@@ -1,4 +1,5 @@
 import { getAiProvider } from "@/lib/ai/providers";
+import { getAppUrl } from "@/lib/app-url";
 import { storeAiResult } from "@/lib/ai/storage";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
@@ -36,7 +37,7 @@ export const runAiJob = inngest.createFunction(
       await step.run("mark done", async () => markJobDone(job.id, resultUrl));
       await step.run("send ready email", async () => {
         const user = await getDb().query.users.findFirst({ where: eq(users.id, job.userId) });
-        if (user?.email) await sendJobReadyEmail(user.email, `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/dashboard`);
+        if (user?.email) await sendJobReadyEmail(user.email, `${getAppUrl()}/dashboard`);
       });
       return { resultUrl };
     } catch (error) {

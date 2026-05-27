@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureUserProfile } from "@/lib/db/queries";
+import { getAppUrl } from "@/lib/app-url";
 import { getCreditPack } from "@/lib/stripe/pricing";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const profile = await ensureUserProfile(user);
   const form = await request.formData();
   const mode = String(form.get("mode") ?? "credits");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+  const appUrl = getAppUrl(new URL(request.url).origin);
 
   if (mode === "subscription") {
     const price = process.env.STRIPE_PRICE_ID_PRO_MONTHLY;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { ensureUserProfile } from "@/lib/db/queries";
+import { getAppUrl } from "@/lib/app-url";
 import { users } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
 
   const profile = await ensureUserProfile(user);
   const stripe = getStripe();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+  const appUrl = getAppUrl(new URL(request.url).origin);
   let customerId = profile.stripeCustomerId;
 
   if (!customerId) {
