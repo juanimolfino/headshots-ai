@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { CreditCard, LogOut, Wallet } from "lucide-react";
+import { Camera, CreditCard, LogOut, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardAutoRefresh } from "@/components/dashboard/dashboard-auto-refresh";
 import { JobCreateForm } from "@/components/dashboard/job-create-form";
@@ -51,6 +51,23 @@ export default async function DashboardPage() {
           <p className="mt-2 text-2xl font-semibold capitalize">{dashboard.subscription?.plan ?? "free"}</p>
           <p className="mt-1 text-sm text-muted-foreground">{dashboard.subscription?.status ?? "active"}</p>
         </div>
+      </section>
+      <section className="mb-6">
+        <Link
+          href="/dashboard/headshots"
+          className="flex flex-col gap-3 rounded-lg border bg-card p-5 transition-colors hover:bg-muted md:flex-row md:items-center md:justify-between"
+        >
+          <span className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <Camera className="h-5 w-5" />
+            </span>
+            <span>
+              <span className="block font-semibold">Headshots AI</span>
+              <span className="block text-sm text-muted-foreground">Subí tus fotos y generá retratos profesionales.</span>
+            </span>
+          </span>
+          <span className="text-sm font-medium text-primary">Crear headshots</span>
+        </Link>
       </section>
       <JobCreateForm />
       <h2 className="mb-4 mt-8 text-2xl font-semibold">History</h2>

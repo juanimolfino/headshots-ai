@@ -99,6 +99,7 @@ This repo is a production-oriented AI SaaS boilerplate built to launch small AI 
   - `components/ui/`: local primitives (`button.tsx`, `input.tsx`, `textarea.tsx`, `badge.tsx`).
   - `components/auth/login-form.tsx`: magic link and Google login controls.
   - `components/dashboard/job-create-form.tsx`: interactive AI job form.
+  - `components/dashboard/headshot-flow.tsx`: client-side headshot flow with local photo previews, fal.storage upload, style/count selection, job creation, and static waiting state.
   - `components/dashboard/job-history.tsx`: table of generated jobs with preview/view/download.
   - `components/dashboard/dashboard-auto-refresh.tsx`: client-side refresh loop for active jobs.
 
@@ -395,7 +396,8 @@ Known placeholders or pending pieces:
 - There is no realtime job subscription; dashboard currently uses polling/refresh.
 - Error messages are functional but not polished product UX.
 - Google OAuth setup depends on external Google Cloud and Supabase provider configuration.
-- Headshot workflow still has no product UI or headshot-specific dashboard result rendering. The backend flow exists, but final visual QA requires running a real PhotoMaker job through Inngest.
+- Headshot workflow has an initial product UI, but no status polling or headshot-specific completed gallery yet. Final visual QA still requires running a real PhotoMaker job through Inngest.
+- The headshot product UI entry point is `app/(dashboard)/dashboard/headshots/page.tsx`, available at `/dashboard/headshots`. It currently supports local multi-image preview/removal, client validation, `POST /api/upload`, style selection, image count selection, `POST /api/jobs/create`, 402 credit messaging, and a static waiting screen with the job id. It intentionally does not poll job status or render completed galleries yet.
 
 ## 10. Próximos pasos sugeridos
 
