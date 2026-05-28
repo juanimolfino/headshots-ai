@@ -20,6 +20,28 @@ describe("createJobSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts headshot jobs with photomaker input defaults", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot",
+      input: { archive_url: "https://storage.googleapis.com/fal/example.zip" }
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.input.style).toBe("Photographic");
+      expect(result.data.input.num_images).toBe(4);
+    }
+  });
+
+  it("rejects headshot jobs with too many images", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot",
+      input: { archive_url: "https://storage.googleapis.com/fal/example.zip", num_images: 9 }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects unsupported job types", () => {
     const result = createJobSchema.safeParse({
       type: "video",
