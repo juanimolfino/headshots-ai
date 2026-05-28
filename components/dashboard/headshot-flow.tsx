@@ -111,7 +111,7 @@ export function HeadshotFlow() {
   const loadPreviousJobs = useCallback(async () => {
     setLoadingPreviousJobs(true);
     try {
-      const response = await fetch("/api/jobs?type=headshot&limit=5");
+      const response = await fetch("/api/jobs?type=headshot-generate&limit=5");
       const data = await response.json();
       if (!response.ok) {
         setPreviousMessage(data.error ?? "No pudimos cargar las sesiones anteriores.");
@@ -306,11 +306,10 @@ export function HeadshotFlow() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "headshot",
+          type: "headshot-training",
           input: {
             archive_url: JSON.stringify(uploadedUrls),
-            style,
-            num_images: numImages
+            steps: 1000
           }
         })
       });

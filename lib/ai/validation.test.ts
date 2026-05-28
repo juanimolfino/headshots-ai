@@ -28,6 +28,8 @@ describe("createJobSchema", () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
+      expect(result.data.type).toBe("headshot-training");
+      if (result.data.type !== "headshot-training") throw new Error("Expected headshot-training job");
       expect(result.data.input.steps).toBe(1000);
     }
   });
@@ -75,6 +77,8 @@ describe("createJobSchema", () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
+      expect(result.data.type).toBe("headshot-generate");
+      if (result.data.type !== "headshot-generate") throw new Error("Expected headshot-generate job");
       expect(result.data.input.style).toBe("professional");
       expect(result.data.input.num_images).toBe(4);
     }

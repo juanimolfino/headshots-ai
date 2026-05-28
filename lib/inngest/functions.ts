@@ -91,11 +91,18 @@ function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxL
   });
 }
 
-function parseJsonObject(value: unknown, label: string) {
+function parseJsonObject(value: unknown, label: string, allowEmpty = false) {
+  if (value === null || value === undefined) {
+    if (allowEmpty) {
+      console.log(`[parseJsonObject] ${label} is null/undefined → using {}`);
+      return {} as Record<string, unknown>;
+    }
+    throw new Error(`${label} es null/undefined`);
+  }
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`${label} inválido: ${String(value)}`);
+      throw new Error(`${label} inválido (tipo: ${typeof parsed}): ${String(value)}`);
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
@@ -215,38 +222,67 @@ async function sendUserEmail(userId: string, subject: string, text: string) {
 }
 
 async function processHeadshotTrainingJob(job: WorkerJob) {
+  console.log("[headshot-training] STEP A before: reading training input");
   const input = job.input as HeadshotTrainingInput;
-  const triggerWord = createTriggerWord(job.userId);
-  await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
+  console.log(
+    "[headshot-training] STEP A after:",
+    JSON.stringify({
+      rawInput: job.input,
+      archiveUrlType: typeof input.archive_url,
+      steps: input.steps
+    })
+  );
 
+  console.log("[headshot-training] STEP B before: creating trigger word");
+  const triggerWord = createTriggerWord(job.userId);
+  console.log("[headshot-training] STEP B triggerWord:", triggerWord);
+  await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
+  console.log("[headshot-training] STEP B after: metadata updated");
+
+  console.log("[headshot-training] STEP C before: parsing image URLs...");
   const imageUrls = parseImageUrls(input.archive_url);
+  console.log("[headshot-training] STEP C after:", JSON.stringify({ count: imageUrls.length, imageUrls }));
+
+  console.log("[headshot-training] STEP D before: building ZIP...");
   const archiveUrl = await createAndUploadHeadshotArchive(imageUrls);
-  console.log("[headshot-training] ZIP URL:", archiveUrl);
+  console.log("[headshot-training] STEP D after: ZIP URL:", archiveUrl);
+
+  console.log("[headshot-training] STEP E before: verifying ZIP...");
   const zipCheck = await checkPublicUrl(archiveUrl);
+  console.log("[headshot-training] STEP E after: HEAD status:", zipCheck.status);
   if (!zipCheck.ok) {
     throw new Error(`Headshot training ZIP is not publicly accessible: ${zipCheck.status}`);
   }
+
+  console.log("[headshot-training] STEP F before: building fal input");
   const trainerInput = {
     images_data_url: archiveUrl,
     trigger_word: triggerWord,
     steps: input.steps
   };
   const falInput = buildFluxLoraTrainerInput(trainerInput);
-  console.log("[headshot-training] fal input:", JSON.stringify(falInput));
+  console.log("[headshot-training] STEP F after:", JSON.stringify(sanitizeTrainerParams(falInput)));
+
+  console.log("[headshot-training] STEP G before: calling fal.ai...");
   let temporaryLoraUrl: string;
   try {
     const trainerResult = await runFluxLoraTrainer(trainerInput);
-    console.log("[headshot-training] trainer result:", JSON.stringify(trainerResult));
+    console.log("[headshot-training] STEP G raw result:", JSON.stringify(trainerResult));
     temporaryLoraUrl = getFluxLoraUrl(trainerResult);
+    console.log("[headshot-training] STEP G after: LoRA URL extracted:", temporaryLoraUrl);
   } catch (error) {
+    console.log("[headshot-training] STEP G error:", JSON.stringify(serializeError(error)));
     logFalTrainerError(error, falInput);
     throw error;
   }
+
+  console.log("[headshot-training] STEP H before: storing LoRA...");
   const loraUrl = await storeLoraFile({
     userId: job.userId,
     jobId: job.id,
     loraUrl: temporaryLoraUrl
   });
+  console.log("[headshot-training] STEP H after: Supabase LoRA URL:", loraUrl);
 
   return {
     lora_url: loraUrl,
@@ -283,15 +319,18 @@ export const runAiJob = inngest.createFunction(
 
     try {
       await step.run("mark processing", async () => markJobProcessing(job.id));
-      console.log("[headshot-training] raw input:", JSON.stringify(event.data));
-      console.log("[headshot-training] job.input type:", typeof job.input);
-      console.log("[headshot-training] job.input raw:", job.input);
+      console.log(`[runAiJob] job.type: ${job.type}`);
+      console.log(`[runAiJob] job.input typeof: ${typeof job.input} | value: ${JSON.stringify(job.input)}`);
+      console.log(`[runAiJob] job.metadata typeof: ${typeof job.metadata} | value: ${JSON.stringify(job.metadata)}`);
 
       const workerJob: WorkerJob = {
         ...job,
         input: parseJsonObject(job.input, "job.input"),
-        metadata: parseJsonObject(job.metadata, "job.metadata")
+        metadata: parseJsonObject(job.metadata, "job.metadata", true)
       };
+
+      console.log("[runAiJob] input parsed OK:", JSON.stringify(workerJob.input));
+      console.log("[runAiJob] metadata parsed OK:", JSON.stringify(workerJob.metadata));
 
       if (job.type === "headshot-training") {
         const result = await step.run("train and store headshot lora", async () => processHeadshotTrainingJob(workerJob));
