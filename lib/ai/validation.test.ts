@@ -20,42 +20,42 @@ describe("createJobSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts headshot jobs with photomaker input defaults", () => {
+  it("accepts headshot training jobs with defaults", () => {
     const result = createJobSchema.safeParse({
-      type: "headshot",
+      type: "headshot-training",
       input: { archive_url: "https://storage.googleapis.com/fal/example.zip" }
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.input.style).toBe("Photographic");
-      expect(result.data.input.num_images).toBe(4);
+      expect(result.data.input.steps).toBe(1000);
     }
   });
 
-  it("accepts headshot jobs with uploaded image URLs encoded as JSON", () => {
+  it("accepts headshot generation jobs with defaults", () => {
     const result = createJobSchema.safeParse({
-      type: "headshot",
+      type: "headshot-generate",
       input: {
-        archive_url: JSON.stringify([
-          "https://v3b.fal.media/files/example/photo-1.jpg",
-          "https://v3b.fal.media/files/example/photo-2.jpg",
-          "https://v3b.fal.media/files/example/photo-3.jpg",
-          "https://v3b.fal.media/files/example/photo-4.jpg",
-          "https://v3b.fal.media/files/example/photo-5.jpg"
-        ]),
-        style: "Cinematic",
-        num_images: 2
+        lora_url: "https://v3b.fal.media/files/example/model.safetensors",
+        trigger_word: "ohwx1234"
       }
     });
 
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.input.style).toBe("professional");
+      expect(result.data.input.num_images).toBe(4);
+    }
   });
 
-  it("rejects headshot jobs with too many images", () => {
+  it("rejects headshot generation jobs with too many images", () => {
     const result = createJobSchema.safeParse({
-      type: "headshot",
-      input: { archive_url: "https://storage.googleapis.com/fal/example.zip", num_images: 9 }
+      type: "headshot-generate",
+      input: {
+        lora_url: "https://v3b.fal.media/files/example/model.safetensors",
+        trigger_word: "ohwx1234",
+        num_images: 9
+      }
     });
 
     expect(result.success).toBe(false);

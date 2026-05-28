@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const jobStatusEnum = pgEnum("job_status", ["pending", "processing", "done", "failed"]);
-export const jobTypeEnum = pgEnum("job_type", ["image", "tts", "headshot"]);
+export const jobTypeEnum = pgEnum("job_type", ["image", "tts", "headshot-training", "headshot-generate"]);
 export const transactionTypeEnum = pgEnum("transaction_type", [
   "credit_purchase",
   "subscription_payment",

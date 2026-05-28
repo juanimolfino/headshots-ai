@@ -9,13 +9,20 @@ export type TtsInput = {
   voice?: "alloy" | "ash" | "ballad" | "coral" | "echo" | "fable" | "nova" | "onyx" | "sage" | "shimmer";
 };
 
-export type HeadshotInput = {
-  archive_url: string;
-  style?: "Photographic" | "Cinematic" | "(No style)";
+export type HeadshotTrainingInput = {
+  images_data_url: string;
+  trigger_word: string;
+  steps?: number;
+};
+
+export type HeadshotGenerateInput = {
+  lora_url: string;
+  trigger_word: string;
+  style?: "professional" | "cinematic" | "natural";
   num_images?: number;
 };
 
-export type AiInput = ImageInput | TtsInput | HeadshotInput;
+export type AiInput = ImageInput | TtsInput | HeadshotTrainingInput | HeadshotGenerateInput;
 
 export type AiResult = {
   bytes: ArrayBuffer;

@@ -34,7 +34,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const job = await getJobForUser(id, profile.id);
   if (!job) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (job.type !== "headshot" || job.status !== "done") {
+  if (job.type !== "headshot-generate" || job.status !== "done") {
     return NextResponse.json({ error: "Headshot job is not ready" }, { status: 400 });
   }
 
