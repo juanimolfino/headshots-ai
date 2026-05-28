@@ -16,13 +16,15 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const parsed = createJobSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  console.log("[jobs/create] input recibido:", JSON.stringify(body.input));
+  const validationResult = createJobSchema.safeParse(body);
+  console.log("[jobs/create] validación:", validationResult);
+  if (!validationResult.success) {
+    return NextResponse.json({ error: validationResult.error.flatten() }, { status: 400 });
   }
 
   const profile = await ensureUserProfile(user);
-  const provider = getAiProvider(parsed.data.type);
+  const provider = getAiProvider(validationResult.data.type);
   let reserved = false;
   let job: Job | null = null;
 
@@ -31,8 +33,8 @@ export async function POST(request: Request) {
     reserved = true;
     job = await createPendingJob({
       userId: profile.id,
-      type: parsed.data.type,
-      payload: parsed.data.input,
+      type: validationResult.data.type,
+      payload: validationResult.data.input,
       creditsUsed: provider.costCredits
     });
 

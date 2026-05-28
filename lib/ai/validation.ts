@@ -1,27 +1,5 @@
 import { z } from "zod";
 
-function isUrl(value: string) {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isUrlArrayJson(value: string) {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) && parsed.length >= 5 && parsed.every((item) => typeof item === "string" && isUrl(item));
-  } catch {
-    return false;
-  }
-}
-
-const trainingArchiveUrlSchema = z.string().refine((value) => isUrl(value) || isUrlArrayJson(value), {
-  message: "archive_url must be a URL or a JSON string array of image URLs"
-});
-
 export const createJobSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("image"),
@@ -39,7 +17,7 @@ export const createJobSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("headshot-training"),
     input: z.object({
-      archive_url: trainingArchiveUrlSchema,
+      archive_url: z.string(),
       steps: z.number().min(500).max(2000).default(1000)
     })
   }),

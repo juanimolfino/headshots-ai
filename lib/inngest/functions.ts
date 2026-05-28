@@ -90,15 +90,31 @@ function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxL
   });
 }
 
-function parseImageUrls(value: string) {
+function parseJsonObject(value: unknown, label: string) {
   try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return null;
-    const urls = parsed.filter((item): item is string => typeof item === "string" && item.length > 0);
-    return urls.length === parsed.length ? urls : null;
-  } catch {
-    return null;
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`${label} inválido: ${String(value)}`);
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`No se pudo parsear ${label}: ${error}`);
   }
+}
+
+function parseImageUrls(raw: unknown) {
+  let urls: string[];
+  try {
+    urls = typeof raw === "string" ? JSON.parse(raw) : (raw as string[]);
+    console.log("[headshot-training] parsed URLs:", urls);
+    if (!Array.isArray(urls) || urls.length === 0 || urls.some((url) => typeof url !== "string" || url.length === 0)) {
+      throw new Error(`archive_url inválido: ${String(raw)}`);
+    }
+  } catch (error) {
+    throw new Error(`No se pudo parsear archive_url: ${error}`);
+  }
+
+  return urls;
 }
 
 function getFilenameFromUrl(url: string, index: number) {
@@ -203,8 +219,7 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
   await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
 
   const imageUrls = parseImageUrls(input.archive_url);
-  console.log("[headshot-training] parsed image URLs:", JSON.stringify(imageUrls));
-  const archiveUrl = imageUrls ? await createAndUploadHeadshotArchive(imageUrls) : input.archive_url;
+  const archiveUrl = await createAndUploadHeadshotArchive(imageUrls);
   console.log("[headshot-training] ZIP URL:", archiveUrl);
   const zipCheck = await checkPublicUrl(archiveUrl);
   if (!zipCheck.ok) {
@@ -265,9 +280,18 @@ export const runAiJob = inngest.createFunction(
 
     try {
       await step.run("mark processing", async () => markJobProcessing(job.id));
+      console.log("[headshot-training] raw input:", JSON.stringify(event.data));
+      console.log("[headshot-training] job.input type:", typeof job.input);
+      console.log("[headshot-training] job.input raw:", job.input);
+
+      const workerJob: WorkerJob = {
+        ...job,
+        input: parseJsonObject(job.input, "job.input"),
+        metadata: parseJsonObject(job.metadata, "job.metadata")
+      };
 
       if (job.type === "headshot-training") {
-        const result = await step.run("train and store headshot lora", async () => processHeadshotTrainingJob(job));
+        const result = await step.run("train and store headshot lora", async () => processHeadshotTrainingJob(workerJob));
         await step.run("mark done", async () => markJobDone(job.id, result.lora_url, result));
         await step.run("send ready email", async () =>
           sendUserEmail(
@@ -280,7 +304,7 @@ export const runAiJob = inngest.createFunction(
       }
 
       if (job.type === "headshot-generate") {
-        const resultUrls = await step.run("generate and store headshots", async () => processHeadshotGenerateJob(job));
+        const resultUrls = await step.run("generate and store headshots", async () => processHeadshotGenerateJob(workerJob));
         await step.run("mark done", async () => markJobDone(job.id, resultUrls[0] ?? "", resultUrls));
         await step.run("send ready email", async () =>
           sendUserEmail(
@@ -294,7 +318,7 @@ export const runAiJob = inngest.createFunction(
 
       const resultUrl = await step.run("generate and store result", async () => {
         const provider = getAiProvider(job.type as JobType);
-        const result = await provider.generate(job.input as never);
+        const result = await provider.generate(workerJob.input as never);
         return storeAiResult({
           userId: job.userId,
           jobId: job.id,
