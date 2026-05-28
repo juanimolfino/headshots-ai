@@ -147,6 +147,14 @@ export async function getJobForUser(jobId: string, userId: string) {
   return getDb().query.jobs.findFirst({ where: and(eq(jobs.id, jobId), eq(jobs.userId, userId)) });
 }
 
+export async function listJobsForUser(input: { userId: string; type?: JobType; limit?: number }) {
+  return getDb().query.jobs.findMany({
+    where: input.type ? and(eq(jobs.userId, input.userId), eq(jobs.type, input.type)) : eq(jobs.userId, input.userId),
+    orderBy: desc(jobs.createdAt),
+    limit: input.limit ?? 50
+  });
+}
+
 export async function addCredits(userId: string, amount: number, metadata: Record<string, unknown>, stripeEventId?: string) {
   const db = getDb();
   const profile = await db.query.users.findFirst({ where: eq(users.id, userId) });

@@ -84,6 +84,10 @@ This repo is a production-oriented AI SaaS boilerplate built to launch small AI 
   - `app/(auth)/login/google/route.ts`: starts Google OAuth from the server so PKCE verifier is stored in cookies.
   - `app/(auth)/logout/route.ts`: signs out and redirects to login.
   - `app/(dashboard)/dashboard/page.tsx`: protected dashboard.
+  - `app/(dashboard)/dashboard/headshots/page.tsx`: protected headshot generation flow.
+  - `app/api/jobs/route.ts`: authenticated job listing endpoint. Supports filters such as `type=headshot` and `limit=5`.
+  - `app/api/jobs/[id]/route.ts`: authenticated job status endpoint for the current user.
+  - `app/api/jobs/[id]/signed-urls/route.ts`: authenticated headshot signed URL endpoint. It normalizes stored Supabase Storage URLs/paths from `jobs.result` and signs them for one hour.
   - `app/api/jobs/create/route.ts`: authenticated job creation endpoint.
   - `app/api/jobs/status/[id]/route.ts`: authenticated job status endpoint.
   - `app/api/jobs/result/[id]/route.ts`: authenticated signed result URL redirect.
@@ -99,7 +103,7 @@ This repo is a production-oriented AI SaaS boilerplate built to launch small AI 
   - `components/ui/`: local primitives (`button.tsx`, `input.tsx`, `textarea.tsx`, `badge.tsx`).
   - `components/auth/login-form.tsx`: magic link and Google login controls.
   - `components/dashboard/job-create-form.tsx`: interactive AI job form.
-  - `components/dashboard/headshot-flow.tsx`: client-side headshot flow with local photo previews, fal.storage upload, style/count selection, job creation, and static waiting state.
+  - `components/dashboard/headshot-flow.tsx`: client-side headshot flow with local photo previews, fal.storage upload, style/count selection, job creation, status polling, signed result gallery, downloads, and previous-session loading.
   - `components/dashboard/job-history.tsx`: table of generated jobs with preview/view/download.
   - `components/dashboard/dashboard-auto-refresh.tsx`: client-side refresh loop for active jobs.
 
@@ -363,6 +367,7 @@ Implemented and tested:
 - PhotoMaker provider for `fal-ai/photomaker`, using `fal.queue.submit()`, `fal.queue.subscribeToStatus()`, and `fal.queue.result()`.
 - Authenticated `/api/upload` endpoint for user photo uploads to fal.storage. It accepts multipart `files`, requires 5-15 jpg/jpeg/png files, enforces 10MB per file and 100MB total, uploads in parallel, and returns `{ urls, count }`.
 - Inngest headshot worker flow. It accepts `archive_url` as either a ZIP URL or a JSON string array of 5-15 image URLs; JSON arrays are zipped with JSZip and uploaded to fal.storage before PhotoMaker runs. Generated images are copied from fal.ai to Supabase Storage under `headshots/{userId}/{jobId}/{index}.jpg`. `jobs.result` stores the Supabase URL array and `jobs.completed_at` is set on completion.
+- Headshot status/result API. `GET /api/jobs/[id]` returns current status/result metadata for an owned job. `POST /api/jobs/[id]/signed-urls` returns one-hour signed URLs for completed owned headshot jobs. `GET /api/jobs?type=headshot&limit=5` lists previous headshot sessions.
 - Inngest worker endpoint and job function.
 - Upstash Redis concurrency reservation.
 - Private Supabase Storage upload to `ai-results` with authenticated signed result URLs.
@@ -396,8 +401,7 @@ Known placeholders or pending pieces:
 - There is no realtime job subscription; dashboard currently uses polling/refresh.
 - Error messages are functional but not polished product UX.
 - Google OAuth setup depends on external Google Cloud and Supabase provider configuration.
-- Headshot workflow has an initial product UI, but no status polling or headshot-specific completed gallery yet. Final visual QA still requires running a real PhotoMaker job through Inngest.
-- The headshot product UI entry point is `app/(dashboard)/dashboard/headshots/page.tsx`, available at `/dashboard/headshots`. It currently supports local multi-image preview/removal, client validation, `POST /api/upload`, style selection, image count selection, `POST /api/jobs/create`, 402 credit messaging, and a static waiting screen with the job id. It intentionally does not poll job status or render completed galleries yet.
+- The headshot product UI entry point is `app/(dashboard)/dashboard/headshots/page.tsx`, available at `/dashboard/headshots`. It supports local multi-image preview/removal, client validation, `POST /api/upload`, style selection, image count selection, `POST /api/jobs/create`, 402 credit messaging, 8-second status polling, elapsed-time display, failed-job retry, signed URL gallery, individual/all downloads, and previous-session loading. Final visual QA still requires running a real PhotoMaker job through Inngest.
 
 ## 10. Próximos pasos sugeridos
 
