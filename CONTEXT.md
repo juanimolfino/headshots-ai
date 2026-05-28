@@ -367,7 +367,7 @@ Implemented and tested:
 - PhotoMaker provider for `fal-ai/photomaker`, using `fal.queue.submit()`, `fal.queue.subscribeToStatus()`, and `fal.queue.result()`.
 - Authenticated `/api/upload` endpoint for user photo uploads to fal.storage. It accepts multipart `files`, requires 5-15 jpg/jpeg/png files, enforces 10MB per file and 100MB total, uploads in parallel, and returns `{ urls, count }`.
 - Inngest headshot worker flow. It accepts `archive_url` as either a ZIP URL or a JSON string array of 5-15 image URLs; JSON arrays are zipped with JSZip and uploaded to fal.storage before PhotoMaker runs. Generated images are copied from fal.ai to Supabase Storage under `headshots/{userId}/{jobId}/{index}.jpg`. `jobs.result` stores the Supabase URL array and `jobs.completed_at` is set on completion.
-- Headshot status/result API. `GET /api/jobs/[id]` returns current status/result metadata for an owned job. `POST /api/jobs/[id]/signed-urls` returns one-hour signed URLs for completed owned headshot jobs. `GET /api/jobs?type=headshot&limit=5` lists previous headshot sessions.
+- Headshot status/result API. `GET /api/jobs/[id]` returns current status/result metadata for an owned job. `POST /api/jobs/[id]/signed-urls` returns one-hour signed URLs for completed owned headshot jobs; it signs paths from `jobs.result` and also lists `headshots/{userId}/{jobId}` in Storage so previous sessions still show every generated image if `jobs.result` is incomplete. `GET /api/jobs?type=headshot&limit=5` lists previous headshot sessions.
 - Inngest worker endpoint and job function.
 - Upstash Redis concurrency reservation.
 - Private Supabase Storage upload to `ai-results` with authenticated signed result URLs.
