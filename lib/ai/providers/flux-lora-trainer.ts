@@ -1,7 +1,7 @@
 import { fal } from "@fal-ai/client";
 import type { AiProvider, HeadshotTrainingInput } from "@/lib/ai/types";
 
-const FLUX_LORA_TRAINER_ENDPOINT = "fal-ai/flux-lora-portrait-trainer";
+export const FLUX_LORA_TRAINER_ENDPOINT = "fal-ai/flux-lora-portrait-trainer";
 
 type FluxLoraTrainerOutput = {
   diffusers_lora_file?: {
@@ -13,19 +13,24 @@ function toArrayBuffer(value: unknown) {
   return new TextEncoder().encode(JSON.stringify(value)).buffer;
 }
 
+export function buildFluxLoraTrainerInput(input: HeadshotTrainingInput) {
+  return {
+    images_data_url: input.images_data_url,
+    trigger_phrase: input.trigger_word,
+    steps: input.steps ?? 1000,
+    learning_rate: 0.0002,
+    multiresolution_training: true,
+    subject_crop: true,
+    create_masks: false
+  };
+}
+
 export async function trainFluxLora(input: HeadshotTrainingInput): Promise<string> {
   fal.config({ credentials: process.env.FAL_KEY });
 
+  const trainerInput = buildFluxLoraTrainerInput(input);
   const queued = await fal.queue.submit(FLUX_LORA_TRAINER_ENDPOINT, {
-    input: {
-      images_data_url: input.images_data_url,
-      trigger_word: input.trigger_word,
-      steps: input.steps ?? 1000,
-      learning_rate: 0.0002,
-      multiresolution_training: true,
-      subject_crop: true,
-      create_masks: false
-    } as never
+    input: trainerInput as never
   });
 
   const result = await fal.queue.result(FLUX_LORA_TRAINER_ENDPOINT, {

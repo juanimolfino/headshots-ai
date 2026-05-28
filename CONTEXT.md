@@ -366,9 +366,9 @@ Implemented and tested:
 - Async image generation pipeline using fal.ai.
 - Async TTS pipeline using OpenAI TTS.
 - Headshot job types in Drizzle/Postgres (`job_type = headshot-training` and `headshot-generate`) and request validation.
-- Flux LoRA trainer provider for `fal-ai/flux-lora-portrait-trainer`, using `fal.queue.submit()` and `fal.queue.result()`, returning the trained LoRA file URL.
+- Flux LoRA trainer provider for `fal-ai/flux-lora-portrait-trainer`, using `fal.queue.submit()` and `fal.queue.result()`, returning the trained LoRA file URL. The fal input ZIP parameter is `images_data_url`; the trigger parameter is `trigger_phrase` even though the internal app input/result field is named `trigger_word`.
 - Flux LoRA generator provider for `fal-ai/flux-lora`, using the trained LoRA URL and style-specific prompts to return generated image URLs.
-- Inngest Flux LoRA headshot worker flow for `headshot-training` and `headshot-generate`, including JSZip archive creation, permanent LoRA/image copies in Supabase Storage, `jobs.result` persistence, `jobs.metadata.trigger_word`, refunds on failure, and plain Resend notifications.
+- Inngest Flux LoRA headshot worker flow for `headshot-training` and `headshot-generate`, including JSZip archive creation, permanent LoRA/image copies in Supabase Storage, `jobs.result` persistence, `jobs.metadata.trigger_word`, refunds on failure, and plain Resend notifications. Trainer failures log the fal endpoint, sanitized submitted params, and serialized fal error details for debugging.
 - Authenticated `/api/upload` endpoint for user photo uploads to fal.storage. It accepts multipart `files`, requires 5-15 jpg/jpeg/png files, enforces 10MB per file and 100MB total, uploads in parallel, and returns `{ urls, count }`.
 - The old PhotoMaker provider and old `headshot` job type have been removed from active provider registration. Migration `0004_polite_silvermane.sql` recreates `job_type` with `headshot-training` and `headshot-generate` and maps legacy `headshot` rows to `headshot-generate` during the cast.
 - Migration `0005_soft_brother_voodoo.sql` adds `jobs.metadata`; it has been applied to the configured Supabase database.

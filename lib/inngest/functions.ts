@@ -2,7 +2,11 @@ import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
 import { storeAiResult } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
-import { trainFluxLora } from "@/lib/ai/providers/flux-lora-trainer";
+import {
+  buildFluxLoraTrainerInput,
+  FLUX_LORA_TRAINER_ENDPOINT,
+  trainFluxLora
+} from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
 import { markJobDone, markJobProcessing, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
@@ -34,7 +38,49 @@ type WorkerJob = {
 };
 
 function createTriggerWord(userId: string) {
-  return `ohwx${userId.replaceAll("-", "").slice(0, 4).toLowerCase()}`;
+  const letters = userId.replaceAll("-", "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 4);
+  return `ohwx${letters.padEnd(4, "x")}`;
+}
+
+function serializeError(error: unknown) {
+  if (!(error instanceof Error)) return { message: String(error) };
+
+  const details: Record<string, unknown> = {
+    name: error.name,
+    message: error.message
+  };
+
+  for (const key of Object.getOwnPropertyNames(error)) {
+    if (key === "name" || key === "message" || key === "stack") continue;
+    details[key] = (error as unknown as Record<string, unknown>)[key];
+  }
+
+  return details;
+}
+
+function redactUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.search = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function sanitizeTrainerParams(params: ReturnType<typeof buildFluxLoraTrainerInput>) {
+  return {
+    ...params,
+    images_data_url: redactUrl(params.images_data_url)
+  };
+}
+
+function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxLoraTrainerInput>) {
+  console.error("fal.ai Flux LoRA trainer failed", {
+    endpoint: FLUX_LORA_TRAINER_ENDPOINT,
+    params: sanitizeTrainerParams(params),
+    error: serializeError(error)
+  });
 }
 
 function parseImageUrls(value: string) {
@@ -145,11 +191,18 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
 
   const imageUrls = parseImageUrls(input.archive_url);
   const archiveUrl = imageUrls ? await createAndUploadHeadshotArchive(imageUrls) : input.archive_url;
-  const temporaryLoraUrl = await trainFluxLora({
+  const trainerInput = {
     images_data_url: archiveUrl,
     trigger_word: triggerWord,
     steps: input.steps
-  });
+  };
+  let temporaryLoraUrl: string;
+  try {
+    temporaryLoraUrl = await trainFluxLora(trainerInput);
+  } catch (error) {
+    logFalTrainerError(error, buildFluxLoraTrainerInput(trainerInput));
+    throw error;
+  }
   const loraUrl = await storeLoraFile({
     userId: job.userId,
     jobId: job.id,
