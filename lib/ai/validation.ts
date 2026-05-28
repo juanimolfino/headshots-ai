@@ -18,7 +18,7 @@ export const createJobSchema = z.discriminatedUnion("type", [
     type: z.literal("headshot-training"),
     input: z.object({
       archive_url: z.string(),
-      steps: z.number().min(500).max(2000).default(1000)
+      steps: z.number().min(300).max(2000).default(1000)
     })
   }),
   z.object({

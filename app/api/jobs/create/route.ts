@@ -18,9 +18,9 @@ export async function POST(request: Request) {
   const body = await request.json();
   console.log("[jobs/create] input recibido:", JSON.stringify(body.input));
   const validationResult = createJobSchema.safeParse(body);
-  console.log("[jobs/create] validación:", validationResult);
   if (!validationResult.success) {
-    return NextResponse.json({ error: validationResult.error.flatten() }, { status: 400 });
+    console.log("[jobs/create] validation error:", JSON.stringify(validationResult.error.errors));
+    return NextResponse.json({ error: validationResult.error.errors }, { status: 400 });
   }
 
   const profile = await ensureUserProfile(user);

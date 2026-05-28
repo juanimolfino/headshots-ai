@@ -49,6 +49,21 @@ describe("createJobSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts headshot training jobs with encoded image URLs and 300 steps", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-training",
+      input: {
+        archive_url: JSON.stringify([
+          "https://v3b.fal.media/files/example/photo-1.jpg",
+          "https://v3b.fal.media/files/example/photo-2.jpg"
+        ]),
+        steps: 300
+      }
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("accepts headshot generation jobs with defaults", () => {
     const result = createJobSchema.safeParse({
       type: "headshot-generate",
