@@ -5,7 +5,8 @@ import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generato
 import {
   buildFluxLoraTrainerInput,
   FLUX_LORA_TRAINER_ENDPOINT,
-  trainFluxLora
+  getFluxLoraUrl,
+  runFluxLoraTrainer
 } from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
@@ -234,7 +235,9 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
   console.log("[headshot-training] fal input:", JSON.stringify(falInput));
   let temporaryLoraUrl: string;
   try {
-    temporaryLoraUrl = await trainFluxLora(trainerInput);
+    const trainerResult = await runFluxLoraTrainer(trainerInput);
+    console.log("[headshot-training] trainer result:", JSON.stringify(trainerResult));
+    temporaryLoraUrl = getFluxLoraUrl(trainerResult);
   } catch (error) {
     logFalTrainerError(error, falInput);
     throw error;

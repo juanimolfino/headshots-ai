@@ -3,10 +3,19 @@ import type { AiProvider, HeadshotTrainingInput } from "@/lib/ai/types";
 
 export const FLUX_LORA_TRAINER_ENDPOINT = "fal-ai/flux-lora-portrait-trainer";
 
-type FluxLoraTrainerOutput = {
+export type FluxLoraTrainerOutput = {
+  config_file?: {
+    url?: string | null;
+    file_name?: string | null;
+    file_size?: number | null;
+    content_type?: string | null;
+  } | null;
   diffusers_lora_file?: {
-    url?: string;
-  };
+    url?: string | null;
+    file_name?: string | null;
+    file_size?: number | null;
+    content_type?: string | null;
+  } | null;
 };
 
 function toArrayBuffer(value: unknown) {
@@ -25,7 +34,16 @@ export function buildFluxLoraTrainerInput(input: HeadshotTrainingInput) {
   };
 }
 
-export async function trainFluxLora(input: HeadshotTrainingInput): Promise<string> {
+export function getFluxLoraUrl(resultData: FluxLoraTrainerOutput | undefined) {
+  const loraUrl = resultData?.diffusers_lora_file?.url;
+  if (!loraUrl) {
+    throw new Error(`fal.ai no devolvió URL del LoRA. Output: ${JSON.stringify(resultData)}`);
+  }
+
+  return loraUrl;
+}
+
+export async function runFluxLoraTrainer(input: HeadshotTrainingInput): Promise<FluxLoraTrainerOutput | undefined> {
   fal.config({ credentials: process.env.FAL_KEY });
 
   const trainerInput = buildFluxLoraTrainerInput(input);
@@ -37,10 +55,12 @@ export async function trainFluxLora(input: HeadshotTrainingInput): Promise<strin
     requestId: queued.request_id
   });
 
-  const loraUrl = (result.data as FluxLoraTrainerOutput | undefined)?.diffusers_lora_file?.url;
-  if (!loraUrl) {
-    throw new Error("fal.ai Flux LoRA trainer did not return a LoRA file URL");
-  }
+  return result.data as FluxLoraTrainerOutput | undefined;
+}
+
+export async function trainFluxLora(input: HeadshotTrainingInput): Promise<string> {
+  const resultData = await runFluxLoraTrainer(input);
+  const loraUrl = getFluxLoraUrl(resultData);
 
   return loraUrl;
 }
