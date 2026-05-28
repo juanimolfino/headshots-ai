@@ -38,8 +38,13 @@ type WorkerJob = {
 };
 
 function createTriggerWord(userId: string) {
-  const letters = userId.replaceAll("-", "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 4);
-  return `ohwx${letters.padEnd(4, "x")}`;
+  void userId;
+  const randomLetters = Math.random()
+    .toString(36)
+    .replace(/[^a-z]/g, "")
+    .substring(0, 4)
+    .padEnd(4, "x");
+  return `ohwx${randomLetters}`;
 }
 
 function serializeError(error: unknown) {
@@ -76,6 +81,8 @@ function sanitizeTrainerParams(params: ReturnType<typeof buildFluxLoraTrainerInp
 }
 
 function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxLoraTrainerInput>) {
+  const falError = error as { message?: unknown; body?: unknown; status?: unknown };
+  console.log("[headshot-training] fal error:", falError.message, falError.body, falError.status);
   console.error("fal.ai Flux LoRA trainer failed", {
     endpoint: FLUX_LORA_TRAINER_ENDPOINT,
     params: sanitizeTrainerParams(params),
@@ -136,6 +143,12 @@ async function createAndUploadHeadshotArchive(imageUrls: string[]) {
   return fal.storage.upload(new File([archiveBytes], "headshot-sources.zip", { type: "application/zip" }));
 }
 
+async function checkPublicUrl(url: string) {
+  const response = await fetch(url, { method: "HEAD" });
+  console.log("[headshot-training] ZIP accessible:", response.ok, response.status);
+  return response;
+}
+
 async function storeSupabaseFile(input: {
   bucket: string;
   path: string;
@@ -190,17 +203,25 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
   await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
 
   const imageUrls = parseImageUrls(input.archive_url);
+  console.log("[headshot-training] parsed image URLs:", JSON.stringify(imageUrls));
   const archiveUrl = imageUrls ? await createAndUploadHeadshotArchive(imageUrls) : input.archive_url;
+  console.log("[headshot-training] ZIP URL:", archiveUrl);
+  const zipCheck = await checkPublicUrl(archiveUrl);
+  if (!zipCheck.ok) {
+    throw new Error(`Headshot training ZIP is not publicly accessible: ${zipCheck.status}`);
+  }
   const trainerInput = {
     images_data_url: archiveUrl,
     trigger_word: triggerWord,
     steps: input.steps
   };
+  const falInput = buildFluxLoraTrainerInput(trainerInput);
+  console.log("[headshot-training] fal input:", JSON.stringify(falInput));
   let temporaryLoraUrl: string;
   try {
     temporaryLoraUrl = await trainFluxLora(trainerInput);
   } catch (error) {
-    logFalTrainerError(error, buildFluxLoraTrainerInput(trainerInput));
+    logFalTrainerError(error, falInput);
     throw error;
   }
   const loraUrl = await storeLoraFile({
