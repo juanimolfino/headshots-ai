@@ -32,6 +32,23 @@ describe("createJobSchema", () => {
     }
   });
 
+  it("accepts headshot training jobs with uploaded image URLs encoded as JSON", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-training",
+      input: {
+        archive_url: JSON.stringify([
+          "https://v3b.fal.media/files/example/photo-1.jpg",
+          "https://v3b.fal.media/files/example/photo-2.jpg",
+          "https://v3b.fal.media/files/example/photo-3.jpg",
+          "https://v3b.fal.media/files/example/photo-4.jpg",
+          "https://v3b.fal.media/files/example/photo-5.jpg"
+        ])
+      }
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("accepts headshot generation jobs with defaults", () => {
     const result = createJobSchema.safeParse({
       type: "headshot-generate",

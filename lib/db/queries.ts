@@ -135,6 +135,13 @@ export async function markJobProcessing(jobId: string) {
     .where(and(eq(jobs.id, jobId), eq(jobs.status, "pending")));
 }
 
+export async function updateJobMetadata(jobId: string, metadata: Record<string, unknown>) {
+  return getDb()
+    .update(jobs)
+    .set({ metadata, updatedAt: new Date() })
+    .where(eq(jobs.id, jobId));
+}
+
 export async function markJobDone(jobId: string, resultUrl: string, result?: unknown) {
   const now = new Date();
   return getDb()

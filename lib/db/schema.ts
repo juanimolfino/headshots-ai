@@ -56,6 +56,7 @@ export const jobs = pgTable("jobs", {
   type: jobTypeEnum("type").notNull(),
   status: jobStatusEnum("status").default("pending").notNull(),
   input: jsonb("input").$type<Record<string, unknown>>().notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
   resultUrl: text("result_url"),
   result: jsonb("result").$type<unknown>(),
   error: text("error"),

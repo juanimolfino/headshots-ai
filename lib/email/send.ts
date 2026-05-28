@@ -51,3 +51,15 @@ export async function sendJobReadyEmail(email: string, resultUrl: string) {
     })
   );
 }
+
+export async function sendPlainEmail(input: { to: string; subject: string; text: string }) {
+  if (!canSendEmail()) return;
+  await sendSafely(input.subject, () =>
+    getResend().emails.send({
+      from: process.env.RESEND_FROM_EMAIL!,
+      to: input.to,
+      subject: input.subject,
+      text: input.text
+    })
+  );
+}
