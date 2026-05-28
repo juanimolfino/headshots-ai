@@ -135,10 +135,11 @@ export async function markJobProcessing(jobId: string) {
     .where(and(eq(jobs.id, jobId), eq(jobs.status, "pending")));
 }
 
-export async function markJobDone(jobId: string, resultUrl: string) {
+export async function markJobDone(jobId: string, resultUrl: string, result?: unknown) {
+  const now = new Date();
   return getDb()
     .update(jobs)
-    .set({ status: "done", resultUrl, updatedAt: new Date() })
+    .set({ status: "done", resultUrl, result: result ?? null, completedAt: now, updatedAt: now })
     .where(and(eq(jobs.id, jobId), eq(jobs.status, "processing")));
 }
 

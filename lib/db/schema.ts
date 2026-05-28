@@ -57,8 +57,10 @@ export const jobs = pgTable("jobs", {
   status: jobStatusEnum("status").default("pending").notNull(),
   input: jsonb("input").$type<Record<string, unknown>>().notNull(),
   resultUrl: text("result_url"),
+  result: jsonb("result").$type<unknown>(),
   error: text("error"),
   creditsUsed: integer("credits_used").notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });

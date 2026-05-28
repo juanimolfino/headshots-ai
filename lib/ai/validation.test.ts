@@ -33,6 +33,25 @@ describe("createJobSchema", () => {
     }
   });
 
+  it("accepts headshot jobs with uploaded image URLs encoded as JSON", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot",
+      input: {
+        archive_url: JSON.stringify([
+          "https://v3b.fal.media/files/example/photo-1.jpg",
+          "https://v3b.fal.media/files/example/photo-2.jpg",
+          "https://v3b.fal.media/files/example/photo-3.jpg",
+          "https://v3b.fal.media/files/example/photo-4.jpg",
+          "https://v3b.fal.media/files/example/photo-5.jpg"
+        ]),
+        style: "Cinematic",
+        num_images: 2
+      }
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects headshot jobs with too many images", () => {
     const result = createJobSchema.safeParse({
       type: "headshot",
