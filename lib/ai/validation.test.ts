@@ -43,7 +43,12 @@ describe("createJobSchema", () => {
           "https://v3b.fal.media/files/example/photo-2.jpg",
           "https://v3b.fal.media/files/example/photo-3.jpg",
           "https://v3b.fal.media/files/example/photo-4.jpg",
-          "https://v3b.fal.media/files/example/photo-5.jpg"
+          "https://v3b.fal.media/files/example/photo-5.jpg",
+          "https://v3b.fal.media/files/example/photo-6.jpg",
+          "https://v3b.fal.media/files/example/photo-7.jpg",
+          "https://v3b.fal.media/files/example/photo-8.jpg",
+          "https://v3b.fal.media/files/example/photo-9.jpg",
+          "https://v3b.fal.media/files/example/photo-10.jpg"
         ])
       }
     });
@@ -51,7 +56,7 @@ describe("createJobSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts headshot training jobs with encoded image URLs and 300 steps", () => {
+  it("rejects headshot training jobs with too few encoded image URLs", () => {
     const result = createJobSchema.safeParse({
       type: "headshot-training",
       input: {
@@ -59,11 +64,23 @@ describe("createJobSchema", () => {
           "https://v3b.fal.media/files/example/photo-1.jpg",
           "https://v3b.fal.media/files/example/photo-2.jpg"
         ]),
+        steps: 1000
+      }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects headshot training jobs below the fal.ai step floor", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-training",
+      input: {
+        archive_url: "https://storage.googleapis.com/fal/example.zip",
         steps: 300
       }
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it("accepts headshot generation jobs with defaults", () => {
@@ -90,7 +107,7 @@ describe("createJobSchema", () => {
       input: {
         lora_url: "https://v3b.fal.media/files/example/model.safetensors",
         trigger_word: "ohwx1234",
-        num_images: 9
+        num_images: 5
       }
     });
 

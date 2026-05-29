@@ -64,6 +64,13 @@ function serializeError(error: unknown) {
   return details;
 }
 
+function formatJobError(error: unknown) {
+  const serialized = serializeError(error);
+  const message = error instanceof Error ? error.message : "Unknown AI job failure";
+  const details = JSON.stringify(serialized);
+  return details.length > message.length ? `${message} | ${details}` : message;
+}
+
 function redactUrl(value: string) {
   try {
     const url = new URL(value);
@@ -189,17 +196,6 @@ async function storeSupabaseFile(input: {
   return supabase.storage.from(input.bucket).getPublicUrl(input.path).data.publicUrl;
 }
 
-async function storeLoraFile(input: { userId: string; jobId: string; loraUrl: string }) {
-  const downloaded = await downloadBytes(input.loraUrl, "trained LoRA file");
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "ai-results";
-  return storeSupabaseFile({
-    bucket,
-    path: `loras/${input.userId}/${input.jobId}/model.safetensors`,
-    bytes: downloaded.bytes,
-    contentType: downloaded.contentType
-  });
-}
-
 async function storeHeadshotImage(input: {
   userId: string;
   jobId: string;
@@ -276,13 +272,9 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
     throw error;
   }
 
-  console.log("[headshot-training] STEP H before: storing LoRA...");
-  const loraUrl = await storeLoraFile({
-    userId: job.userId,
-    jobId: job.id,
-    loraUrl: temporaryLoraUrl
-  });
-  console.log("[headshot-training] STEP H after: Supabase LoRA URL:", loraUrl);
+  console.log("[headshot-training] STEP H before: persisting fal LoRA URL");
+  const loraUrl = temporaryLoraUrl;
+  console.log("[headshot-training] STEP H after: using fal LoRA URL:", loraUrl);
 
   return {
     lora_url: loraUrl,
@@ -375,7 +367,8 @@ export const runAiJob = inngest.createFunction(
       );
       return { resultUrl };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown AI job failure";
+      const message = formatJobError(error);
+      console.error("[runAiJob] failed:", message);
       await step.run("refund credits", async () => refundJobCredits(job.id, message));
       throw error;
     } finally {

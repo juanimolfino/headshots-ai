@@ -9,7 +9,7 @@ import { Check, Download, ExternalLink, Loader2, RefreshCw, Upload, X } from "lu
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const MIN_PHOTOS = 5;
+const MIN_PHOTOS = 10;
 const MAX_PHOTOS = 15;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 8000;
@@ -57,7 +57,7 @@ const STYLE_OPTIONS: StyleOption[] = [
   }
 ];
 
-const IMAGE_COUNTS = [2, 4, 8] as const;
+const IMAGE_COUNTS = [1, 2, 4] as const;
 
 function formatElapsed(seconds: number) {
   const minutes = Math.floor(seconds / 60);

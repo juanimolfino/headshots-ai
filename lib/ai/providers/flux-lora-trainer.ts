@@ -47,12 +47,19 @@ export async function runFluxLoraTrainer(input: HeadshotTrainingInput): Promise<
   fal.config({ credentials: process.env.FAL_KEY });
 
   const trainerInput = buildFluxLoraTrainerInput(input);
-  const queued = await fal.queue.submit(FLUX_LORA_TRAINER_ENDPOINT, {
-    input: trainerInput as never
-  });
-
-  const result = await fal.queue.result(FLUX_LORA_TRAINER_ENDPOINT, {
-    requestId: queued.request_id
+  const result = await fal.subscribe(FLUX_LORA_TRAINER_ENDPOINT, {
+    input: trainerInput as never,
+    logs: true,
+    pollInterval: 5000,
+    onEnqueue(requestId) {
+      console.log("[flux-lora-trainer] enqueued:", requestId);
+    },
+    onQueueUpdate(update) {
+      console.log("[flux-lora-trainer] status:", update.status);
+      if ("logs" in update) {
+        for (const log of update.logs) console.log("[flux-lora-trainer]", log.message);
+      }
+    }
   });
 
   return result.data as FluxLoraTrainerOutput | undefined;

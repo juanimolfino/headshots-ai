@@ -2,7 +2,7 @@ import { fal } from "@fal-ai/client";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-const MIN_FILES = 5;
+const MIN_FILES = 10;
 const MAX_FILES = 15;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 100 * 1024 * 1024;

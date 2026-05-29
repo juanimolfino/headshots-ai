@@ -29,7 +29,7 @@ function buildPrompt(input: HeadshotGenerateInput) {
 export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): Promise<string[]> {
   fal.config({ credentials: process.env.FAL_KEY });
 
-  const queued = await fal.queue.submit(FLUX_LORA_GENERATOR_ENDPOINT, {
+  const result = await fal.subscribe(FLUX_LORA_GENERATOR_ENDPOINT, {
     input: {
       prompt: buildPrompt(input),
       image_size: "portrait_4_3",
@@ -37,11 +37,18 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
       num_inference_steps: 28,
       num_images: input.num_images ?? 4,
       loras: [{ path: input.lora_url, scale: 1 }]
-    } as never
-  });
-
-  const result = await fal.queue.result(FLUX_LORA_GENERATOR_ENDPOINT, {
-    requestId: queued.request_id
+    } as never,
+    logs: true,
+    pollInterval: 5000,
+    onEnqueue(requestId) {
+      console.log("[flux-lora-generator] enqueued:", requestId);
+    },
+    onQueueUpdate(update) {
+      console.log("[flux-lora-generator] status:", update.status);
+      if ("logs" in update) {
+        for (const log of update.logs) console.log("[flux-lora-generator]", log.message);
+      }
+    }
   });
 
   const imageUrls = (result.data as FluxLoraGeneratorOutput | undefined)?.images
