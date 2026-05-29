@@ -105,6 +105,7 @@ export function HeadshotFlow() {
   const [galleryJobId, setGalleryJobId] = useState<string | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [previousJobs, setPreviousJobs] = useState<HeadshotJob[]>([]);
+  const [savedModelJob, setSavedModelJob] = useState<HeadshotJob | null>(null);
   const [loadingPreviousJobs, setLoadingPreviousJobs] = useState(false);
   const [previousMessage, setPreviousMessage] = useState<string | null>(null);
 
@@ -121,15 +122,31 @@ export function HeadshotFlow() {
   const loadPreviousJobs = useCallback(async () => {
     setLoadingPreviousJobs(true);
     try {
-      console.log("[headshot-flow] previous jobs: loading headshot-generate jobs");
-      const response = await fetch("/api/jobs?type=headshot-generate&limit=5");
-      const data = await response.json();
-      console.log("[headshot-flow] previous jobs response:", response.status, data);
-      if (!response.ok) {
-        setPreviousMessage(data.error ?? "No pudimos cargar las sesiones anteriores.");
+      console.log("[headshot-flow] previous jobs: loading jobs and saved model");
+      const [generatedResponse, trainingResponse] = await Promise.all([
+        fetch("/api/jobs?type=headshot-generate&limit=5"),
+        fetch("/api/jobs?type=headshot-training&limit=10")
+      ]);
+      const generatedData = await generatedResponse.json();
+      const trainingData = await trainingResponse.json();
+      console.log("[headshot-flow] previous jobs response:", generatedResponse.status, generatedData);
+      console.log("[headshot-flow] saved model response:", trainingResponse.status, trainingData);
+      if (!generatedResponse.ok) {
+        setPreviousMessage(generatedData.error ?? "No pudimos cargar las sesiones anteriores.");
         return;
       }
-      setPreviousJobs(data.jobs ?? []);
+
+      if (!trainingResponse.ok) {
+        setPreviousMessage(trainingData.error ?? "No pudimos cargar tu modelo guardado.");
+        return;
+      }
+
+      setPreviousJobs(generatedData.jobs ?? []);
+      setSavedModelJob(
+        (trainingData.jobs as HeadshotJob[] | undefined)?.find(
+          (job) => job.status === "done" && job.result && !Array.isArray(job.result) && job.result.lora_url && job.result.trigger_word
+        ) ?? null
+      );
       setPreviousMessage(null);
     } catch (error) {
       console.error("[headshot-flow] previous jobs failed:", error);
@@ -279,7 +296,8 @@ export function HeadshotFlow() {
     return () => window.clearInterval(intervalId);
   }, [jobStartedAt, jobStatus, signedUrls]);
 
-  const canContinue = photos.length >= MIN_PHOTOS && !uploading && !uploadedUrls && !jobId && !signedUrls;
+  const canContinue = photos.length >= MIN_PHOTOS && !uploading && !uploadedUrls && !jobId && !signedUrls && !savedModelJob;
+  const canChooseGenerationOptions = Boolean(savedModelJob || uploadedUrls);
   const uploadHelp = useMemo(() => {
     if (photos.length === 0) return "Todavía no seleccionaste fotos.";
     if (photos.length < MIN_PHOTOS) return `Agregá ${MIN_PHOTOS - photos.length} foto${MIN_PHOTOS - photos.length === 1 ? "" : "s"} más para continuar.`;
@@ -417,17 +435,29 @@ export function HeadshotFlow() {
   }
 
   async function createHeadshotJob() {
-    if (!uploadedUrls) return;
+    if (!savedModelJob && !uploadedUrls) return;
 
     setCreatingJob(true);
     setMessage(null);
-    console.log("[headshot-flow] training: starting", {
-      uploadedUrlCount: uploadedUrls.length,
+    console.log("[headshot-flow] headshot job: starting", {
+      mode: savedModelJob ? "generate-from-saved-model" : "train-then-generate",
+      uploadedUrlCount: uploadedUrls?.length ?? 0,
+      savedModelJobId: savedModelJob?.id ?? null,
       style,
       numImages
     });
 
     try {
+      if (savedModelJob) {
+        console.log("[headshot-flow] saved model: skipping training", { trainingJobId: savedModelJob.id });
+        await createGenerationJob(savedModelJob);
+        return;
+      }
+
+      if (!uploadedUrls) {
+        throw new Error("Subí tus fotos para entrenar el modelo.");
+      }
+
       const trainingJobId = await createJob({
         type: "headshot-training",
         input: {
@@ -542,83 +572,87 @@ export function HeadshotFlow() {
 
     return (
       <div className="space-y-6">
-        <section className="rounded-lg border bg-card p-5">
-          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
-            <div>
-              <h1 className="text-2xl font-semibold">Headshots AI</h1>
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Subí entre 5 y 15 fotos tuyas. Usá fotos de distintos ángulos, con buena luz y sin anteojos de sol. Cuantas más fotos, mejor resultado.
+        {!savedModelJob ? (
+          <section className="rounded-lg border bg-card p-5">
+            <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
+              <div>
+                <h1 className="text-2xl font-semibold">Headshots AI</h1>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  Subí entre 5 y 15 fotos tuyas. Usá fotos de distintos ángulos, con buena luz y sin anteojos de sol. Cuantas más fotos, mejor resultado.
+                </p>
+              </div>
+              <span className="rounded-md border px-3 py-1 text-sm font-medium">{photos.length} / {MAX_PHOTOS} fotos</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                addFiles(event.dataTransfer.files);
+              }}
+              disabled={uploading || Boolean(uploadedUrls)}
+              className="flex min-h-44 w-full flex-col items-center justify-center rounded-lg border border-dashed bg-background px-6 py-8 text-center transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
+              <span className="text-sm font-medium">Arrastrá tus fotos o hacé click para elegirlas</span>
+              <span className="mt-1 text-xs text-muted-foreground">JPG, JPEG o PNG. Máximo 10MB por archivo.</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                if (event.target.files) addFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+
+            {photos.length > 0 ? (
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
+                    <Image src={photo.previewUrl} alt="" fill unoptimized className="object-cover" />
+                    {!uploadedUrls ? (
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(photo.id)}
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background"
+                        aria-label="Eliminar foto"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+              {canContinue ? (
+                <Button type="button" onClick={uploadPhotos} disabled={uploading}>
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {uploading ? "Subiendo fotos..." : "Continuar"}
+                </Button>
+              ) : null}
+              <p className={cn("text-sm", message ? "text-destructive" : "text-muted-foreground")}>
+                {message ?? uploadHelp}
               </p>
             </div>
-            <span className="rounded-md border px-3 py-1 text-sm font-medium">{photos.length} / {MAX_PHOTOS} fotos</span>
-          </div>
+          </section>
+        ) : null}
 
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              addFiles(event.dataTransfer.files);
-            }}
-            disabled={uploading || Boolean(uploadedUrls)}
-            className="flex min-h-44 w-full flex-col items-center justify-center rounded-lg border border-dashed bg-background px-6 py-8 text-center transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-            <span className="text-sm font-medium">Arrastrá tus fotos o hacé click para elegirlas</span>
-            <span className="mt-1 text-xs text-muted-foreground">JPG, JPEG o PNG. Máximo 10MB por archivo.</span>
-          </button>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              if (event.target.files) addFiles(event.target.files);
-              event.currentTarget.value = "";
-            }}
-          />
-
-          {photos.length > 0 ? (
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-              {photos.map((photo) => (
-                <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border bg-muted">
-                  <Image src={photo.previewUrl} alt="" fill unoptimized className="object-cover" />
-                  {!uploadedUrls ? (
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(photo.id)}
-                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background"
-                      aria-label="Eliminar foto"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-            {canContinue ? (
-              <Button type="button" onClick={uploadPhotos} disabled={uploading}>
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                {uploading ? "Subiendo fotos..." : "Continuar"}
-              </Button>
-            ) : null}
-            <p className={cn("text-sm", message ? "text-destructive" : "text-muted-foreground")}>
-              {message ?? uploadHelp}
-            </p>
-          </div>
-        </section>
-
-        {uploadedUrls ? (
+        {canChooseGenerationOptions ? (
           <section className="rounded-lg border bg-card p-5">
             <div className="mb-5">
               <h2 className="text-2xl font-semibold">Elegí el estilo</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{uploadedUrls.length} fotos subidas correctamente.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {savedModelJob ? "Vamos a usar tu modelo guardado y generar nuevas fotos." : `${uploadedUrls?.length ?? 0} fotos subidas correctamente.`}
+              </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">

@@ -10,7 +10,7 @@ function serializeJob(job: Job) {
     id: job.id,
     type: job.type,
     status: job.status,
-    result: Array.isArray(job.result) ? job.result : null,
+    result: job.result ?? null,
     error: job.error,
     createdAt: job.createdAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null
