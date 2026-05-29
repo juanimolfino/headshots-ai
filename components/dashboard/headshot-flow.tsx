@@ -76,6 +76,16 @@ function downloadUrl(url: string, filename: string) {
   anchor.remove();
 }
 
+async function readJsonOrText(response: Response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { error: text };
+  }
+}
+
 export function HeadshotFlow() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef<SelectedPhoto[]>([]);
@@ -350,23 +360,53 @@ export function HeadshotFlow() {
       files: photos.map((photo) => ({ name: photo.file.name, size: photo.file.size, type: photo.file.type }))
     });
 
-    const formData = new FormData();
-    for (const photo of photos) formData.append("files", photo.file);
-
     try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData
-      });
-      const data = await response.json();
-      console.log("[headshot-flow] upload response:", response.status, data);
+      const urls = await Promise.all(
+        photos.map(async (photo, index) => {
+          console.log("[headshot-flow] upload: initiating fal upload", {
+            index,
+            name: photo.file.name,
+            size: photo.file.size,
+            type: photo.file.type
+          });
 
-      if (!response.ok) {
-        setMessage(data.error ?? "No pudimos subir las fotos.");
-        return;
-      }
+          const initiateResponse = await fetch("/api/upload/initiate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename: photo.file.name,
+              contentType: photo.file.type,
+              size: photo.file.size
+            })
+          });
+          const initiateData = await readJsonOrText(initiateResponse) as { uploadUrl?: string; fileUrl?: string; error?: string } | null;
+          console.log("[headshot-flow] upload initiate response:", initiateResponse.status, initiateData);
 
-      setUploadedUrls(data.urls);
+          if (!initiateResponse.ok || !initiateData?.uploadUrl || !initiateData.fileUrl) {
+            throw new Error(initiateData?.error ?? `No pudimos preparar la subida de ${photo.file.name}.`);
+          }
+
+          const uploadResponse = await fetch(initiateData.uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": photo.file.type || "application/octet-stream" },
+            body: photo.file
+          });
+          console.log("[headshot-flow] fal upload response:", uploadResponse.status, {
+            index,
+            fileUrl: initiateData.fileUrl
+          });
+
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            throw new Error(errorText || `No pudimos subir ${photo.file.name}.`);
+          }
+
+          return initiateData.fileUrl;
+        })
+      );
+
+      setUploadedUrls(urls);
+      console.log("[headshot-flow] upload complete:", { count: urls.length, urls });
       setMessage(null);
     } catch (error) {
       console.error("[headshot-flow] upload failed:", error);
