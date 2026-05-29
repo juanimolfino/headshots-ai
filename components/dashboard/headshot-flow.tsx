@@ -23,7 +23,7 @@ type SelectedPhoto = {
 
 type StyleOption = {
   label: string;
-  value: "Photographic" | "Cinematic" | "(No style)";
+  value: "professional" | "cinematic" | "natural";
   description: string;
 };
 
@@ -33,7 +33,7 @@ type HeadshotJob = {
   id: string;
   type?: string;
   status: JobStatus;
-  result: string[] | null;
+  result: string[] | { lora_url?: string; trigger_word?: string } | null;
   error: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -42,17 +42,17 @@ type HeadshotJob = {
 const STYLE_OPTIONS: StyleOption[] = [
   {
     label: "Profesional",
-    value: "Photographic",
+    value: "professional",
     description: "Fondo neutro, iluminación de estudio. Ideal para LinkedIn y CV."
   },
   {
     label: "Cinematográfico",
-    value: "Cinematic",
+    value: "cinematic",
     description: "Estilo editorial con mayor contraste. Para perfiles creativos."
   },
   {
     label: "Natural",
-    value: "(No style)",
+    value: "natural",
     description: "Sin filtros adicionales. El resultado más cercano a tus fotos originales."
   }
 ];
@@ -81,7 +81,7 @@ export function HeadshotFlow() {
   const photosRef = useRef<SelectedPhoto[]>([]);
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [uploadedUrls, setUploadedUrls] = useState<string[] | null>(null);
-  const [style, setStyle] = useState<StyleOption["value"]>("Photographic");
+  const [style, setStyle] = useState<StyleOption["value"]>("professional");
   const [numImages, setNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(4);
   const [uploading, setUploading] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
@@ -111,15 +111,18 @@ export function HeadshotFlow() {
   const loadPreviousJobs = useCallback(async () => {
     setLoadingPreviousJobs(true);
     try {
+      console.log("[headshot-flow] previous jobs: loading headshot-generate jobs");
       const response = await fetch("/api/jobs?type=headshot-generate&limit=5");
       const data = await response.json();
+      console.log("[headshot-flow] previous jobs response:", response.status, data);
       if (!response.ok) {
         setPreviousMessage(data.error ?? "No pudimos cargar las sesiones anteriores.");
         return;
       }
       setPreviousJobs(data.jobs ?? []);
       setPreviousMessage(null);
-    } catch {
+    } catch (error) {
+      console.error("[headshot-flow] previous jobs failed:", error);
       setPreviousMessage("No pudimos cargar las sesiones anteriores.");
     } finally {
       setLoadingPreviousJobs(false);
@@ -127,8 +130,10 @@ export function HeadshotFlow() {
   }, []);
 
   const loadSignedUrls = useCallback(async (id: string) => {
+    console.log("[headshot-flow] signed urls: loading", { jobId: id });
     const response = await fetch(`/api/jobs/${id}/signed-urls`, { method: "POST" });
     const data = await response.json();
+    console.log("[headshot-flow] signed urls response:", response.status, data);
     if (!response.ok) throw new Error(data.error ?? "No pudimos cargar las fotos.");
     setSignedUrls(data.signedUrls);
     setGalleryJobId(id);
@@ -136,9 +141,72 @@ export function HeadshotFlow() {
     return data.signedUrls as string[];
   }, []);
 
+  const createJob = useCallback(async (payload: { type: "headshot-training" | "headshot-generate"; input: Record<string, unknown> }) => {
+    console.log("[headshot-flow] create job: request", {
+      type: payload.type,
+      input: {
+        ...payload.input,
+        archive_url: typeof payload.input.archive_url === "string" ? `[${payload.input.archive_url.length} chars]` : payload.input.archive_url,
+        lora_url: typeof payload.input.lora_url === "string" ? "[redacted]" : payload.input.lora_url
+      }
+    });
+    const response = await fetch("/api/jobs/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    console.log("[headshot-flow] create job response:", response.status, data);
+
+    if (response.status === 402) {
+      throw new Error("No tenés créditos suficientes. Comprá un pack para continuar.");
+    }
+
+    if (!response.ok) {
+      throw new Error(typeof data.error === "string" ? data.error : "No pudimos crear el job.");
+    }
+
+    return data.jobId as string;
+  }, []);
+
+  const createGenerationJob = useCallback(async (trainingJob: HeadshotJob) => {
+    console.log("[headshot-flow] generation: preparing from training result", {
+      trainingJobId: trainingJob.id,
+      result: trainingJob.result
+    });
+    if (!trainingJob.result || Array.isArray(trainingJob.result)) {
+      throw new Error("El training terminó sin datos de LoRA.");
+    }
+
+    const { lora_url: loraUrl, trigger_word: triggerWord } = trainingJob.result;
+    if (!loraUrl || !triggerWord) {
+      throw new Error("El training terminó sin URL de LoRA o trigger word.");
+    }
+
+    const generationJobId = await createJob({
+      type: "headshot-generate",
+      input: {
+        lora_url: loraUrl,
+        trigger_word: triggerWord,
+        style,
+        num_images: numImages
+      }
+    });
+
+    console.log("[headshot-flow] generation: job created", { generationJobId });
+    setJobId(generationJobId);
+    setJobStartedAt(Date.now());
+    setJobStatus("pending");
+    setJobError(null);
+    setElapsedSeconds(0);
+    await loadPreviousJobs();
+  }, [createJob, loadPreviousJobs, numImages, style]);
+
   const pollJob = useCallback(async (id: string) => {
+    console.log("[headshot-flow] poll: request", { jobId: id });
     const response = await fetch(`/api/jobs/${id}`);
     const data = await response.json();
+    console.log("[headshot-flow] poll response:", response.status, data);
     if (!response.ok) throw new Error(data.error ?? "No pudimos consultar el estado del job.");
 
     const job = data as HeadshotJob;
@@ -146,6 +214,13 @@ export function HeadshotFlow() {
     setJobError(job.error);
 
     if (job.status === "done") {
+      if (job.type === "headshot-training") {
+        console.log("[headshot-flow] poll: training done, creating generation job", { trainingJobId: job.id });
+        await createGenerationJob(job);
+        return;
+      }
+
+      console.log("[headshot-flow] poll: generation done, loading signed urls", { generationJobId: id });
       await loadSignedUrls(id);
       await loadPreviousJobs();
       return;
@@ -154,7 +229,7 @@ export function HeadshotFlow() {
     if (job.status === "failed") {
       await loadPreviousJobs();
     }
-  }, [loadPreviousJobs, loadSignedUrls]);
+  }, [createGenerationJob, loadPreviousJobs, loadSignedUrls]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -238,7 +313,7 @@ export function HeadshotFlow() {
     photosRef.current = [];
     setPhotos([]);
     setUploadedUrls(null);
-    setStyle("Photographic");
+    setStyle("professional");
     setNumImages(4);
     setUploading(false);
     setCreatingJob(false);
@@ -270,6 +345,10 @@ export function HeadshotFlow() {
 
     setUploading(true);
     setMessage("Subiendo fotos...");
+    console.log("[headshot-flow] upload: starting", {
+      count: photos.length,
+      files: photos.map((photo) => ({ name: photo.file.name, size: photo.file.size, type: photo.file.type }))
+    });
 
     const formData = new FormData();
     for (const photo of photos) formData.append("files", photo.file);
@@ -280,6 +359,7 @@ export function HeadshotFlow() {
         body: formData
       });
       const data = await response.json();
+      console.log("[headshot-flow] upload response:", response.status, data);
 
       if (!response.ok) {
         setMessage(data.error ?? "No pudimos subir las fotos.");
@@ -288,7 +368,8 @@ export function HeadshotFlow() {
 
       setUploadedUrls(data.urls);
       setMessage(null);
-    } catch {
+    } catch (error) {
+      console.error("[headshot-flow] upload failed:", error);
       setMessage("No pudimos subir las fotos. Probá de nuevo.");
     } finally {
       setUploading(false);
@@ -300,38 +381,30 @@ export function HeadshotFlow() {
 
     setCreatingJob(true);
     setMessage(null);
+    console.log("[headshot-flow] training: starting", {
+      uploadedUrlCount: uploadedUrls.length,
+      style,
+      numImages
+    });
 
     try {
-      const response = await fetch("/api/jobs/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "headshot-training",
-          input: {
-            archive_url: JSON.stringify(uploadedUrls),
-            steps: 1000
-          }
-        })
+      const trainingJobId = await createJob({
+        type: "headshot-training",
+        input: {
+          archive_url: JSON.stringify(uploadedUrls),
+          steps: 1000
+        }
       });
-      const data = await response.json();
 
-      if (response.status === 402) {
-        setMessage("No tenés créditos suficientes. Comprá un pack para continuar.");
-        return;
-      }
-
-      if (!response.ok) {
-        setMessage(data.error ?? "No pudimos crear el job.");
-        return;
-      }
-
-      setJobId(data.jobId);
+      setJobId(trainingJobId);
+      console.log("[headshot-flow] training: job created", { trainingJobId });
       setJobStartedAt(Date.now());
       setJobStatus("pending");
       setElapsedSeconds(0);
       await loadPreviousJobs();
-    } catch {
-      setMessage("No pudimos crear el job. Probá de nuevo.");
+    } catch (error) {
+      console.error("[headshot-flow] training/create failed:", error);
+      setMessage(error instanceof Error ? error.message : "No pudimos crear el job. Probá de nuevo.");
     } finally {
       setCreatingJob(false);
     }

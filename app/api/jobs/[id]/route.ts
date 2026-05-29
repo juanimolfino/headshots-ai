@@ -15,10 +15,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const job = await getJobForUser(id, profile.id);
   if (!job) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  console.log("[api/jobs/:id] status:", JSON.stringify({
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    hasResult: Boolean(job.result),
+    error: job.error
+  }));
+
   return NextResponse.json({
     id: job.id,
+    type: job.type,
     status: job.status,
-    result: Array.isArray(job.result) ? job.result : null,
+    result: job.result ?? null,
     error: job.error,
     createdAt: job.createdAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null
