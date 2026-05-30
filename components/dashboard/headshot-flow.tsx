@@ -394,7 +394,7 @@ export function HeadshotFlow() {
           <div className={cn("mt-4 rounded-md border bg-background p-4", trainedModels.length > 0 && "mt-4")}>
             <div className="flex items-start gap-3">
               <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
                   Entrenando &quot;{getModelName(activeTrainingJob)}&quot;...
                 </p>
@@ -402,6 +402,14 @@ export function HeadshotFlow() {
                   Estado: {activeTrainingJob.status} · Tiempo: {formatElapsed(trainingElapsed)} · Puede tardar 15–30 min
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => { setActiveTrainingJob(null); trainingStartRef.current = null; }}
+                className="ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-muted"
+                aria-label="Descartar"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
             </div>
           </div>
         ) : null}
