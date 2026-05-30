@@ -355,113 +355,109 @@ RLS:
 
 ## 9. Estado actual
 
-Implemented and tested:
+### Infraestructura base (implementado y verificado)
 - Next.js production deploy on Vercel.
-- Supabase Auth login with Google/magic-link callback infrastructure.
-- Auth-protected dashboard.
-- Production health endpoint at `/api/health`, protected by `HEALTHCHECK_SECRET` in production.
-- Supabase Postgres tables and RLS SQL.
-- First-login profile creation and signup credits.
-- Credit balance display.
-- Async image generation pipeline using fal.ai.
-- Async TTS pipeline using OpenAI TTS.
-- Headshot job types in Drizzle/Postgres (`job_type = headshot-training` and `headshot-generate`) and request validation.
-- Flux LoRA trainer provider for `fal-ai/flux-lora-portrait-trainer`, using `fal.queue.submit()` and `fal.queue.result()`, returning the trained LoRA file URL. The fal input ZIP parameter is `images_data_url`; the trigger parameter is `trigger_phrase` even though the internal app input/result field is named `trigger_word`.
-- Flux LoRA generator provider for `fal-ai/flux-lora`, using the trained LoRA URL and style-specific prompts to return generated image URLs.
-- Inngest Flux LoRA headshot worker flow for `headshot-training` and `headshot-generate`, including JSZip archive creation, permanent LoRA/image copies in Supabase Storage, `jobs.result` persistence, `jobs.metadata.trigger_word`, refunds on failure, and plain Resend notifications. Headshot training currently includes explicit debug logs for parsed source URLs, fal.storage ZIP URL, HEAD accessibility check, fal trainer input, and `message/body/status` on fal errors.
-- Latest local verification for the Flux LoRA worker/debug changes: `npm run lint`, `npm run test`, and `npm run build` pass. A real fal.ai/Inngest training run has not been executed in this verification pass because it consumes fal credits and can take several minutes.
-- Authenticated `/api/upload` endpoint for user photo uploads to fal.storage. It accepts multipart `files`, requires 5-15 jpg/jpeg/png files, enforces 10MB per file and 100MB total, uploads in parallel, and returns `{ urls, count }`.
-- The old PhotoMaker provider and old `headshot` job type have been removed from active provider registration. Migration `0004_polite_silvermane.sql` recreates `job_type` with `headshot-training` and `headshot-generate` and maps legacy `headshot` rows to `headshot-generate` during the cast.
-- Migration `0005_soft_brother_voodoo.sql` adds `jobs.metadata`; it has been applied to the configured Supabase database.
-- Headshot status/result API. `GET /api/jobs/[id]` returns current status/result metadata for an owned job. `POST /api/jobs/[id]/signed-urls` returns one-hour signed URLs for completed owned headshot generation jobs; it signs paths from `jobs.result` and also lists `headshots/{userId}/{jobId}` in Storage so previous sessions still show every generated image if `jobs.result` is incomplete. `GET /api/jobs?type=headshot-generate&limit=5` lists previous generation sessions.
-- Inngest worker endpoint and job function.
-- Upstash Redis concurrency reservation.
-- Private Supabase Storage upload to `ai-results` with authenticated signed result URLs.
-- Dashboard auto-refresh while jobs are `pending` or `processing`.
-- Job history with preview, view, download, and audio player.
-- Logout.
-- Pricing page with pack/plan selection before Stripe Checkout.
-- Stripe Checkout routes using HTTP 303 redirects after POST.
-- Stripe webhook route for credit purchase, subscription payment, and subscription deletion.
-- Stripe credit grants are idempotent by event id.
-- Stripe customer portal route.
-- Resend email templates and send helpers, with failures made non-blocking.
-- Vercel env quote issues mitigated for `DATABASE_URL` and Upstash vars.
-- Job spends are tracked as `credit_spend` transactions.
-- Job refunds are idempotent.
-- `/api/auth/session` debug endpoint has been removed.
-- Visible test prices in `lib/stripe/pricing.ts` are committed as 10 credits `$1`, 50 credits `$2`, and Pro monthly `$3`.
-- Current deployed commits include:
-  - `aad4712 Add photomaker headshot provider`
-  - `a374123 Add fal storage upload endpoint`
-- The local DB migration `0003_clean_nightcrawler.sql` adds `jobs.result` and `jobs.completed_at`; it has been applied to the configured Supabase database.
+- Supabase Auth: magic link y Google OAuth con callback infrastructure.
+- Auth-protected dashboard y rutas de API.
+- Production health endpoint at `/api/health`, protected by `HEALTHCHECK_SECRET`.
+- Supabase Postgres con Drizzle ORM, migraciones aplicadas, RLS SQL aplicado.
+- First-login profile creation: credits, suscripción free, y signup_bonus transaction.
+- Stripe Checkout, portal, y webhook route para credit purchase, subscription payment, y subscription deletion. Grants idempotentes por stripeEventId.
+- Resend email templates (welcome, purchase, job-ready) con errores no-bloqueantes.
+- Upstash Redis concurrency reservation: `MAX_CONCURRENT_JOBS=3` permite hasta 3 jobs simultáneos por usuario.
+- Inngest async job runner con retries=0 y liberación de slot en finally.
+- Job spends como `credit_spend` transactions, refunds idempotentes.
 
-Known placeholders or pending pieces:
-- `STRIPE_WEBHOOK_SECRET` must be set per deployment environment for real Stripe webhook processing.
-- `HEALTHCHECK_SECRET` should be set in production if `/api/health` is used.
-- Resend requires a verified sender domain. `gmail.com` senders are rejected by Resend.
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is configured but not used by embedded Stripe UI; current flow uses external Stripe Checkout.
-- There is no embedded Stripe checkout.
-- There is no admin UI.
-- Automated tests currently cover AI validation, AI storage helpers, and Stripe pricing metadata. There are not yet DB integration, webhook signature, or browser smoke tests.
-- There is no realtime job subscription; dashboard currently uses polling/refresh.
-- Error messages are functional but not polished product UX.
-- Google OAuth setup depends on external Google Cloud and Supabase provider configuration.
-- The headshot product UI entry point is `app/(dashboard)/dashboard/headshots/page.tsx`, available at `/dashboard/headshots`. It still reflects the previous single-job headshot UX and must be updated to orchestrate the new `headshot-training` then `headshot-generate` flow. Final visual QA still requires running a real Flux LoRA training/generation job through Inngest.
+### Flujo de headshots (implementado y testeado end-to-end)
+
+**Upload de fotos:**
+- `/api/upload/initiate`: genera pre-signed PUT URL en fal-cdn-v3 por archivo.
+- El browser sube directamente a fal.storage (client-side) de forma secuencial (un archivo a la vez para evitar timeouts de 408 que ocurrían con uploads paralelos).
+- Compresión client-side antes del upload: Canvas API redimensiona a max 1024px, JPEG 88% de calidad. Reduce fotos de iPhone de 5–15 MB a ~200–500 KB sin pérdida relevante para el trainer.
+
+**Training (Etapa 1):**
+- `POST /api/jobs/create` con `type: "headshot-training"` y `input: { archive_url: JSON.stringify(urls), steps: 1000, name: "nombre del modelo" }`.
+- El worker Inngest (`runAiJob`):
+  1. Crea trigger word aleatorio (`ohwx` + 4 letras).
+  2. Descarga las imágenes de fal.storage y las comprime en un ZIP con JSZip.
+  3. Sube el ZIP a fal.storage.
+  4. Llama a `fal-ai/flux-lora-portrait-trainer` (≈15–30 min).
+  5. Intenta copiar el `.safetensors` resultante a Supabase Storage en `loras/{userId}/{jobId}/model.safetensors`. Si falla (límite de 50 MB del free tier de Supabase), hace fallback a la URL temporal de fal.storage sin fallar el job.
+  6. Guarda `{ lora_url, trigger_word }` en `jobs.result`.
+  7. Envía email de notificación si Resend está configurado.
+- El `input.name` del training job es el nombre visible del modelo en la UI.
+
+**Generation (Etapa 2):**
+- `POST /api/jobs/create` con `type: "headshot-generate"` y `input: { lora_url, trigger_word, style, num_images }`.
+- El `lora_url` puede ser una URL directa de fal.storage o un path de Supabase Storage (`loras/...`).
+- Si es un path de Supabase, `isSupabaseLoraPath()` lo detecta y `createLoraSignedUrl()` genera una signed URL de 1 hora antes de llamar a fal.ai.
+- El worker genera imágenes con `fal-ai/flux-lora`, las copia a Supabase Storage en `headshots/{userId}/{jobId}/{index}.jpg`, y guarda el array de URLs en `jobs.result`.
+- `POST /api/jobs/{id}/signed-urls` devuelve signed URLs de 1 hora para la galería.
+
+**UI en `/dashboard/headshots`:**
+- **Etapa 1 — "Tus modelos"**: lista de todos los training jobs con `status=done`. Cada modelo muestra su nombre y fecha. Click en un modelo lo selecciona para generación.
+- **Training en progreso**: si hay un job `pending`/`processing`, muestra barra de estado con nombre del modelo y tiempo transcurrido. Polling cada 8 segundos.
+- **Formulario "Entrenar nuevo modelo"**: se despliega al hacer click. Incluye campo de nombre, drag-and-drop de fotos con preview, compresión y upload secuencial, y botón "Entrenar modelo".
+- **Etapa 2 — Generación**: aparece al seleccionar un modelo. Muestra selector de estilo (professional/cinematic/natural) y cantidad (1/2/4 fotos). Botón "Generar mis headshots". Progress in-place mientras genera. Galería con descarga individual y masiva al terminar.
+- **Concurrencia**: training y generation corren en paralelo sin bloquearse (hasta `MAX_CONCURRENT_JOBS=3` simultáneos por usuario).
+
+**Script de seed para testing:**
+- `scripts/seed-training-job.mjs`: inserta un job de training completado directamente en la DB para testing sin correr el trainer real. Intenta copiar el LoRA a Supabase Storage; si falla por límite de tamaño, inserta con la URL de fal.storage.
+
+### Limitaciones conocidas
+- **Supabase Storage free tier**: límite de 50 MB por archivo. Los `.safetensors` de Flux LoRA portrait pesan ~125 MB y no se pueden almacenar permanentemente en el free tier. El fallback guarda la URL de fal.storage, que no es permanente. Solución: upgrade a Supabase Pro ($25/mes) o migrar almacenamiento de LoRAs a Cloudflare R2/AWS S3.
+- `STRIPE_WEBHOOK_SECRET` debe estar configurado en cada entorno para procesamiento real de webhooks.
+- `HEALTHCHECK_SECRET` debe estar en producción si se usa `/api/health`.
+- Resend requiere dominio verificado; direcciones `gmail.com` son rechazadas.
+- No hay embedded Stripe checkout (flujo actual usa Stripe Checkout externo).
+- No hay admin UI.
+- Tests automatizados cubren validación de AI, storage helpers, y precios Stripe. Faltan tests de integración de DB, webhooks firmados, y browser smoke tests.
+- No hay Supabase Realtime; la UI usa polling/refresh.
 
 ## 10. Próximos pasos sugeridos
 
-1. Finish Stripe end-to-end.
-   - Set `STRIPE_WEBHOOK_SECRET` in Vercel.
-   - Run a test purchase.
-   - Confirm credits are added through webhook.
-   - Confirm `transactions` table gets the Stripe event id.
-   - Confirm duplicate webhook events do not duplicate credits.
+1. **Resolver almacenamiento permanente de LoRAs.**
+   - Opción A: upgrade Supabase a Pro y aumentar límite de Storage a 200+ MB.
+   - Opción B: agregar Cloudflare R2 como storage alternativo para archivos grandes (LoRAs y opcionalmente imágenes generadas). R2 no tiene costo de egress y acepta archivos de cualquier tamaño.
+   - El código ya está preparado: `storeLoraFile()`, `createLoraSignedUrl()`, e `isSupabaseLoraPath()` en `lib/ai/storage.ts` manejan el caso de Supabase. Solo habría que añadir el adaptador de R2 si se elige esa opción.
 
-2. Clean production env vars.
-   - Remove wrapping quotes from Vercel env values.
-   - Rotate all secrets that were pasted into chat or exposed during setup.
+2. **Completar verificación end-to-end del training real.**
+   - Correr un training job real con fotos reales a través de Inngest en producción.
+   - Verificar que las imágenes generadas llegan a Supabase Storage y la galería las muestra correctamente.
+   - Confirmar que el email de "modelo listo" se envía.
 
-3. Replace Resend sender.
-   - Verify a real domain in Resend.
-   - Set `RESEND_FROM_EMAIL` to something like `Product <noreply@yourdomain.com>`.
-   - Keep email failures non-blocking.
+3. **Finish Stripe end-to-end.**
+   - Set `STRIPE_WEBHOOK_SECRET` en Vercel.
+   - Correr una compra de prueba y confirmar que los créditos se agregan por webhook.
+   - Confirmar idempotencia ante eventos duplicados.
 
-4. Improve pricing model.
-   - Decide final products/prices.
-   - Add `STRIPE_PRICE_ID_CREDITS_100` if a 100-credit pack returns.
-   - Keep UI prices in `lib/stripe/pricing.ts` synchronized with Stripe.
+4. **Productize el modelo de precios.**
+   - Decidir precio final por training y por generation (créditos).
+   - Actualizar `lib/stripe/pricing.ts` y los Price IDs de Stripe.
+   - Los precios de test actuales son $1/10cr, $2/50cr, $3/mes Pro.
 
-5. Complete headshot generation flow.
-   - Run a real end-to-end Flux LoRA training/generation job in Inngest and verify generated images in Supabase Storage.
-   - Add dashboard UI for photo upload, style selection, generation count, and generated headshot gallery.
-   - Add headshot-specific result rendering using `jobs.result`.
+5. **Mejorar UX de estados de error.**
+   - Botón de retry para jobs fallidos.
+   - Mensajes de error más amigables (sin exponer detalles técnicos).
+   - Indicar claramente cuando el training terminó y el modelo está listo (notificación in-app además del email).
 
-6. Improve job UX.
-   - Add better loading states and status labels.
-   - Add retry button for failed jobs.
-   - Add filters or tabs for image/TTS/history.
-   - Consider Supabase Realtime or SWR/TanStack Query instead of `router.refresh()` polling.
+6. **Harden seguridad.**
+   - Revisar RLS policies con el modelo de datos final.
+   - Agregar rate limits a endpoints de auth y billing si es necesario.
+   - Confirmar que el service role key nunca se expone client-side.
 
-7. Add tests.
-   - Unit test credit debit/refund logic in `lib/db/queries.ts`.
-   - Integration test job creation route behavior.
-   - Webhook tests with signed Stripe payloads.
-   - Basic Playwright smoke test for login/dashboard where feasible.
+7. **Agregar tests.**
+   - Unit tests para credit debit/refund en `lib/db/queries.ts`.
+   - Integration tests para el route de creación de jobs.
+   - Webhook tests con payloads de Stripe firmados.
 
-8. Harden security.
-   - Review RLS policies after final data model.
-   - Protect or remove diagnostic endpoints.
-   - Add rate limits to auth-sensitive and billing endpoints if needed.
-   - Verify service role key is never exposed client-side.
+8. **Productize la UI.**
+   - Reemplazar copy genérico por copy del producto.
+   - Branding: nombre, logo, colores.
+   - Layout responsive para mobile.
+   - Página de cuenta/settings.
 
-9. Productize the UI.
-   - Replace boilerplate marketing copy.
-   - Add proper app name/branding.
-   - Improve dashboard layout for mobile.
-   - Add account/settings page.
-
-10. Operationalize deployment.
-   - Document Vercel env setup per environment.
-   - Document Inngest sync/deploy process.
-   - Add monitoring/logging strategy for failed jobs and webhook failures.
+9. **Operacionalizar el deployment.**
+   - Documentar variables de entorno por entorno (dev/prod).
+   - Documentar proceso de sync/deploy de Inngest.
+   - Agregar monitoring para jobs fallidos y webhook failures.

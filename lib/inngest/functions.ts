@@ -5,8 +5,10 @@ import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generato
 import {
   buildFluxLoraTrainerInput,
   FLUX_LORA_TRAINER_ENDPOINT,
+  type FluxLoraTrainerOutput,
   getFluxLoraUrl,
-  runFluxLoraTrainer
+  pollFluxLoraTrainer,
+  submitFluxLoraTrainer
 } from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
@@ -217,76 +219,44 @@ async function sendUserEmail(userId: string, subject: string, text: string) {
   if (user?.email) await sendPlainEmail({ to: user.email, subject, text });
 }
 
-async function processHeadshotTrainingJob(job: WorkerJob) {
-  console.log("[headshot-training] STEP A before: reading training input");
+type TrainingPrepResult = {
+  triggerWord: string;
+  trainerInput: ReturnType<typeof buildFluxLoraTrainerInput>;
+};
+
+async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResult> {
   const input = job.input as HeadshotTrainingInput;
-  console.log(
-    "[headshot-training] STEP A after:",
-    JSON.stringify({
-      rawInput: job.input,
-      archiveUrlType: typeof input.archive_url,
-      steps: input.steps
-    })
-  );
+  console.log("[headshot-training] prep: input", JSON.stringify({ archiveUrlType: typeof input.archive_url, steps: input.steps }));
 
-  console.log("[headshot-training] STEP B before: creating trigger word");
   const triggerWord = createTriggerWord(job.userId);
-  console.log("[headshot-training] STEP B triggerWord:", triggerWord);
   await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
-  console.log("[headshot-training] STEP B after: metadata updated");
+  console.log("[headshot-training] prep: triggerWord", triggerWord);
 
-  console.log("[headshot-training] STEP C before: parsing image URLs...");
   const imageUrls = parseImageUrls(input.archive_url);
-  console.log("[headshot-training] STEP C after:", JSON.stringify({ count: imageUrls.length, imageUrls }));
+  console.log("[headshot-training] prep: parsed", imageUrls.length, "image URLs");
 
-  console.log("[headshot-training] STEP D before: building ZIP...");
   const archiveUrl = await createAndUploadHeadshotArchive(imageUrls);
-  console.log("[headshot-training] STEP D after: ZIP URL:", archiveUrl);
+  console.log("[headshot-training] prep: ZIP uploaded", archiveUrl);
 
-  console.log("[headshot-training] STEP E before: verifying ZIP...");
   const zipCheck = await checkPublicUrl(archiveUrl);
-  console.log("[headshot-training] STEP E after: HEAD status:", zipCheck.status);
-  if (!zipCheck.ok) {
-    throw new Error(`Headshot training ZIP is not publicly accessible: ${zipCheck.status}`);
-  }
+  if (!zipCheck.ok) throw new Error(`Training ZIP not publicly accessible: ${zipCheck.status}`);
 
-  console.log("[headshot-training] STEP F before: building fal input");
-  const trainerInput = {
-    images_data_url: archiveUrl,
-    trigger_word: triggerWord,
-    steps: input.steps
-  };
-  const falInput = buildFluxLoraTrainerInput(trainerInput);
-  console.log("[headshot-training] STEP F after:", JSON.stringify(sanitizeTrainerParams(falInput)));
+  const trainerInput = buildFluxLoraTrainerInput({ images_data_url: archiveUrl, trigger_word: triggerWord, steps: input.steps });
+  console.log("[headshot-training] prep: fal input built", JSON.stringify(sanitizeTrainerParams(trainerInput)));
 
-  console.log("[headshot-training] STEP G before: calling fal.ai...");
-  let temporaryLoraUrl: string;
-  try {
-    const trainerResult = await runFluxLoraTrainer(trainerInput);
-    console.log("[headshot-training] STEP G raw result:", JSON.stringify(trainerResult));
-    temporaryLoraUrl = getFluxLoraUrl(trainerResult);
-    console.log("[headshot-training] STEP G after: LoRA URL extracted:", temporaryLoraUrl);
-  } catch (error) {
-    console.log("[headshot-training] STEP G error:", JSON.stringify(serializeError(error)));
-    logFalTrainerError(error, falInput);
-    throw error;
-  }
+  return { triggerWord, trainerInput };
+}
 
-  console.log("[headshot-training] STEP H before: copying LoRA to Supabase Storage");
-  let loraUrl = temporaryLoraUrl;
+async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId: string): Promise<string> {
   try {
     const { bytes: loraBytes } = await downloadBytes(temporaryLoraUrl, "trained LoRA");
-    const loraPath = await storeLoraFile({ userId: job.userId, jobId: job.id, bytes: loraBytes });
-    loraUrl = loraPath;
-    console.log("[headshot-training] STEP H after: stored permanently at", loraPath);
-  } catch (storageErr) {
-    console.warn("[headshot-training] STEP H warn: Supabase copy failed, falling back to fal.storage URL:", storageErr);
+    const loraPath = await storeLoraFile({ userId, jobId, bytes: loraBytes });
+    console.log("[headshot-training] LoRA stored permanently at", loraPath);
+    return loraPath;
+  } catch (err) {
+    console.warn("[headshot-training] Supabase copy failed, falling back to fal.storage URL:", err);
+    return temporaryLoraUrl;
   }
-
-  return {
-    lora_url: loraUrl,
-    trigger_word: triggerWord
-  };
 }
 
 async function processHeadshotGenerateJob(job: WorkerJob) {
@@ -332,14 +302,51 @@ export const runAiJob = inngest.createFunction(
       console.log("[runAiJob] metadata parsed OK:", JSON.stringify(workerJob.metadata));
 
       if (job.type === "headshot-training") {
-        const result = await step.run("train and store headshot lora", async () => processHeadshotTrainingJob(workerJob));
-        await step.run("mark done", async () => markJobDone(job.id, result.lora_url, result));
+        // Step 1: prepare archive and submit to fal.ai (fast, < 60s)
+        const { triggerWord, trainerInput } = await step.run("prepare training", async () =>
+          prepareHeadshotTraining(workerJob)
+        );
+
+        const falRequestId = await step.run("submit to fal trainer", async () => {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+          const webhookUrl = appUrl ? `${appUrl}/api/webhooks/fal` : undefined;
+          console.log("[headshot-training] submitting to fal.ai, webhook:", webhookUrl ?? "none");
+          try {
+            return await submitFluxLoraTrainer(
+              { images_data_url: trainerInput.images_data_url, trigger_word: triggerWord, steps: trainerInput.steps },
+              webhookUrl
+            );
+          } catch (error) {
+            logFalTrainerError(error, trainerInput);
+            throw error;
+          }
+        });
+
+        console.log("[headshot-training] fal request_id:", falRequestId, "— waiting for webhook");
+
+        // Step 2: wait for fal.ai to call our webhook (no Vercel function held open)
+        const falEvent = await step.waitForEvent("wait for fal training webhook", {
+          event: "fal/job.completed",
+          timeout: "45m",
+          if: `async_event.data.request_id == "${falRequestId}"`
+        });
+
+        if (!falEvent) throw new Error("Training timed out: fal.ai did not complete within 45 minutes");
+        if (falEvent.data.status !== "OK") {
+          throw new Error(`fal.ai training failed: ${JSON.stringify(falEvent.data.error)}`);
+        }
+
+        const temporaryLoraUrl = getFluxLoraUrl(falEvent.data.payload as FluxLoraTrainerOutput);
+
+        // Step 4: store LoRA permanently (with Supabase fallback)
+        const loraUrl = await step.run("store lora", async () =>
+          storeTrainedLora(temporaryLoraUrl!, job.userId, job.id)
+        );
+
+        const result = { lora_url: loraUrl, trigger_word: triggerWord };
+        await step.run("mark done", async () => markJobDone(job.id, loraUrl, result));
         await step.run("send ready email", async () =>
-          sendUserEmail(
-            job.userId,
-            "Tu modelo personal está listo",
-            "Tu modelo personal está listo. Entrá a tu dashboard para generar tus headshots."
-          )
+          sendUserEmail(job.userId, "Tu modelo personal está listo", "Tu modelo personal está listo. Entrá a tu dashboard para generar tus headshots.")
         );
         return { result };
       }
