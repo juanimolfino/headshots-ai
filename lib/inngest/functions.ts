@@ -1,6 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
-import { storeAiResult, storeLoraFile } from "@/lib/ai/storage";
+import { storeAiResult, storeLoraFileR2 } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
 import {
   buildFluxLoraTrainerInput,
@@ -249,14 +249,14 @@ async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResu
 
 async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId: string): Promise<string> {
   try {
-    const response = await fetch(temporaryLoraUrl, { signal: AbortSignal.timeout(8000) });
+    const response = await fetch(temporaryLoraUrl, { signal: AbortSignal.timeout(120000) });
     if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     const loraBytes = await response.arrayBuffer();
-    const loraPath = await storeLoraFile({ userId, jobId, bytes: loraBytes });
-    console.log("[headshot-training] LoRA stored permanently at", loraPath);
-    return loraPath;
+    const r2Key = await storeLoraFileR2({ userId, jobId, bytes: loraBytes });
+    console.log("[headshot-training] LoRA stored permanently in R2 at", r2Key);
+    return r2Key;
   } catch (err) {
-    console.warn("[headshot-training] LoRA storage skipped, using fal.storage URL:", err);
+    console.warn("[headshot-training] R2 storage failed, using fal.storage URL:", err);
     return temporaryLoraUrl;
   }
 }

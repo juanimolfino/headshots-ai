@@ -1,4 +1,41 @@
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+
+function getR2Client() {
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!
+    }
+  });
+}
+
+export function isR2LoraKey(value: string): boolean {
+  return value.startsWith("r2:loras/");
+}
+
+export async function storeLoraFileR2(input: { userId: string; jobId: string; bytes: ArrayBuffer }): Promise<string> {
+  const key = `loras/${input.userId}/${input.jobId}/model.safetensors`;
+  await getR2Client().send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME!,
+    Key: key,
+    Body: Buffer.from(input.bytes),
+    ContentType: "application/octet-stream"
+  }));
+  return `r2:${key}`;
+}
+
+export async function createLoraSignedUrlR2(r2Key: string): Promise<string> {
+  const key = r2Key.replace(/^r2:/, "");
+  return getSignedUrl(
+    getR2Client(),
+    new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME!, Key: key }),
+    { expiresIn: 60 * 60 }
+  );
+}
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
 const LORA_SIGNED_URL_TTL_SECONDS = 60 * 60;
