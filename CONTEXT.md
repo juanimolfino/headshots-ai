@@ -375,17 +375,20 @@ RLS:
 - El browser sube directamente a fal.storage (client-side) de forma secuencial (un archivo a la vez para evitar timeouts de 408 que ocurrían con uploads paralelos).
 - Compresión client-side antes del upload: Canvas API redimensiona a max 1024px, JPEG 88% de calidad. Reduce fotos de iPhone de 5–15 MB a ~200–500 KB sin pérdida relevante para el trainer.
 
-**Training (Etapa 1):**
+**Training (Etapa 1) — arquitectura webhook-driven:**
 - `POST /api/jobs/create` con `type: "headshot-training"` y `input: { archive_url: JSON.stringify(urls), steps: 1000, name: "nombre del modelo" }`.
-- El worker Inngest (`runAiJob`):
-  1. Crea trigger word aleatorio (`ohwx` + 4 letras).
-  2. Descarga las imágenes de fal.storage y las comprime en un ZIP con JSZip.
-  3. Sube el ZIP a fal.storage.
-  4. Llama a `fal-ai/flux-lora-portrait-trainer` (≈15–30 min).
-  5. Intenta copiar el `.safetensors` resultante a Supabase Storage en `loras/{userId}/{jobId}/model.safetensors`. Si falla (límite de 50 MB del free tier de Supabase), hace fallback a la URL temporal de fal.storage sin fallar el job.
-  6. Guarda `{ lora_url, trigger_word }` en `jobs.result`.
-  7. Envía email de notificación si Resend está configurado.
+- El worker Inngest (`runAiJob`) usa steps para no bloquear Vercel (timeout de 300s en Pro):
+  1. `prepare training`: crea trigger word aleatorio (`ohwx` + 4 letras), descarga las imágenes de fal.storage, las comprime en un ZIP con JSZip, y sube el ZIP a fal.storage.
+  2. `submit to fal trainer`: llama a `fal.queue.submit()` con `webhookUrl = ${NEXT_PUBLIC_APP_URL}/api/webhooks/fal` y devuelve el `request_id`. No bloquea Vercel.
+  3. `store fal request id`: guarda `{ trigger_word, fal_request_id }` en `jobs.metadata`.
+  4. `step.waitForEvent("fal/training.${falRequestId}", timeout: "45m")`: suspende el run de Inngest sin mantener ninguna función de Vercel abierta. fal.ai entrena durante ≈8–30 minutos.
+  5. fal.ai POST a `/api/webhooks/fal` → el handler envía el evento `fal/training.${request_id}` a Inngest → el run se reactiva.
+  6. `store lora`: intenta descargar el `.safetensors` y subirlo a Supabase Storage. Si falla (límite 50 MB del free tier), hace fallback a la URL temporal de fal.storage con un timeout de 8s para no bloquear.
+  7. `mark done`: guarda `{ lora_url, trigger_word }` en `jobs.result`.
+  8. `send ready email`: envía email de notificación si Resend está configurado.
 - El `input.name` del training job es el nombre visible del modelo en la UI.
+- **Webhook endpoint**: `app/api/webhooks/fal/route.ts`. Recibe el POST de fal.ai, extrae `request_id`, y envía `inngest.send({ name: "fal/training.${requestId}", data: { status, payload, error } })`. El nombre del evento lleva el `request_id` embebido para evitar expresiones CEL (más confiable en el dev server local).
+- **Verificado fal.ai SDK**: el webhook se registra como `fal_webhook` query param en `fal.queue.submit`. El payload de fal.ai usa `status: "OK"` para éxito y `status: "ERROR"` para fallo. El payload contiene `{ diffusers_lora_file: { url }, config_file }` que es exactamente lo que parsea `getFluxLoraUrl()`.
 
 **Generation (Etapa 2):**
 - `POST /api/jobs/create` con `type: "headshot-generate"` y `input: { lora_url, trigger_word, style, num_images }`.
@@ -401,11 +404,16 @@ RLS:
 - **Etapa 2 — Generación**: aparece al seleccionar un modelo. Muestra selector de estilo (professional/cinematic/natural) y cantidad (1/2/4 fotos). Botón "Generar mis headshots". Progress in-place mientras genera. Galería con descarga individual y masiva al terminar.
 - **Concurrencia**: training y generation corren en paralelo sin bloquearse (hasta `MAX_CONCURRENT_JOBS=3` simultáneos por usuario).
 
-**Script de seed para testing:**
+**Scripts de testing:**
 - `scripts/seed-training-job.mjs`: inserta un job de training completado directamente en la DB para testing sin correr el trainer real. Intenta copiar el LoRA a Supabase Storage; si falla por límite de tamaño, inserta con la URL de fal.storage.
+- `scripts/simulate-fal-webhook.mjs`: simula la finalización de fal.ai disparando el webhook manualmente. Lee el `fal_request_id` de `jobs.metadata` y hace POST a `/api/webhooks/fal`. Usar con `FAL_MOCK_TRAINING=true` para testear el flujo completo sin gastar créditos de fal.ai.
+
+**Variables de entorno locales adicionales (`.env.local` únicamente):**
+- `FAL_MOCK_TRAINING=true`: saltea el llamado real a `fal.queue.submit` y devuelve un request_id falso. Usar solo en desarrollo. No subir a Vercel.
+- `INNGEST_BASE_URL=http://localhost:8288`: redirige `inngest.send()` al dev server local en vez de Inngest cloud. Necesario cuando se tienen claves de producción en `.env.local` y se quiere testear localmente.
 
 ### Limitaciones conocidas
-- **Supabase Storage free tier**: límite de 50 MB por archivo. Los `.safetensors` de Flux LoRA portrait pesan ~125 MB y no se pueden almacenar permanentemente en el free tier. El fallback guarda la URL de fal.storage, que no es permanente. Solución: upgrade a Supabase Pro ($25/mes) o migrar almacenamiento de LoRAs a Cloudflare R2/AWS S3.
+- **Supabase Storage free tier**: límite de 50 MB por archivo. Los `.safetensors` de Flux LoRA portrait pesan ~125 MB y no se pueden almacenar permanentemente en el free tier. El fallback guarda la URL de fal.storage, que es temporal (expira). Los modelos de los usuarios se perderán cuando expire la URL. Solución pendiente: Cloudflare R2 (ver próximos pasos).
 - `STRIPE_WEBHOOK_SECRET` debe estar configurado en cada entorno para procesamiento real de webhooks.
 - `HEALTHCHECK_SECRET` debe estar en producción si se usa `/api/health`.
 - Resend requiere dominio verificado; direcciones `gmail.com` son rechazadas.
@@ -416,15 +424,23 @@ RLS:
 
 ## 10. Próximos pasos sugeridos
 
-1. **Resolver almacenamiento permanente de LoRAs.**
-   - Opción A: upgrade Supabase a Pro y aumentar límite de Storage a 200+ MB.
-   - Opción B: agregar Cloudflare R2 como storage alternativo para archivos grandes (LoRAs y opcionalmente imágenes generadas). R2 no tiene costo de egress y acepta archivos de cualquier tamaño.
-   - El código ya está preparado: `storeLoraFile()`, `createLoraSignedUrl()`, e `isSupabaseLoraPath()` en `lib/ai/storage.ts` manejan el caso de Supabase. Solo habría que añadir el adaptador de R2 si se elige esa opción.
+1. **Integrar Cloudflare R2 para almacenamiento permanente de LoRAs.**
+   - R2 es la opción recomendada: 10 GB gratis permanentemente (~80 LoRAs), sin costo de egress (fal.ai descarga de R2 gratis), $0.015/GB/mes después.
+   - Plan de integración:
+     1. Crear bucket en Cloudflare R2 (dashboard.cloudflare.com → R2).
+     2. Instalar `@aws-sdk/client-s3` (R2 es compatible con S3 API).
+     3. Agregar en `lib/ai/storage.ts` función `storeLoraFileR2({ userId, jobId, bytes })` que sube a R2 y devuelve la URL pública.
+     4. Agregar `createLoraSignedUrlR2(key)` que genera signed URL de 1 hora con `GetObjectCommand`.
+     5. Actualizar `storeTrainedLora()` en `lib/inngest/functions.ts` para llamar a R2 en vez de Supabase.
+     6. Actualizar `flux-lora-generator.ts` para detectar keys de R2 y generar signed URL antes de llamar a fal.ai.
+   - Variables nuevas necesarias: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_URL` (opcional, para URLs públicas).
+   - Hasta implementar R2, los LoRAs quedan en fal.storage (temporal). Los modelos de usuarios con URLs expiradas dejarán de funcionar.
 
-2. **Completar verificación end-to-end del training real.**
-   - Correr un training job real con fotos reales a través de Inngest en producción.
-   - Verificar que las imágenes generadas llegan a Supabase Storage y la galería las muestra correctamente.
+2. **Verificación end-to-end en producción.**
+   - Correr un training job real con fotos reales. URL de producción: `https://headshots-ai-delta-pink.vercel.app`.
+   - Confirmar que fal.ai llama al webhook en `/api/webhooks/fal`.
    - Confirmar que el email de "modelo listo" se envía.
+   - Confirmar que la generación de imágenes funciona desde el modelo entrenado.
 
 3. **Finish Stripe end-to-end.**
    - Set `STRIPE_WEBHOOK_SECRET` en Vercel.

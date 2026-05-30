@@ -249,12 +249,14 @@ async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResu
 
 async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId: string): Promise<string> {
   try {
-    const { bytes: loraBytes } = await downloadBytes(temporaryLoraUrl, "trained LoRA");
+    const response = await fetch(temporaryLoraUrl, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+    const loraBytes = await response.arrayBuffer();
     const loraPath = await storeLoraFile({ userId, jobId, bytes: loraBytes });
     console.log("[headshot-training] LoRA stored permanently at", loraPath);
     return loraPath;
   } catch (err) {
-    console.warn("[headshot-training] Supabase copy failed, falling back to fal.storage URL:", err);
+    console.warn("[headshot-training] LoRA storage skipped, using fal.storage URL:", err);
     return temporaryLoraUrl;
   }
 }
@@ -328,10 +330,10 @@ export const runAiJob = inngest.createFunction(
         );
 
         // Step 2: wait for fal.ai to call our webhook (no Vercel function held open)
+        // Event name encodes the request_id — no CEL filter needed, match is exact by name.
         const falEvent = await step.waitForEvent("wait for fal training webhook", {
-          event: "fal/job.completed",
-          timeout: "45m",
-          if: `event.data.request_id == "${falRequestId}"`
+          event: `fal/training.${falRequestId}`,
+          timeout: "45m"
         });
 
         if (!falEvent) throw new Error("Training timed out: fal.ai did not complete within 45 minutes");

@@ -24,9 +24,8 @@ export async function POST(request: Request) {
   console.log("[fal-webhook] received:", requestId, "status:", body.status);
 
   await inngest.send({
-    name: "fal/job.completed",
+    name: `fal/training.${requestId}`,
     data: {
-      request_id: requestId,
       status: body.status ?? "UNKNOWN",
       payload: body.payload ?? null,
       error: body.error ?? null
