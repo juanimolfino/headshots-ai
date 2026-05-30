@@ -379,49 +379,50 @@ export function HeadshotFlow() {
     });
 
     try {
-      const urls = await Promise.all(
-        photos.map(async (photo, index) => {
-          console.log("[headshot-flow] upload: initiating fal upload", {
-            index,
-            name: photo.file.name,
-            size: photo.file.size,
-            type: photo.file.type
-          });
+      const urls: string[] = [];
+      for (let index = 0; index < photos.length; index++) {
+        const photo = photos[index];
+        setMessage(`Subiendo foto ${index + 1} de ${photos.length}...`);
+        console.log("[headshot-flow] upload: initiating fal upload", {
+          index,
+          name: photo.file.name,
+          size: photo.file.size,
+          type: photo.file.type
+        });
 
-          const initiateResponse = await fetch("/api/upload/initiate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              filename: photo.file.name,
-              contentType: photo.file.type,
-              size: photo.file.size
-            })
-          });
-          const initiateData = await readJsonOrText(initiateResponse) as { uploadUrl?: string; fileUrl?: string; error?: string } | null;
-          console.log("[headshot-flow] upload initiate response:", initiateResponse.status, initiateData);
+        const initiateResponse = await fetch("/api/upload/initiate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: photo.file.name,
+            contentType: photo.file.type,
+            size: photo.file.size
+          })
+        });
+        const initiateData = await readJsonOrText(initiateResponse) as { uploadUrl?: string; fileUrl?: string; error?: string } | null;
+        console.log("[headshot-flow] upload initiate response:", initiateResponse.status, initiateData);
 
-          if (!initiateResponse.ok || !initiateData?.uploadUrl || !initiateData.fileUrl) {
-            throw new Error(initiateData?.error ?? `No pudimos preparar la subida de ${photo.file.name}.`);
-          }
+        if (!initiateResponse.ok || !initiateData?.uploadUrl || !initiateData.fileUrl) {
+          throw new Error(initiateData?.error ?? `No pudimos preparar la subida de ${photo.file.name}.`);
+        }
 
-          const uploadResponse = await fetch(initiateData.uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": photo.file.type || "application/octet-stream" },
-            body: photo.file
-          });
-          console.log("[headshot-flow] fal upload response:", uploadResponse.status, {
-            index,
-            fileUrl: initiateData.fileUrl
-          });
+        const uploadResponse = await fetch(initiateData.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": photo.file.type || "application/octet-stream" },
+          body: photo.file
+        });
+        console.log("[headshot-flow] fal upload response:", uploadResponse.status, {
+          index,
+          fileUrl: initiateData.fileUrl
+        });
 
-          if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            throw new Error(errorText || `No pudimos subir ${photo.file.name}.`);
-          }
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          throw new Error(errorText || `No pudimos subir ${photo.file.name}.`);
+        }
 
-          return initiateData.fileUrl;
-        })
-      );
+        urls.push(initiateData.fileUrl);
+      }
 
       setUploadedUrls(urls);
       console.log("[headshot-flow] upload complete:", { count: urls.length, urls });

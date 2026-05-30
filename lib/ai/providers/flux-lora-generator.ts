@@ -1,4 +1,5 @@
 import { fal } from "@fal-ai/client";
+import { createLoraSignedUrl, isSupabaseLoraPath } from "@/lib/ai/storage";
 import type { AiProvider, HeadshotGenerateInput } from "@/lib/ai/types";
 
 const FLUX_LORA_GENERATOR_ENDPOINT = "fal-ai/flux-lora";
@@ -29,6 +30,10 @@ function buildPrompt(input: HeadshotGenerateInput) {
 export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): Promise<string[]> {
   fal.config({ credentials: process.env.FAL_KEY });
 
+  const loraUrl = isSupabaseLoraPath(input.lora_url)
+    ? await createLoraSignedUrl(input.lora_url)
+    : input.lora_url;
+
   const result = await fal.subscribe(FLUX_LORA_GENERATOR_ENDPOINT, {
     input: {
       prompt: buildPrompt(input),
@@ -36,7 +41,7 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
       guidance_scale: 3.5,
       num_inference_steps: 28,
       num_images: input.num_images ?? 4,
-      loras: [{ path: input.lora_url, scale: 1 }]
+      loras: [{ path: loraUrl, scale: 1 }]
     } as never,
     logs: true,
     pollInterval: 5000,

@@ -1,6 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
-import { storeAiResult } from "@/lib/ai/storage";
+import { storeAiResult, storeLoraFile } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
 import {
   buildFluxLoraTrainerInput,
@@ -272,9 +272,16 @@ async function processHeadshotTrainingJob(job: WorkerJob) {
     throw error;
   }
 
-  console.log("[headshot-training] STEP H before: persisting fal LoRA URL");
-  const loraUrl = temporaryLoraUrl;
-  console.log("[headshot-training] STEP H after: using fal LoRA URL:", loraUrl);
+  console.log("[headshot-training] STEP H before: copying LoRA to Supabase Storage");
+  let loraUrl = temporaryLoraUrl;
+  try {
+    const { bytes: loraBytes } = await downloadBytes(temporaryLoraUrl, "trained LoRA");
+    const loraPath = await storeLoraFile({ userId: job.userId, jobId: job.id, bytes: loraBytes });
+    loraUrl = loraPath;
+    console.log("[headshot-training] STEP H after: stored permanently at", loraPath);
+  } catch (storageErr) {
+    console.warn("[headshot-training] STEP H warn: Supabase copy failed, falling back to fal.storage URL:", storageErr);
+  }
 
   return {
     lora_url: loraUrl,

@@ -1,6 +1,37 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
+const LORA_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+export async function storeLoraFile(input: {
+  userId: string;
+  jobId: string;
+  bytes: ArrayBuffer;
+}): Promise<string> {
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "ai-results";
+  const path = `loras/${input.userId}/${input.jobId}/model.safetensors`;
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.storage.from(bucket).upload(path, input.bytes, {
+    upsert: true,
+    contentType: "application/octet-stream"
+  });
+  if (error) throw error;
+  return path;
+}
+
+export async function createLoraSignedUrl(path: string): Promise<string> {
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "ai-results";
+  const { data, error } = await getSupabaseAdmin()
+    .storage
+    .from(bucket)
+    .createSignedUrl(path, LORA_SIGNED_URL_TTL_SECONDS);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+export function isSupabaseLoraPath(value: string): boolean {
+  return value.startsWith("loras/");
+}
 
 export async function storeAiResult(input: {
   userId: string;
