@@ -46,13 +46,14 @@ export const createJobSchema = z.discriminatedUnion("type", [
     type: z.literal("headshot-training"),
     input: z.object({
       archive_url: headshotArchiveSchema,
-      steps: z.number().min(1000).max(2500).default(1000)
+      steps: z.number().min(1000).max(2500).default(1000),
+      name: z.string().min(1).max(60).optional()
     })
   }),
   z.object({
     type: z.literal("headshot-generate"),
     input: z.object({
-      lora_url: z.string().url(),
+      lora_url: z.string().min(1),
       trigger_word: z.string(),
       style: z.enum(["professional", "cinematic", "natural"]).default("professional"),
       num_images: z.number().min(1).max(4).default(4)
