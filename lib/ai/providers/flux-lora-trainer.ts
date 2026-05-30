@@ -44,6 +44,12 @@ export function getFluxLoraUrl(resultData: FluxLoraTrainerOutput | undefined) {
 }
 
 export async function submitFluxLoraTrainer(input: HeadshotTrainingInput, webhookUrl?: string): Promise<string> {
+  if (process.env.FAL_MOCK_TRAINING === "true") {
+    const mockId = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log("[flux-lora-trainer] MOCK MODE — skipping fal.ai, fake request_id:", mockId);
+    return mockId;
+  }
+
   fal.config({ credentials: process.env.FAL_KEY });
   const trainerInput = buildFluxLoraTrainerInput(input);
   const { request_id } = await fal.queue.submit(FLUX_LORA_TRAINER_ENDPOINT, {

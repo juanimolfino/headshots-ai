@@ -323,6 +323,9 @@ export const runAiJob = inngest.createFunction(
         });
 
         console.log("[headshot-training] fal request_id:", falRequestId, "— waiting for webhook");
+        await step.run("store fal request id", async () =>
+          updateJobMetadata(job.id, { ...workerJob.metadata, trigger_word: triggerWord, fal_request_id: falRequestId })
+        );
 
         // Step 2: wait for fal.ai to call our webhook (no Vercel function held open)
         const falEvent = await step.waitForEvent("wait for fal training webhook", {
