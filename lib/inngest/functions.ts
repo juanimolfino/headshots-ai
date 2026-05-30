@@ -331,7 +331,7 @@ export const runAiJob = inngest.createFunction(
         const falEvent = await step.waitForEvent("wait for fal training webhook", {
           event: "fal/job.completed",
           timeout: "45m",
-          if: `async_event.data.request_id == "${falRequestId}"`
+          if: `event.data.request_id == "${falRequestId}"`
         });
 
         if (!falEvent) throw new Error("Training timed out: fal.ai did not complete within 45 minutes");
