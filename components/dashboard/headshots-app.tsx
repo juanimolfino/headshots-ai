@@ -12,6 +12,7 @@ import {
   Download,
   Loader2,
   LogOut,
+  Pencil,
   Plus,
   RefreshCw,
   Sparkles,
@@ -35,19 +36,19 @@ const UPLOAD_JPEG_QUALITY = 0.88;
 
 const STYLE_OPTIONS = [
   {
-    label: "Profesional",
+    label: "Professional",
     value: "professional" as const,
-    description: "Fondo neutro, iluminación de estudio. Ideal para LinkedIn y CV."
+    description: "Neutral background, studio lighting. Ideal for LinkedIn and CV."
   },
   {
-    label: "Cinematográfico",
+    label: "Cinematic",
     value: "cinematic" as const,
-    description: "Estilo editorial con mayor contraste. Para perfiles creativos."
+    description: "Editorial style with higher contrast. For creative profiles."
   },
   {
     label: "Natural",
     value: "natural" as const,
-    description: "Sin filtros adicionales. El resultado más cercano a tus fotos reales."
+    description: "No extra filters. The result closest to your real photos."
   }
 ] as const;
 
@@ -85,7 +86,7 @@ type SelectedPhoto = { id: string; file: File; previewUrl: string };
 function getModelName(job: TrainingJob): string {
   const name = job.input?.name;
   if (typeof name === "string" && name.trim()) return name.trim();
-  return new Date(job.createdAt).toLocaleDateString("es-AR", {
+  return new Date(job.createdAt).toLocaleDateString("en-US", {
     day: "2-digit",
     month: "short",
     year: "numeric"
@@ -186,6 +187,10 @@ export function HeadshotsApp({
   // Nav
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showNewModelForm, setShowNewModelForm] = useState(false);
+
+  // Rename
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   // New model form
   const [modelName, setModelName] = useState("");
@@ -336,6 +341,20 @@ export function HeadshotsApp({
     generationStartRef.current = null;
   }
 
+  async function renameModel(modelId: string, newName: string) {
+    const trimmed = newName.trim().slice(0, 60);
+    if (!trimmed) return;
+    const res = await fetch(`/api/jobs/${modelId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed })
+    });
+    if (!res.ok) return;
+    setTrainedModels(prev =>
+      prev.map(m => (m.id === modelId ? { ...m, input: { ...m.input, name: trimmed } } : m))
+    );
+  }
+
   function addFiles(fileList: FileList | File[]) {
     setFormMessage(null);
     const errors: string[] = [];
@@ -343,7 +362,7 @@ export function HeadshotsApp({
     for (const file of Array.from(fileList)) {
       if (!ALLOWED_TYPES.has(file.type)) continue;
       if (file.size > MAX_FILE_SIZE_BYTES) {
-        errors.push(`${file.name} supera 10MB.`);
+        errors.push(`${file.name} exceeds 10 MB.`);
         continue;
       }
       accepted.push({
@@ -357,7 +376,7 @@ export function HeadshotsApp({
     for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
     const skipped = accepted.length - toAdd.length;
     setPhotos(prev => [...prev, ...toAdd]);
-    if (skipped > 0) setFormMessage(`Solo podés subir hasta ${MAX_PHOTOS} fotos.`);
+    if (skipped > 0) setFormMessage(`You can upload up to ${MAX_PHOTOS} photos.`);
     else if (errors[0]) setFormMessage(errors[0]);
   }
 
@@ -371,7 +390,7 @@ export function HeadshotsApp({
 
   async function uploadPhotos() {
     if (photos.length < MIN_PHOTOS) {
-      setFormMessage(`Subí al menos ${MIN_PHOTOS} fotos.`);
+      setFormMessage(`Upload at least ${MIN_PHOTOS} photos.`);
       return;
     }
     setUploading(true);
@@ -379,7 +398,7 @@ export function HeadshotsApp({
     try {
       const urls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
-        setFormMessage(`Subiendo foto ${i + 1} de ${photos.length}...`);
+        setFormMessage(`Uploading photo ${i + 1} of ${photos.length}...`);
         const file = await compressImage(photos[i].file);
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
@@ -393,7 +412,7 @@ export function HeadshotsApp({
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
           throw new Error(
-            initData?.error ?? `No pudimos preparar la subida de ${photos[i].file.name}.`
+            initData?.error ?? `Could not prepare upload for ${photos[i].file.name}.`
           );
         }
         const upRes = await fetch(initData.uploadUrl, {
@@ -401,14 +420,14 @@ export function HeadshotsApp({
           headers: { "Content-Type": file.type },
           body: file
         });
-        if (!upRes.ok) throw new Error(`No pudimos subir ${photos[i].file.name}.`);
+        if (!upRes.ok) throw new Error(`Could not upload ${photos[i].file.name}.`);
         urls.push(initData.fileUrl);
       }
       setUploadedUrls(urls);
       setFormMessage(null);
     } catch (err) {
       setFormMessage(
-        err instanceof Error ? err.message : "No pudimos subir las fotos. Probá de nuevo."
+        err instanceof Error ? err.message : "Could not upload photos. Please try again."
       );
     } finally {
       setUploading(false);
@@ -418,7 +437,7 @@ export function HeadshotsApp({
   async function startTraining() {
     if (!uploadedUrls) return;
     if (!modelName.trim()) {
-      setFormMessage("Dale un nombre a tu modelo.");
+      setFormMessage("Please give your model a name.");
       return;
     }
     setTrainingCreating(true);
@@ -433,8 +452,8 @@ export function HeadshotsApp({
         })
       });
       const data = (await res.json()) as { jobId?: string; error?: string };
-      if (res.status === 402) throw new Error("No tenés créditos suficientes.");
-      if (!res.ok) throw new Error(data.error ?? "No pudimos iniciar el entrenamiento.");
+      if (res.status === 402) throw new Error("Not enough credits.");
+      if (!res.ok) throw new Error(data.error ?? "Could not start training.");
       for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
       setPhotos([]);
       setUploadedUrls(null);
@@ -443,9 +462,7 @@ export function HeadshotsApp({
       trainingStartRef.current = Date.now();
       await loadModels();
     } catch (err) {
-      setFormMessage(
-        err instanceof Error ? err.message : "No pudimos iniciar el entrenamiento."
-      );
+      setFormMessage(err instanceof Error ? err.message : "Could not start training.");
     } finally {
       setTrainingCreating(false);
     }
@@ -473,11 +490,11 @@ export function HeadshotsApp({
     });
     const data = (await res.json()) as { jobId?: string; error?: string };
     if (res.status === 402) {
-      setGenerationMessage("No tenés créditos suficientes.");
+      setGenerationMessage("Not enough credits.");
       return;
     }
     if (!res.ok) {
-      setGenerationMessage(data.error ?? "No pudimos iniciar la generación.");
+      setGenerationMessage(data.error ?? "Could not start generation.");
       return;
     }
     generationStartRef.current = Date.now();
@@ -517,42 +534,78 @@ export function HeadshotsApp({
 
         {/* Models nav */}
         <div className="flex-1 overflow-y-auto py-4">
-          <p className="mb-2 px-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-            Tus modelos
+          <p className="mb-2 px-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+            Your models
           </p>
 
           {loadingModels ? (
             <div className="flex items-center gap-2 px-4 py-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-600" />
-              <span className="text-xs text-zinc-500">Cargando...</span>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
+              <span className="text-xs text-zinc-400">Loading...</span>
             </div>
           ) : (
             <>
               {trainedModels.map(model => {
                 const name = getModelName(model);
                 const isSelected = selectedModelId === model.id && !showNewModelForm;
+                const isEditing = editingModelId === model.id;
                 return (
-                  <button
+                  <div
                     key={model.id}
-                    type="button"
-                    onClick={() => handleSelectModel(model.id)}
+                    onClick={() => !isEditing && handleSelectModel(model.id)}
                     className={cn(
-                      "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
+                      "group/model flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition-colors",
                       isSelected
                         ? "bg-zinc-800 text-white"
-                        : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                        : "text-zinc-300 hover:bg-zinc-800/50 hover:text-white"
                     )}
                   >
                     <div
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold uppercase",
-                        isSelected ? "bg-white text-zinc-900" : "bg-zinc-800 text-zinc-400"
+                        isSelected ? "bg-white text-zinc-900" : "bg-zinc-800 text-zinc-300"
                       )}
                     >
                       {name.charAt(0)}
                     </div>
-                    <span className="truncate text-sm">{name}</span>
-                  </button>
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        className="flex-1 truncate bg-transparent text-sm outline-none"
+                        value={editingName}
+                        maxLength={60}
+                        onChange={e => setEditingName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") {
+                            void renameModel(model.id, editingName);
+                            setEditingModelId(null);
+                          }
+                          if (e.key === "Escape") setEditingModelId(null);
+                        }}
+                        onBlur={() => {
+                          void renameModel(model.id, editingName);
+                          setEditingModelId(null);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <>
+                        <span className="flex-1 truncate text-sm">{name}</span>
+                        <button
+                          type="button"
+                          className="shrink-0 opacity-0 transition-opacity group-hover/model:opacity-100"
+                          title="Rename"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setEditingModelId(model.id);
+                            setEditingName(name);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 text-zinc-500 hover:text-zinc-300" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 );
               })}
 
@@ -560,11 +613,11 @@ export function HeadshotsApp({
                 <div className="mx-3 mt-1 flex items-center gap-2 rounded-md bg-zinc-900 px-2.5 py-2">
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-500" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-zinc-300">
+                    <p className="truncate text-xs text-zinc-200">
                       {getModelName(activeTrainingJob)}
                     </p>
-                    <p className="text-[10px] text-zinc-500">
-                      Entrenando · {formatElapsed(trainingElapsed)}
+                    <p className="text-[10px] text-zinc-400">
+                      Training · {formatElapsed(trainingElapsed)}
                     </p>
                   </div>
                   <button
@@ -573,7 +626,7 @@ export function HeadshotsApp({
                       setActiveTrainingJob(null);
                       trainingStartRef.current = null;
                     }}
-                    className="text-zinc-600 hover:text-zinc-400"
+                    className="text-zinc-500 hover:text-zinc-400"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -581,17 +634,17 @@ export function HeadshotsApp({
               )}
 
               {trainedModels.length === 0 && !activeTrainingJob && (
-                <p className="px-4 py-1 text-xs text-zinc-600">Ningún modelo entrenado aún.</p>
+                <p className="px-4 py-1 text-xs text-zinc-500">No trained models yet.</p>
               )}
 
               <div className="mt-3 px-3">
                 <button
                   type="button"
                   onClick={handleNewModel}
-                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-400"
+                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-300"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  Nuevo modelo
+                  New model
                 </button>
               </div>
             </>
@@ -601,26 +654,26 @@ export function HeadshotsApp({
         {/* Bottom */}
         <div className="border-t border-zinc-800 px-4 py-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-zinc-500">Créditos</span>
+            <span className="text-xs text-zinc-400">Credits</span>
             <span className="text-xs font-semibold text-zinc-200">{initialCredits}</span>
           </div>
           <Link
             href="/pricing"
-            className="mb-4 flex items-center gap-1.5 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+            className="mb-4 flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
           >
             <Wallet className="h-3.5 w-3.5" />
-            Comprar créditos
+            Buy credits
           </Link>
           <div className="flex items-center gap-2 border-t border-zinc-800 pt-3">
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800">
               <User className="h-3.5 w-3.5 text-zinc-400" />
             </div>
-            <span className="min-w-0 flex-1 truncate text-xs text-zinc-500">{userEmail}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">{userEmail}</span>
             <form action="/logout" method="post">
               <button
                 type="submit"
-                className="text-zinc-600 transition-colors hover:text-zinc-400"
-                aria-label="Cerrar sesión"
+                className="text-zinc-500 transition-colors hover:text-zinc-300"
+                aria-label="Sign out"
               >
                 <LogOut className="h-3.5 w-3.5" />
               </button>
@@ -720,22 +773,20 @@ function NewModelPanel({
           className="flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-zinc-700"
         >
           <ChevronLeft className="h-4 w-4" />
-          Cancelar
+          Cancel
         </button>
         <span className="text-zinc-300">/</span>
-        <h1 className="text-sm font-semibold text-zinc-900">Nuevo modelo</h1>
+        <h1 className="text-sm font-semibold text-zinc-900">New model</h1>
       </div>
 
       <div className="max-w-lg space-y-6">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-zinc-700">
-            Nombre del modelo
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-zinc-700">Model name</label>
           <input
             type="text"
             value={modelName}
             onChange={e => onModelNameChange(e.target.value)}
-            placeholder="Ej: Juan, María, etc."
+            placeholder="e.g. Alex, Jordan…"
             maxLength={60}
             disabled={uploading || !!uploadedUrls || trainingCreating}
             className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-100 disabled:opacity-60"
@@ -746,7 +797,7 @@ function NewModelPanel({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm font-medium text-zinc-700">
-                Fotos ({MIN_PHOTOS}–{MAX_PHOTOS})
+                Photos ({MIN_PHOTOS}–{MAX_PHOTOS})
               </label>
               <span className="text-sm text-zinc-400">
                 {photos.length} / {MAX_PHOTOS}
@@ -764,10 +815,8 @@ function NewModelPanel({
               className="flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-6 text-center transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Upload className="mb-2 h-6 w-6 text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-700">
-                Arrastrá o hacé click para elegir
-              </span>
-              <span className="mt-1 text-xs text-zinc-400">JPG o PNG · Máx 10 MB por foto</span>
+              <span className="text-sm font-medium text-zinc-700">Drag or click to select</span>
+              <span className="mt-1 text-xs text-zinc-400">JPG or PNG · Max 10 MB per photo</span>
             </button>
             <input
               ref={fileInputRef}
@@ -826,13 +875,13 @@ function NewModelPanel({
                   ) : (
                     <Check className="h-4 w-4" />
                   )}
-                  {uploading ? (formMessage ?? "Subiendo...") : "Confirmar fotos"}
+                  {uploading ? (formMessage ?? "Uploading...") : "Confirm photos"}
                 </Button>
               ) : (
                 <p className="text-sm text-zinc-400">
                   {photos.length === 0
-                    ? "Seleccioná entre 10 y 15 fotos tuyas, con distintos ángulos y buena luz."
-                    : `Agregá ${MIN_PHOTOS - photos.length} foto${MIN_PHOTOS - photos.length === 1 ? "" : "s"} más.`}
+                    ? "Select 10–15 photos of yourself with different angles and good lighting."
+                    : `Add ${MIN_PHOTOS - photos.length} more photo${MIN_PHOTOS - photos.length === 1 ? "" : "s"}.`}
                 </p>
               )}
             </div>
@@ -841,7 +890,7 @@ function NewModelPanel({
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-emerald-700">
               <Check className="h-4 w-4" />
-              {uploadedUrls.length} fotos listas para entrenar.
+              {uploadedUrls.length} photos ready for training.
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -851,12 +900,12 @@ function NewModelPanel({
                 className="bg-zinc-900 text-white hover:bg-zinc-800"
               >
                 {trainingCreating && <Loader2 className="h-4 w-4 animate-spin" />}
-                {trainingCreating ? "Iniciando..." : "Entrenar modelo"}
+                {trainingCreating ? "Starting..." : "Train model"}
               </Button>
               {formMessage ? (
                 <p className="text-sm text-red-600">{formMessage}</p>
               ) : (
-                <p className="text-sm text-zinc-400">Tarda entre 15 y 30 minutos.</p>
+                <p className="text-sm text-zinc-400">Takes 15–30 minutes.</p>
               )}
             </div>
           </div>
@@ -927,7 +976,7 @@ function ModelWorkspace({
             className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            Generar de nuevo
+            Generate again
           </Button>
         ) : null}
       </div>
@@ -941,9 +990,9 @@ function ModelWorkspace({
                 <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
               </div>
               <div>
-                <p className="font-medium text-zinc-900">Generando headshots...</p>
+                <p className="font-medium text-zinc-900">Generating headshots…</p>
                 <p className="mt-0.5 text-sm text-zinc-400">
-                  {formatElapsed(generationElapsed)} · Puede tardar hasta 1 minuto
+                  {formatElapsed(generationElapsed)} · May take up to 1 minute
                 </p>
               </div>
             </div>
@@ -953,9 +1002,9 @@ function ModelWorkspace({
           </div>
         ) : generationStatus === "failed" ? (
           <div className="mb-8 rounded-xl border border-red-100 bg-red-50 p-6">
-            <p className="font-medium text-red-800">No pudimos generar los headshots.</p>
+            <p className="font-medium text-red-800">Could not generate headshots.</p>
             <p className="mt-1 text-sm text-red-500">
-              {generationError ?? "Te devolvimos los créditos si correspondía."}
+              {generationError ?? "Credits were refunded if applicable."}
             </p>
             <Button
               type="button"
@@ -965,7 +1014,7 @@ function ModelWorkspace({
               className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Intentar de nuevo
+              Try again
             </Button>
           </div>
         ) : signedUrls?.length ? (
@@ -973,7 +1022,7 @@ function ModelWorkspace({
           <div className="mb-8">
             <div className="mb-4 flex items-center justify-between">
               <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
-                Resultado
+                Results
               </p>
               <Button
                 type="button"
@@ -983,7 +1032,7 @@ function ModelWorkspace({
                 className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
               >
                 <Download className="h-3.5 w-3.5" />
-                Descargar todas
+                Download all
               </Button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1009,7 +1058,7 @@ function ModelWorkspace({
                       type="button"
                       onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
                       className="text-zinc-400 transition-colors hover:text-zinc-700"
-                      aria-label="Descargar"
+                      aria-label="Download"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
@@ -1022,12 +1071,12 @@ function ModelWorkspace({
           /* Generation form */
           <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6">
             <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">
-              Nueva generación
+              New generation
             </p>
 
             {/* Style */}
             <div className="mb-5">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">Estilo</p>
+              <p className="mb-2.5 text-sm font-medium text-zinc-700">Style</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {STYLE_OPTIONS.map(opt => (
                   <button
@@ -1058,25 +1107,25 @@ function ModelWorkspace({
             {/* Custom prompt */}
             <div className="mb-5">
               <label className="mb-1.5 block text-sm font-medium text-zinc-700">
-                Descripción adicional{" "}
-                <span className="font-normal text-zinc-400">(opcional)</span>
+                Additional description{" "}
+                <span className="font-normal text-zinc-400">(optional)</span>
               </label>
               <input
                 type="text"
                 value={customPrompt}
                 onChange={e => onCustomPromptChange(e.target.value)}
-                placeholder="Ej: traje azul marino, corbata, fondo blanco, al aire libre..."
+                placeholder="e.g. navy suit, white background, outdoors…"
                 maxLength={200}
                 className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100"
               />
               <p className="mt-1.5 text-xs text-zinc-400">
-                Podés indicar ropa, fondo, contexto o cualquier detalle extra.
+                Specify clothing, background, context, or any extra detail.
               </p>
             </div>
 
             {/* Count */}
             <div className="mb-6">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">Cantidad</p>
+              <p className="mb-2.5 text-sm font-medium text-zinc-700">Count</p>
               <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
                 {IMAGE_COUNTS.map(count => (
                   <button
@@ -1090,7 +1139,7 @@ function ModelWorkspace({
                         : "text-zinc-400 hover:text-zinc-600"
                     )}
                   >
-                    {count} {count === 1 ? "foto" : "fotos"}
+                    {count} {count === 1 ? "photo" : "photos"}
                   </button>
                 ))}
               </div>
@@ -1104,10 +1153,10 @@ function ModelWorkspace({
                 className="bg-zinc-900 text-white hover:bg-zinc-800"
               >
                 <Sparkles className="h-4 w-4" />
-                Generar headshots
+                Generate headshots
               </Button>
               {generationMessage &&
-                (generationMessage.includes("créditos") ? (
+                (generationMessage.toLowerCase().includes("credit") ? (
                   <div className="flex items-center gap-2 text-sm text-red-600">
                     <span>{generationMessage}</span>
                     <Button
@@ -1116,7 +1165,7 @@ function ModelWorkspace({
                       variant="outline"
                       className="border-red-200 text-red-600 hover:bg-red-50"
                     >
-                      <Link href="/pricing">Comprar créditos</Link>
+                      <Link href="/pricing">Buy credits</Link>
                     </Button>
                   </div>
                 ) : (
@@ -1148,7 +1197,7 @@ function ModelWorkspace({
               type="button"
               onClick={onCloseImage}
               className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-colors hover:bg-white/20"
-              aria-label="Cerrar"
+              aria-label="Close"
             >
               <X className="h-4 w-4 text-white" />
             </button>
@@ -1167,158 +1216,19 @@ function ModelWorkspace({
 // ── Model history (per-model past generates) ──────────────────────────────────
 
 function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedUrls, setExpandedUrls] = useState<string[] | null>(null);
-  const [expandedLoading, setExpandedLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-
   const doneJobs = jobs.filter(j => j.status === "done");
   if (doneJobs.length === 0) return null;
-
-  async function toggleExpand(jobId: string) {
-    if (expandedId === jobId) {
-      setExpandedId(null);
-      setExpandedUrls(null);
-      setSelectedImage(null);
-      return;
-    }
-    setExpandedId(jobId);
-    setExpandedUrls(null);
-    setSelectedImage(null);
-    setExpandedLoading(true);
-    try {
-      const res = await fetch(`/api/jobs/${jobId}/signed-urls`, { method: "POST" });
-      const data = (await res.json()) as { signedUrls?: string[] };
-      setExpandedUrls(data.signedUrls ?? []);
-    } finally {
-      setExpandedLoading(false);
-    }
-  }
 
   return (
     <div>
       <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">
-        Historial
+        History
       </p>
       <div className="space-y-2">
-        {doneJobs.map(job => {
-          const isExpanded = expandedId === job.id;
-          const thumbnails = Array.isArray(job.result)
-            ? (job.result as string[]).slice(0, 4)
-            : [];
-          const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
-          const styleLabel =
-            STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
-          const count =
-            (job.input as { num_images?: number } | null)?.num_images ?? thumbnails.length;
-          const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("es-AR", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric"
-          });
-
-          return (
-            <div
-              key={job.id}
-              className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
-            >
-              <button
-                type="button"
-                onClick={() => void toggleExpand(job.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
-              >
-                {thumbnails.length > 0 && (
-                  <div className="flex shrink-0 gap-0.5">
-                    {thumbnails.map((url, i) => (
-                      <div
-                        key={i}
-                        className="h-10 w-10 overflow-hidden rounded-md bg-zinc-100"
-                      >
-                        <img
-                          src={url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-800">
-                    {styleLabel} · {count} foto{count === 1 ? "" : "s"}
-                  </p>
-                  <p className="text-xs text-zinc-400">{date}</p>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 shrink-0 text-zinc-400 transition-transform",
-                    isExpanded && "rotate-180"
-                  )}
-                />
-              </button>
-
-              {isExpanded && (
-                <div className="border-t border-zinc-100 p-4">
-                  {expandedLoading ? (
-                    <div className="flex items-center gap-2 py-2 text-sm text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Cargando...
-                    </div>
-                  ) : expandedUrls?.length ? (
-                    <>
-                      <div className="mb-3 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void downloadAll(expandedUrls)}
-                          className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          Descargar todas
-                        </Button>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                        {expandedUrls.map((url, i) => (
-                          <div
-                            key={url}
-                            className="overflow-hidden rounded-lg border border-zinc-100"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setSelectedImage(url)}
-                              className="block aspect-square w-full bg-zinc-100"
-                            >
-                              <img
-                                src={url}
-                                alt={`Headshot ${i + 1}`}
-                                className="h-full w-full object-cover transition-opacity hover:opacity-90"
-                              />
-                            </button>
-                            <div className="flex items-center justify-between p-2">
-                              <span className="text-xs text-zinc-400">#{i + 1}</span>
-                              <button
-                                type="button"
-                                onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                                className="text-zinc-400 transition-colors hover:text-zinc-700"
-                                aria-label="Descargar"
-                              >
-                                <Download className="h-3 w-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="py-1 text-sm text-zinc-400">No se pudieron cargar las fotos.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {doneJobs.map(job => (
+          <HistoryRow key={job.id} job={job} onOpenImage={setSelectedImage} />
+        ))}
       </div>
 
       {selectedImage && (
@@ -1336,7 +1246,7 @@ function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
               type="button"
               onClick={() => setSelectedImage(null)}
               className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-colors hover:bg-white/20"
-              aria-label="Cerrar"
+              aria-label="Close"
             >
               <X className="h-4 w-4 text-white" />
             </button>
@@ -1352,6 +1262,137 @@ function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
   );
 }
 
+function HistoryRow({
+  job,
+  onOpenImage
+}: {
+  job: GenerateJob;
+  onOpenImage: (url: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/jobs/${job.id}/signed-urls`, { method: "POST" });
+        const data = (await res.json()) as { signedUrls?: string[] };
+        if (!cancelled) setSignedUrls(data.signedUrls ?? []);
+      } catch {
+        if (!cancelled) setSignedUrls([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [job.id]);
+
+  const thumbnails = signedUrls?.slice(0, 4) ?? [];
+  const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
+  const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
+  const count = (job.input as { num_images?: number } | null)?.num_images ?? thumbnails.length;
+  const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(v => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
+      >
+        {/* Thumbnails or skeleton placeholders */}
+        <div className="flex shrink-0 gap-0.5">
+          {signedUrls === null
+            ? Array.from({ length: Math.min(count, 4) }).map((_, i) => (
+                <div key={i} className="h-10 w-10 animate-pulse rounded-md bg-zinc-100" />
+              ))
+            : thumbnails.map((url, i) => (
+                <div key={i} className="h-10 w-10 overflow-hidden rounded-md bg-zinc-100">
+                  <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                </div>
+              ))}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-zinc-800">
+            {styleLabel} · {count} {count === 1 ? "photo" : "photos"}
+          </p>
+          <p className="text-xs text-zinc-400">{date}</p>
+        </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-zinc-400 transition-transform",
+            isExpanded && "rotate-180"
+          )}
+        />
+      </button>
+
+      {isExpanded && (
+        <div className="border-t border-zinc-100 p-4">
+          {signedUrls === null ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-zinc-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading…
+            </div>
+          ) : signedUrls.length > 0 ? (
+            <>
+              <div className="mb-3 flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void downloadAll(signedUrls)}
+                  className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download all
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {signedUrls.map((url, i) => (
+                  <div
+                    key={url}
+                    className="overflow-hidden rounded-lg border border-zinc-100"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenImage(url)}
+                      className="block aspect-square w-full bg-zinc-100"
+                    >
+                      <img
+                        src={url}
+                        alt={`Headshot ${i + 1}`}
+                        className="h-full w-full object-cover transition-opacity hover:opacity-90"
+                      />
+                    </button>
+                    <div className="flex items-center justify-between p-2">
+                      <span className="text-xs text-zinc-400">#{i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
+                        className="text-zinc-400 transition-colors hover:text-zinc-700"
+                        aria-label="Download"
+                      >
+                        <Download className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="py-1 text-sm text-zinc-400">Could not load photos.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState({ onNewModel }: { onNewModel: () => void }) {
@@ -1360,10 +1401,10 @@ function EmptyState({ onNewModel }: { onNewModel: () => void }) {
       <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-900">
         <Sparkles className="h-7 w-7 text-white" />
       </div>
-      <h2 className="text-xl font-semibold text-zinc-900">Empezá con tu primer modelo</h2>
+      <h2 className="text-xl font-semibold text-zinc-900">Get started with your first model</h2>
       <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-zinc-500">
-        Subí entre 10 y 15 fotos tuyas para entrenar un modelo personalizado. Cada modelo
-        se puede usar para generar headshots ilimitados.
+        Upload 10–15 photos of yourself to train a personalized model. Each model can be used to
+        generate unlimited headshots.
       </p>
       <Button
         type="button"
@@ -1371,7 +1412,7 @@ function EmptyState({ onNewModel }: { onNewModel: () => void }) {
         className="mt-6 bg-zinc-900 text-white hover:bg-zinc-800"
       >
         <Plus className="h-4 w-4" />
-        Entrenar primer modelo
+        Train your first model
       </Button>
     </div>
   );
