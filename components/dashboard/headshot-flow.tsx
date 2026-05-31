@@ -53,14 +53,17 @@ function formatElapsed(seconds: number) {
   return m === 0 ? `${s}s` : `${m} min ${String(s).padStart(2, "0")}s`;
 }
 
-function downloadUrl(url: string, filename: string) {
+async function downloadUrl(url: string, filename: string) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
+  a.href = blobUrl;
   a.download = filename;
-  a.rel = "noreferrer";
   document.body.appendChild(a);
   a.click();
   a.remove();
+  URL.revokeObjectURL(blobUrl);
 }
 
 async function readJsonOrText(response: Response) {
@@ -644,7 +647,7 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
           {modelName ? <p className="mt-1 text-sm text-muted-foreground">Modelo: {modelName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => urls.forEach((url, i) => downloadUrl(url, `headshot-${i + 1}.jpg`))}>
+          <Button type="button" variant="outline" onClick={() => { urls.forEach((url, i) => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }); }}>
             <Download className="h-4 w-4" /> Descargar todas
           </Button>
           <Button type="button" variant="outline" onClick={onReset}>
@@ -665,7 +668,7 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
                 <Button type="button" size="sm" variant="ghost" onClick={() => onSelectImage(url)} aria-label="Ver en grande">
                   <ExternalLink className="h-4 w-4" />
                 </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => downloadUrl(url, `headshot-${i + 1}.jpg`)} aria-label="Descargar">
+                <Button type="button" size="sm" variant="ghost" onClick={() => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }} aria-label="Descargar">
                   <Download className="h-4 w-4" />
                 </Button>
               </div>
