@@ -63,7 +63,13 @@ async function downloadUrl(url: string, filename: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(blobUrl);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+async function downloadAll(urls: string[]) {
+  for (let i = 0; i < urls.length; i++) {
+    await downloadUrl(urls[i], `headshot-${i + 1}.jpg`);
+  }
 }
 
 async function readJsonOrText(response: Response) {
@@ -647,7 +653,7 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
           {modelName ? <p className="mt-1 text-sm text-muted-foreground">Modelo: {modelName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => { urls.forEach((url, i) => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }); }}>
+          <Button type="button" variant="outline" onClick={() => { void downloadAll(urls); }}>
             <Download className="h-4 w-4" /> Descargar todas
           </Button>
           <Button type="button" variant="outline" onClick={onReset}>
