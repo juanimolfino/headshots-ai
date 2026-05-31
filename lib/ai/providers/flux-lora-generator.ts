@@ -24,7 +24,11 @@ function toArrayBuffer(value: unknown) {
 
 function buildPrompt(input: HeadshotGenerateInput) {
   const style = input.style ?? "professional";
-  return prompts[style].replace("{trigger_word}", input.trigger_word);
+  const base = prompts[style].replace("{trigger_word}", input.trigger_word);
+  if (input.custom_prompt?.trim()) {
+    return base.replace(`${input.trigger_word},`, `${input.trigger_word}, ${input.custom_prompt.trim()},`);
+  }
+  return base;
 }
 
 export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): Promise<string[]> {

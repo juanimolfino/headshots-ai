@@ -8,22 +8,22 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   metadataBase: getAppUrlObject(),
   title: {
-    default: "AI SaaS Boilerplate",
-    template: "%s | AI SaaS Boilerplate"
+    default: "Headshots AI",
+    template: "%s | Headshots AI"
   },
-  description: "Production-ready AI micro-SaaS starter with auth, billing, async AI jobs, credits, subscriptions, and SEO.",
+  description: "Generá headshots profesionales con inteligencia artificial. Subí tus fotos y obtené retratos para LinkedIn, CV y más.",
   openGraph: {
-    title: "AI SaaS Boilerplate",
-    description: "Launch AI micro-SaaS products with the boring production pieces already wired.",
+    title: "Headshots AI",
+    description: "Generá headshots profesionales con inteligencia artificial.",
     url: "/",
-    siteName: "AI SaaS Boilerplate",
+    siteName: "Headshots AI",
     type: "website"
   }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="es" className={inter.variable}>
       <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
   );

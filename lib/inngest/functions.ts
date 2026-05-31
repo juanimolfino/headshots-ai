@@ -30,6 +30,7 @@ type HeadshotGenerateInput = {
   trigger_word: string;
   style?: "professional" | "cinematic" | "natural";
   num_images?: number;
+  custom_prompt?: string;
 };
 
 type WorkerJob = {
