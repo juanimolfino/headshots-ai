@@ -54,6 +54,32 @@ const STYLE_OPTIONS = [
 
 const IMAGE_COUNTS = [1, 2, 4] as const;
 
+const BACKGROUND_OPTIONS = [
+  { label: "Default", value: null },
+  { label: "White", value: "white" as const },
+  { label: "Gray", value: "gray" as const },
+  { label: "Dark", value: "dark" as const },
+  { label: "Outdoor", value: "outdoor" as const }
+];
+
+const ATTIRE_OPTIONS = [
+  { label: "None", value: null },
+  { label: "Suit", value: "suit" as const },
+  { label: "Dress", value: "dress" as const },
+  { label: "Business casual", value: "business_casual" as const },
+  { label: "Casual", value: "casual" as const }
+];
+
+const ATTIRE_COLORS = [
+  { label: "Black", value: "black", hex: "#18181b" },
+  { label: "White", value: "white", hex: "#e4e4e7" },
+  { label: "Navy", value: "navy blue", hex: "#1e3a5f" },
+  { label: "Gray", value: "gray", hex: "#71717a" },
+  { label: "Red", value: "red", hex: "#dc2626" },
+  { label: "Green", value: "emerald green", hex: "#059669" },
+  { label: "Beige", value: "beige", hex: "#d4b896" }
+] as const;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type StyleValue = "professional" | "cinematic" | "natural";
@@ -205,7 +231,9 @@ export function HeadshotsApp({
   // Generation
   const [style, setStyle] = useState<StyleValue>("professional");
   const [numImages, setNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(4);
-  const [customPrompt, setCustomPrompt] = useState("");
+  const [background, setBackground] = useState<"white" | "gray" | "dark" | "outdoor" | null>(null);
+  const [attireType, setAttireType] = useState<"suit" | "dress" | "business_casual" | "casual" | null>(null);
+  const [attireColor, setAttireColor] = useState<string | null>(null);
   const [generationJobId, setGenerationJobId] = useState<string | null>(null);
   const [generationStatus, setGenerationStatus] = useState<JobStatus | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -339,6 +367,9 @@ export function HeadshotsApp({
     setSelectedImageUrl(null);
     setGenerationElapsed(0);
     generationStartRef.current = null;
+    setBackground(null);
+    setAttireType(null);
+    setAttireColor(null);
   }
 
   async function renameModel(modelId: string, newName: string) {
@@ -484,7 +515,9 @@ export function HeadshotsApp({
           trigger_word: r.trigger_word,
           style,
           num_images: numImages,
-          ...(customPrompt.trim() ? { custom_prompt: customPrompt.trim() } : {})
+          ...(background ? { background } : {}),
+          ...(attireType ? { attire: attireType } : {}),
+          ...(attireType && attireColor ? { attire_color: attireColor } : {})
         }
       })
     });
@@ -708,7 +741,9 @@ export function HeadshotsApp({
             model={selectedModel}
             style={style}
             numImages={numImages}
-            customPrompt={customPrompt}
+            background={background}
+            attireType={attireType}
+            attireColor={attireColor}
             generationJobId={generationJobId}
             generationStatus={generationStatus}
             generationError={generationError}
@@ -719,7 +754,9 @@ export function HeadshotsApp({
             modelGenerateJobs={modelGenerateJobs}
             onStyleChange={setStyle}
             onNumImagesChange={setNumImages}
-            onCustomPromptChange={setCustomPrompt}
+            onBackgroundChange={setBackground}
+            onAttireTypeChange={v => { setAttireType(v); setAttireColor(null); }}
+            onAttireColorChange={setAttireColor}
             onGenerate={() => void startGeneration()}
             onReset={resetGeneration}
             onSelectImage={setSelectedImageUrl}
@@ -921,7 +958,9 @@ function ModelWorkspace({
   model,
   style,
   numImages,
-  customPrompt,
+  background,
+  attireType,
+  attireColor,
   generationJobId,
   generationStatus,
   generationError,
@@ -932,7 +971,9 @@ function ModelWorkspace({
   modelGenerateJobs,
   onStyleChange,
   onNumImagesChange,
-  onCustomPromptChange,
+  onBackgroundChange,
+  onAttireTypeChange,
+  onAttireColorChange,
   onGenerate,
   onReset,
   onSelectImage,
@@ -941,7 +982,9 @@ function ModelWorkspace({
   model: TrainingJob;
   style: StyleValue;
   numImages: (typeof IMAGE_COUNTS)[number];
-  customPrompt: string;
+  background: "white" | "gray" | "dark" | "outdoor" | null;
+  attireType: "suit" | "dress" | "business_casual" | "casual" | null;
+  attireColor: string | null;
   generationJobId: string | null;
   generationStatus: JobStatus | null;
   generationError: string | null;
@@ -952,7 +995,9 @@ function ModelWorkspace({
   modelGenerateJobs: GenerateJob[];
   onStyleChange: (v: StyleValue) => void;
   onNumImagesChange: (v: (typeof IMAGE_COUNTS)[number]) => void;
-  onCustomPromptChange: (v: string) => void;
+  onBackgroundChange: (v: "white" | "gray" | "dark" | "outdoor" | null) => void;
+  onAttireTypeChange: (v: "suit" | "dress" | "business_casual" | "casual" | null) => void;
+  onAttireColorChange: (v: string | null) => void;
   onGenerate: () => void;
   onReset: () => void;
   onSelectImage: (url: string) => void;
@@ -1104,23 +1149,78 @@ function ModelWorkspace({
               </div>
             </div>
 
-            {/* Custom prompt */}
+            {/* Background */}
             <div className="mb-5">
-              <label className="mb-1.5 block text-sm font-medium text-zinc-700">
-                Additional description{" "}
+              <p className="mb-2.5 text-sm font-medium text-zinc-700">
+                Background{" "}
                 <span className="font-normal text-zinc-400">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={customPrompt}
-                onChange={e => onCustomPromptChange(e.target.value)}
-                placeholder="e.g. navy suit, white background, outdoors…"
-                maxLength={200}
-                className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-100"
-              />
-              <p className="mt-1.5 text-xs text-zinc-400">
-                Specify clothing, background, context, or any extra detail.
               </p>
+              <div className="flex flex-wrap gap-2">
+                {BACKGROUND_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => onBackgroundChange(opt.value)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition-all",
+                      background === opt.value
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Attire */}
+            <div className="mb-5">
+              <p className="mb-2.5 text-sm font-medium text-zinc-700">
+                Attire{" "}
+                <span className="font-normal text-zinc-400">(optional)</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {ATTIRE_OPTIONS.map(opt => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => onAttireTypeChange(opt.value)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs font-medium transition-all",
+                      attireType === opt.value
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Color swatches — only when an attire type is selected */}
+              {attireType && (
+                <div className="mt-3">
+                  <p className="mb-2 text-xs text-zinc-500">Color</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ATTIRE_COLORS.map(c => (
+                      <button
+                        key={c.value}
+                        type="button"
+                        title={c.label}
+                        onClick={() => onAttireColorChange(attireColor === c.value ? null : c.value)}
+                        className={cn(
+                          "h-6 w-6 rounded-full border-2 transition-all",
+                          attireColor === c.value
+                            ? "border-zinc-900 scale-110"
+                            : "border-transparent hover:border-zinc-400"
+                        )}
+                        style={{ backgroundColor: c.hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Count */}

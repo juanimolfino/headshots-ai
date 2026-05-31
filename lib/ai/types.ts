@@ -20,7 +20,9 @@ export type HeadshotGenerateInput = {
   trigger_word: string;
   style?: "professional" | "cinematic" | "natural";
   num_images?: number;
-  custom_prompt?: string;
+  background?: "white" | "gray" | "dark" | "outdoor";
+  attire?: "suit" | "dress" | "business_casual" | "casual";
+  attire_color?: string;
 };
 
 export type AiInput = ImageInput | TtsInput | HeadshotTrainingInput | HeadshotGenerateInput;

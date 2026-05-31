@@ -30,7 +30,7 @@ export function buildFluxLoraTrainerInput(input: HeadshotTrainingInput) {
     learning_rate: 0.0002,
     multiresolution_training: true,
     subject_crop: true,
-    create_masks: false
+    create_masks: true
   };
 }
 
