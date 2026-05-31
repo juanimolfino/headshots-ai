@@ -5,7 +5,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Download, ExternalLink, Loader2, Plus, RefreshCw, Upload, X } from "lucide-react";
+import { Check, ChevronDown, Download, ExternalLink, Loader2, Plus, RefreshCw, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -126,6 +126,10 @@ export function HeadshotFlow() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef<SelectedPhoto[]>([]);
 
+  // History
+  const [generateJobs, setGenerateJobs] = useState<HeadshotJob[]>([]);
+  const [loadingGenerateJobs, setLoadingGenerateJobs] = useState(true);
+
   // Generation
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [style, setStyle] = useState<StyleValue>("professional");
@@ -170,7 +174,19 @@ export function HeadshotFlow() {
     }
   }, []);
 
+  const loadGenerateJobs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/jobs?type=headshot-generate&limit=20");
+      if (!res.ok) return;
+      const data = await res.json() as { jobs?: HeadshotJob[] };
+      setGenerateJobs(data.jobs ?? []);
+    } finally {
+      setLoadingGenerateJobs(false);
+    }
+  }, []);
+
   useEffect(() => { loadModels(); }, [loadModels]);
+  useEffect(() => { loadGenerateJobs(); }, [loadGenerateJobs]);
 
   // Poll while training active
   useEffect(() => {
@@ -202,12 +218,13 @@ export function HeadshotFlow() {
         const sRes = await fetch(`/api/jobs/${generationJobId}/signed-urls`, { method: "POST" });
         const sData = await sRes.json() as { signedUrls?: string[] };
         setSignedUrls(sData.signedUrls ?? []);
+        void loadGenerateJobs();
       }
     };
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [generationJobId, generationStatus, signedUrls]);
+  }, [generationJobId, generationStatus, signedUrls, loadGenerateJobs]);
 
   // Generation elapsed timer
   useEffect(() => {
@@ -603,7 +620,7 @@ export function HeadshotFlow() {
         </section>
       ) : null}
 
-      {/* Gallery */}
+      {/* Gallery — current session */}
       {signedUrls?.length ? (
         <HeadshotGallery
           urls={signedUrls}
@@ -614,6 +631,13 @@ export function HeadshotFlow() {
           onReset={resetGeneration}
         />
       ) : null}
+
+      {/* Historial de headshots */}
+      <HeadshotHistorySection
+        generateJobs={generateJobs}
+        trainedModels={trainedModels}
+        loading={loadingGenerateJobs}
+      />
     </div>
   );
 }
@@ -697,6 +721,158 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function resolveModelName(job: HeadshotJob, trainedModels: HeadshotJob[]): string {
+  const loraUrl = (job.input as { lora_url?: string } | null)?.lora_url;
+  if (loraUrl) {
+    const match = trainedModels.find(m => {
+      const r = m.result as { lora_url?: string } | null;
+      return r?.lora_url === loraUrl;
+    });
+    if (match) return getModelName(match);
+  }
+  return "Modelo desconocido";
+}
+
+function HeadshotHistorySection({
+  generateJobs,
+  trainedModels,
+  loading,
+}: {
+  generateJobs: HeadshotJob[];
+  trainedModels: HeadshotJob[];
+  loading: boolean;
+}) {
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [expandedSignedUrls, setExpandedSignedUrls] = useState<string[] | null>(null);
+  const [expandedLoading, setExpandedLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const doneJobs = generateJobs.filter(j => j.status === "done");
+  if (loading || doneJobs.length === 0) return null;
+
+  async function toggleExpand(jobId: string) {
+    if (expandedJobId === jobId) {
+      setExpandedJobId(null);
+      setExpandedSignedUrls(null);
+      setSelectedImage(null);
+      return;
+    }
+    setExpandedJobId(jobId);
+    setExpandedSignedUrls(null);
+    setSelectedImage(null);
+    setExpandedLoading(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/signed-urls`, { method: "POST" });
+      const data = await res.json() as { signedUrls?: string[] };
+      setExpandedSignedUrls(data.signedUrls ?? []);
+    } finally {
+      setExpandedLoading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border bg-card p-5">
+      <h2 className="mb-4 text-xl font-semibold">Tus headshots</h2>
+      <div className="space-y-3">
+        {doneJobs.map(job => {
+          const isExpanded = expandedJobId === job.id;
+          const thumbnailUrls = Array.isArray(job.result) ? (job.result as string[]).slice(0, 4) : [];
+          const style = (job.input as { style?: string } | null)?.style ?? "professional";
+          const styleLabel = STYLE_OPTIONS.find(s => s.value === style)?.label ?? style;
+          const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+          const modelName = resolveModelName(job, trainedModels);
+
+          return (
+            <div key={job.id} className="overflow-hidden rounded-lg border bg-background">
+              <button
+                type="button"
+                onClick={() => { void toggleExpand(job.id); }}
+                className="flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-muted/50"
+              >
+                {thumbnailUrls.length > 0 ? (
+                  <div className="flex shrink-0 gap-1">
+                    {thumbnailUrls.map((url, i) => (
+                      <div key={i} className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="h-12 w-48 shrink-0 rounded bg-muted" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{modelName}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{styleLabel} · {date}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 text-xs text-primary">
+                  <span>{isExpanded ? "Ocultar" : "Ver fotos"}</span>
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t p-4">
+                  {expandedLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando fotos...
+                    </div>
+                  ) : expandedSignedUrls?.length ? (
+                    <>
+                      <div className="mb-3 flex justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={() => { void downloadAll(expandedSignedUrls); }}>
+                          <Download className="h-4 w-4" /> Descargar todas
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {expandedSignedUrls.map((url, i) => (
+                          <div key={url} className="overflow-hidden rounded-lg border bg-background">
+                            <button type="button" onClick={() => setSelectedImage(url)}
+                              className="relative block aspect-square w-full bg-muted">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`Headshot ${i + 1}`} className="h-full w-full object-cover transition-opacity hover:opacity-90" />
+                            </button>
+                            <div className="flex items-center justify-between gap-2 p-2">
+                              <span className="text-xs font-medium">Headshot {i + 1}</span>
+                              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
+                                onClick={() => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }}
+                                aria-label="Descargar">
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="py-2 text-sm text-muted-foreground">No se pudieron cargar las fotos.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedImage && (
+        <div role="dialog" aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedImage(null)}>
+          <div className="relative max-h-[90vh] max-w-5xl" onClick={e => e.stopPropagation()}>
+            <button type="button" onClick={() => setSelectedImage(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/90 shadow-sm hover:bg-background"
+              aria-label="Cerrar imagen">
+              <X className="h-4 w-4" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={selectedImage} alt="Headshot seleccionado" className="max-h-[90vh] rounded-lg object-contain" />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
