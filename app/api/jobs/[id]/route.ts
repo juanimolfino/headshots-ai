@@ -49,9 +49,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const job = await getJobForUser(id, profile.id);
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (job.type !== "headshot-training") {
+    return NextResponse.json({ error: "Only training jobs can be renamed" }, { status: 400 });
+  }
 
-  const body = (await request.json()) as { name?: string };
-  const name = typeof body.name === "string" ? body.name.trim().slice(0, 60) : null;
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const raw = (body as { name?: unknown }).name;
+  const name = typeof raw === "string" ? raw.trim().slice(0, 60) : null;
   if (!name) return NextResponse.json({ error: "Invalid name" }, { status: 400 });
 
   await getDb()

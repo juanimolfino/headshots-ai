@@ -16,6 +16,7 @@ function getRedis() {
   return redis;
 }
 
+// Concurrent job slot — max 3 active jobs per user (10-minute TTL)
 export async function reserveJobSlot(userId: string) {
   const max = Number(process.env.MAX_CONCURRENT_JOBS ?? 3);
   const key = `jobs:active:${userId}`;
@@ -33,4 +34,37 @@ export async function releaseJobSlot(userId: string) {
   const client = getRedis();
   const count = await client.decr(key);
   if (count <= 0) await client.del(key);
+}
+
+// Training rate limit — max 1 new training job per user per 5 minutes.
+// Prevents accidental double-submissions and cost abuse (training ~$0.50–$1 each).
+export async function checkTrainingRateLimit(userId: string) {
+  const key = `training:rate:${userId}`;
+  const client = getRedis();
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, 5 * 60);
+  if (count > 1) {
+    await client.decr(key);
+    throw new Error("TRAINING_RATE_LIMITED");
+  }
+}
+
+// Upload rate limit — max 20 upload-initiations per user per 2 minutes.
+// 15 photos per training set × 2 attempts = 30 slack; 20 is a tight but fair bound.
+export async function checkUploadRateLimit(userId: string) {
+  const key = `upload:rate:${userId}`;
+  const client = getRedis();
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, 2 * 60);
+  if (count > 20) {
+    throw new Error("UPLOAD_RATE_LIMITED");
+  }
+}
+
+// Generic fixed-window counter — returns current count within the window.
+export async function checkRateLimit(key: string, max: number, windowSeconds: number) {
+  const client = getRedis();
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, windowSeconds);
+  if (count > max) throw new Error("RATE_LIMITED");
 }

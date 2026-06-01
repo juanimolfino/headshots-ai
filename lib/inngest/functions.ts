@@ -30,7 +30,9 @@ type HeadshotGenerateInput = {
   trigger_word: string;
   style?: "professional" | "cinematic" | "natural";
   num_images?: number;
-  custom_prompt?: string;
+  background?: "white" | "gray" | "dark" | "outdoor";
+  attire?: "suit" | "dress" | "business_casual" | "casual";
+  attire_color?: string;
 };
 
 type WorkerJob = {
@@ -312,7 +314,12 @@ export const runAiJob = inngest.createFunction(
 
         const falRequestId = await step.run("submit to fal trainer", async () => {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-          const webhookUrl = appUrl ? `${appUrl}/api/webhooks/fal` : undefined;
+          const webhookSecret = process.env.FAL_WEBHOOK_SECRET;
+          const webhookUrl = appUrl
+            ? webhookSecret
+              ? `${appUrl}/api/webhooks/fal?secret=${encodeURIComponent(webhookSecret)}`
+              : `${appUrl}/api/webhooks/fal`
+            : undefined;
           console.log("[headshot-training] submitting to fal.ai, webhook:", webhookUrl ?? "none");
           try {
             return await submitFluxLoraTrainer(

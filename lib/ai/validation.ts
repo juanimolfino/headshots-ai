@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// Only allow fal.storage HTTPS URLs as training photo sources
+const falStorageUrl = z
+  .string()
+  .url()
+  .refine(url => url.startsWith("https://"), "Training photo URLs must be HTTPS");
+
 function parseArchiveUrlList(value: string) {
   try {
     const parsed = JSON.parse(value);
@@ -19,14 +25,33 @@ const headshotArchiveSchema = z.string().superRefine((value, context) => {
     return;
   }
 
-  if (urls.length < 10) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "headshot-training requires at least 10 image URLs" });
+  if (urls.length < 10 || urls.length > 20) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "headshot-training requires between 10 and 20 image URLs" });
   }
 
-  if (urls.some((url) => typeof url !== "string" || !url.startsWith("https://"))) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: "archive_url must contain only HTTPS image URLs" });
+  for (const url of urls) {
+    const result = falStorageUrl.safeParse(url);
+    if (!result.success) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "archive_url must contain only valid HTTPS image URLs" });
+      return;
+    }
   }
 });
+
+// lora_url must be an R2 key, a legacy Supabase path, or an HTTPS URL — never arbitrary
+const loraUrlSchema = z
+  .string()
+  .min(1)
+  .max(500)
+  .refine(
+    url => url.startsWith("r2:loras/") || url.startsWith("loras/") || url.startsWith("https://"),
+    "Invalid lora_url format"
+  );
+
+// trigger_word is always "ohwx" + 4 lowercase letters from the trainer
+const triggerWordSchema = z
+  .string()
+  .regex(/^[a-z0-9]{4,20}$/, "trigger_word must be 4–20 lowercase alphanumeric characters");
 
 export const createJobSchema = z.discriminatedUnion("type", [
   z.object({
@@ -39,24 +64,34 @@ export const createJobSchema = z.discriminatedUnion("type", [
     type: z.literal("tts"),
     input: z.object({
       text: z.string().min(3).max(5000),
-      voice: z.enum(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]).optional()
+      voice: z
+        .enum(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"])
+        .optional()
     })
   }),
   z.object({
     type: z.literal("headshot-training"),
     input: z.object({
       archive_url: headshotArchiveSchema,
-      steps: z.number().min(1000).max(2500).default(1000),
-      name: z.string().min(1).max(60).optional()
+      steps: z.number().int().min(500).max(2000).default(1000),
+      name: z.string().min(1).max(60).trim().optional()
     })
   }),
   z.object({
     type: z.literal("headshot-generate"),
     input: z.object({
-      lora_url: z.string().min(1),
-      trigger_word: z.string(),
+      lora_url: loraUrlSchema,
+      trigger_word: triggerWordSchema,
       style: z.enum(["professional", "cinematic", "natural"]).default("professional"),
-      num_images: z.number().min(1).max(4).default(4)
+      num_images: z.number().int().min(1).max(4).default(4),
+      // Strict enum for background — no free-text injection
+      background: z.enum(["white", "gray", "dark", "outdoor"]).optional(),
+      // Strict enum for attire type
+      attire: z.enum(["suit", "dress", "business_casual", "casual"]).optional(),
+      // Strict enum for attire color — controls what goes into the prompt
+      attire_color: z
+        .enum(["black", "white", "navy blue", "gray", "red", "emerald green", "beige"])
+        .optional()
     })
   })
 ]);
