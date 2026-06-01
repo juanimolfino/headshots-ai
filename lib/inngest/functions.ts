@@ -126,7 +126,6 @@ function parseImageUrls(raw: unknown) {
   let urls: string[];
   try {
     urls = typeof raw === "string" ? JSON.parse(raw) : (raw as string[]);
-    console.log("[headshot-training] parsed URLs:", urls);
     if (!Array.isArray(urls) || urls.length === 0 || urls.some((url) => typeof url !== "string" || url.length === 0)) {
       throw new Error(`archive_url inválido: ${String(raw)}`);
     }
@@ -239,7 +238,6 @@ async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResu
   console.log("[headshot-training] prep: parsed", imageUrls.length, "image URLs");
 
   const archiveUrl = await createAndUploadHeadshotArchive(imageUrls);
-  console.log("[headshot-training] prep: ZIP uploaded", archiveUrl);
 
   const zipCheck = await checkPublicUrl(archiveUrl);
   if (!zipCheck.ok) throw new Error(`Training ZIP not publicly accessible: ${zipCheck.status}`);
@@ -256,7 +254,6 @@ async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId:
     if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     const loraBytes = await response.arrayBuffer();
     const r2Key = await storeLoraFileR2({ userId, jobId, bytes: loraBytes });
-    console.log("[headshot-training] LoRA stored permanently in R2 at", r2Key);
     return r2Key;
   } catch (err) {
     console.warn("[headshot-training] R2 storage failed, using fal.storage URL:", err);
@@ -294,8 +291,6 @@ export const runAiJob = inngest.createFunction(
     try {
       await step.run("mark processing", async () => markJobProcessing(job.id));
       console.log(`[runAiJob] job.type: ${job.type}`);
-      console.log(`[runAiJob] job.input typeof: ${typeof job.input} | value: ${JSON.stringify(job.input)}`);
-      console.log(`[runAiJob] job.metadata typeof: ${typeof job.metadata} | value: ${JSON.stringify(job.metadata)}`);
 
       const workerJob: WorkerJob = {
         ...job,
@@ -303,8 +298,6 @@ export const runAiJob = inngest.createFunction(
         metadata: parseJsonObject(job.metadata, "job.metadata", true)
       };
 
-      console.log("[runAiJob] input parsed OK:", JSON.stringify(workerJob.input));
-      console.log("[runAiJob] metadata parsed OK:", JSON.stringify(workerJob.metadata));
 
       if (job.type === "headshot-training") {
         // Step 1: prepare archive and submit to fal.ai (fast, < 60s)
@@ -320,7 +313,6 @@ export const runAiJob = inngest.createFunction(
               ? `${appUrl}/api/webhooks/fal?secret=${encodeURIComponent(webhookSecret)}`
               : `${appUrl}/api/webhooks/fal`
             : undefined;
-          console.log("[headshot-training] submitting to fal.ai, webhook:", webhookUrl ?? "none");
           try {
             return await submitFluxLoraTrainer(
               { images_data_url: trainerInput.images_data_url, trigger_word: triggerWord, steps: trainerInput.steps },

@@ -1315,10 +1315,16 @@ function ModelWorkspace({
 
 // ── Model history (per-model past generates) ──────────────────────────────────
 
+const HISTORY_PAGE_SIZE = 10;
+
 function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const doneJobs = jobs.filter(j => j.status === "done");
   if (doneJobs.length === 0) return null;
+
+  const visibleJobs = doneJobs.slice(0, visibleCount);
+  const remaining = doneJobs.length - visibleCount;
 
   return (
     <div>
@@ -1326,10 +1332,19 @@ function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
         History
       </p>
       <div className="space-y-2">
-        {doneJobs.map(job => (
+        {visibleJobs.map(job => (
           <HistoryRow key={job.id} job={job} onOpenImage={setSelectedImage} />
         ))}
       </div>
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount(v => v + HISTORY_PAGE_SIZE)}
+          className="mt-3 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
+        >
+          Load {Math.min(HISTORY_PAGE_SIZE, remaining)} more ({remaining} remaining)
+        </button>
+      )}
 
       {selectedImage && (
         <div
