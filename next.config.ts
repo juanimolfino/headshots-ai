@@ -11,7 +11,7 @@ const csp = [
   "script-src 'self' 'unsafe-inline' https://js.stripe.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co https://*.fal.media",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://*.fal.media",
   "frame-src https://js.stripe.com",
   "font-src 'self'",
   "object-src 'none'",
