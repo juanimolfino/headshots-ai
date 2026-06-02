@@ -43,6 +43,13 @@
       "when": 1779974095414,
       "tag": "0005_soft_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780444800000,
+      "tag": "0006_headshot_edit_job_type",
+      "breakpoints": true
     }
   ]
 }

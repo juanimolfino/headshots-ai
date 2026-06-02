@@ -53,6 +53,11 @@ const triggerWordSchema = z
   .string()
   .regex(/^[a-z0-9]{4,20}$/, "trigger_word must be 4–20 lowercase alphanumeric characters");
 
+const referenceImageUrlSchema = z
+  .string()
+  .url()
+  .refine(url => url.startsWith("https://"), "Reference image URLs must be HTTPS");
+
 export const createJobSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("image"),
@@ -92,6 +97,15 @@ export const createJobSchema = z.discriminatedUnion("type", [
       attire_color: z
         .enum(["black", "white", "navy blue", "gray", "red", "emerald green", "beige"])
         .optional()
+    })
+  }),
+  z.object({
+    type: z.literal("headshot-edit"),
+    input: z.object({
+      image_urls: z.array(referenceImageUrlSchema).min(4).max(15),
+      prompt: z.string().min(10).max(2000),
+      quality: z.enum(["low", "medium", "high", "auto"]).default("low"),
+      num_images: z.number().int().min(1).max(4).default(1)
     })
   })
 ]);

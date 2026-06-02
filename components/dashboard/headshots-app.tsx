@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Download,
+  Images,
   Loader2,
   LogOut,
   Pencil,
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 10;
 const MAX_PHOTOS = 15;
+const QUICK_MIN_PHOTOS = 4;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 8000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -213,6 +215,7 @@ export function HeadshotsApp({
   // Nav
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [showNewModelForm, setShowNewModelForm] = useState(false);
+  const [showQuickEditForm, setShowQuickEditForm] = useState(false);
 
   // Rename
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
@@ -227,6 +230,18 @@ export function HeadshotsApp({
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photosRef = useRef<SelectedPhoto[]>([]);
+
+  // Quick edit form
+  const [quickPhotos, setQuickPhotos] = useState<SelectedPhoto[]>([]);
+  const [quickPrompt, setQuickPrompt] = useState(
+    "Create a professional headshot using these reference photos. Preserve the person's identity, facial features, and natural expression. Use clean studio lighting, realistic skin texture, a polished outfit, and a neutral background."
+  );
+  const [quickQuality, setQuickQuality] = useState<"low" | "medium" | "high">("low");
+  const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
+  const [quickUploading, setQuickUploading] = useState(false);
+  const [quickMessage, setQuickMessage] = useState<string | null>(null);
+  const quickFileInputRef = useRef<HTMLInputElement>(null);
+  const quickPhotosRef = useRef<SelectedPhoto[]>([]);
 
   // Generation
   const [style, setStyle] = useState<StyleValue>("professional");
@@ -250,8 +265,12 @@ export function HeadshotsApp({
     photosRef.current = photos;
   }, [photos]);
   useEffect(() => {
+    quickPhotosRef.current = quickPhotos;
+  }, [quickPhotos]);
+  useEffect(() => {
     return () => {
       for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
+      for (const p of quickPhotosRef.current) URL.revokeObjectURL(p.previewUrl);
     };
   }, []);
 
@@ -349,12 +368,21 @@ export function HeadshotsApp({
   function handleSelectModel(modelId: string) {
     setSelectedModelId(modelId);
     setShowNewModelForm(false);
+    setShowQuickEditForm(false);
     resetGeneration();
   }
 
   function handleNewModel() {
     setSelectedModelId(null);
     setShowNewModelForm(true);
+    setShowQuickEditForm(false);
+    resetGeneration();
+  }
+
+  function handleQuickEdit() {
+    setSelectedModelId(null);
+    setShowNewModelForm(false);
+    setShowQuickEditForm(true);
     resetGeneration();
   }
 
@@ -411,8 +439,41 @@ export function HeadshotsApp({
     else if (errors[0]) setFormMessage(errors[0]);
   }
 
+  function addQuickFiles(fileList: FileList | File[]) {
+    setQuickMessage(null);
+    const errors: string[] = [];
+    const accepted: SelectedPhoto[] = [];
+    for (const file of Array.from(fileList)) {
+      if (!ALLOWED_TYPES.has(file.type)) continue;
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        errors.push(`${file.name} exceeds 10 MB.`);
+        continue;
+      }
+      accepted.push({
+        id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+        file,
+        previewUrl: URL.createObjectURL(file)
+      });
+    }
+    const slots = MAX_PHOTOS - quickPhotos.length;
+    const toAdd = accepted.slice(0, Math.max(slots, 0));
+    for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
+    const skipped = accepted.length - toAdd.length;
+    setQuickPhotos(prev => [...prev, ...toAdd]);
+    if (skipped > 0) setQuickMessage(`You can upload up to ${MAX_PHOTOS} photos.`);
+    else if (errors[0]) setQuickMessage(errors[0]);
+  }
+
   function removePhoto(id: string) {
     setPhotos(prev => {
+      const p = prev.find(x => x.id === id);
+      if (p) URL.revokeObjectURL(p.previewUrl);
+      return prev.filter(x => x.id !== id);
+    });
+  }
+
+  function removeQuickPhoto(id: string) {
+    setQuickPhotos(prev => {
       const p = prev.find(x => x.id === id);
       if (p) URL.revokeObjectURL(p.previewUrl);
       return prev.filter(x => x.id !== id);
@@ -536,6 +597,77 @@ export function HeadshotsApp({
     setGenerationError(null);
     setSignedUrls(null);
     setGenerationElapsed(0);
+  }
+
+  async function startQuickEdit() {
+    if (quickPhotos.length < QUICK_MIN_PHOTOS) {
+      setQuickMessage(`Upload at least ${QUICK_MIN_PHOTOS} photos.`);
+      return;
+    }
+    if (quickPrompt.trim().length < 10) {
+      setQuickMessage("Write a prompt with at least 10 characters.");
+      return;
+    }
+
+    setQuickUploading(true);
+    setQuickMessage(null);
+    try {
+      const urls: string[] = [];
+      for (let i = 0; i < quickPhotos.length; i++) {
+        setQuickMessage(`Uploading photo ${i + 1} of ${quickPhotos.length}...`);
+        const file = await compressImage(quickPhotos[i].file);
+        const initRes = await fetch("/api/upload/initiate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size })
+        });
+        const initData = (await readJsonOrText(initRes)) as {
+          uploadUrl?: string;
+          fileUrl?: string;
+          error?: string;
+        } | null;
+        if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
+          throw new Error(initData?.error ?? `Could not prepare upload for ${quickPhotos[i].file.name}.`);
+        }
+        const upRes = await fetch(initData.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file
+        });
+        if (!upRes.ok) throw new Error(`Could not upload ${quickPhotos[i].file.name}.`);
+        urls.push(initData.fileUrl);
+      }
+
+      setQuickMessage("Starting generation...");
+      const res = await fetch("/api/jobs/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "headshot-edit",
+          input: {
+            image_urls: urls,
+            prompt: quickPrompt.trim(),
+            quality: quickQuality,
+            num_images: quickNumImages
+          }
+        })
+      });
+      const data = (await res.json()) as { jobId?: string; error?: string };
+      if (res.status === 402) throw new Error("Not enough credits.");
+      if (!res.ok) throw new Error(data.error ?? "Could not start generation.");
+
+      generationStartRef.current = Date.now();
+      setGenerationJobId(data.jobId!);
+      setGenerationStatus("pending");
+      setGenerationError(null);
+      setSignedUrls(null);
+      setGenerationElapsed(0);
+      setQuickMessage(null);
+    } catch (err) {
+      setQuickMessage(err instanceof Error ? err.message : "Could not generate photos.");
+    } finally {
+      setQuickUploading(false);
+    }
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -673,6 +805,19 @@ export function HeadshotsApp({
               <div className="mt-3 px-3">
                 <button
                   type="button"
+                  onClick={handleQuickEdit}
+                  className={cn(
+                    "mb-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors",
+                    showQuickEditForm
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
+                  )}
+                >
+                  <Images className="h-3.5 w-3.5" />
+                  Quick GPT edit
+                </button>
+                <button
+                  type="button"
                   onClick={handleNewModel}
                   className="flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-300"
                 >
@@ -733,6 +878,35 @@ export function HeadshotsApp({
             onStartTraining={() => void startTraining()}
             onCancel={() => {
               setShowNewModelForm(false);
+              if (trainedModels[0]) setSelectedModelId(trainedModels[0].id);
+            }}
+          />
+        ) : showQuickEditForm ? (
+          <QuickEditPanel
+            photos={quickPhotos}
+            prompt={quickPrompt}
+            quality={quickQuality}
+            numImages={quickNumImages}
+            uploading={quickUploading}
+            message={quickMessage}
+            generationJobId={generationJobId}
+            generationStatus={generationStatus}
+            generationError={generationError}
+            generationElapsed={generationElapsed}
+            signedUrls={signedUrls}
+            selectedImageUrl={selectedImageUrl}
+            fileInputRef={quickFileInputRef}
+            onPromptChange={setQuickPrompt}
+            onQualityChange={setQuickQuality}
+            onNumImagesChange={setQuickNumImages}
+            onAddFiles={addQuickFiles}
+            onRemovePhoto={removeQuickPhoto}
+            onGenerate={() => void startQuickEdit()}
+            onReset={resetGeneration}
+            onSelectImage={setSelectedImageUrl}
+            onCloseImage={() => setSelectedImageUrl(null)}
+            onCancel={() => {
+              setShowQuickEditForm(false);
               if (trainedModels[0]) setSelectedModelId(trainedModels[0].id);
             }}
           />
@@ -948,6 +1122,322 @@ function NewModelPanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Quick GPT edit form ───────────────────────────────────────────────────────
+
+function QuickEditPanel({
+  photos,
+  prompt,
+  quality,
+  numImages,
+  uploading,
+  message,
+  generationJobId,
+  generationStatus,
+  generationError,
+  generationElapsed,
+  signedUrls,
+  selectedImageUrl,
+  fileInputRef,
+  onPromptChange,
+  onQualityChange,
+  onNumImagesChange,
+  onAddFiles,
+  onRemovePhoto,
+  onGenerate,
+  onReset,
+  onSelectImage,
+  onCloseImage,
+  onCancel
+}: {
+  photos: SelectedPhoto[];
+  prompt: string;
+  quality: "low" | "medium" | "high";
+  numImages: (typeof IMAGE_COUNTS)[number];
+  uploading: boolean;
+  message: string | null;
+  generationJobId: string | null;
+  generationStatus: JobStatus | null;
+  generationError: string | null;
+  generationElapsed: number;
+  signedUrls: string[] | null;
+  selectedImageUrl: string | null;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPromptChange: (v: string) => void;
+  onQualityChange: (v: "low" | "medium" | "high") => void;
+  onNumImagesChange: (v: (typeof IMAGE_COUNTS)[number]) => void;
+  onAddFiles: (files: FileList | File[]) => void;
+  onRemovePhoto: (id: string) => void;
+  onGenerate: () => void;
+  onReset: () => void;
+  onSelectImage: (url: string) => void;
+  onCloseImage: () => void;
+  onCancel: () => void;
+}) {
+  const isGenerating = !!generationJobId && !signedUrls && generationStatus !== "failed";
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-8">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-zinc-700"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back
+          </button>
+          <span className="text-zinc-300">/</span>
+          <h1 className="font-semibold text-zinc-900">Quick GPT edit</h1>
+        </div>
+        {signedUrls?.length ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onReset}
+            className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Generate again
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-8 py-8">
+        {isGenerating ? (
+          <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100">
+                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              </div>
+              <div>
+                <p className="font-medium text-zinc-900">Generating with GPT Image 2...</p>
+                <p className="mt-0.5 text-sm text-zinc-400">
+                  {formatElapsed(generationElapsed)} · Usually finishes in about a minute
+                </p>
+              </div>
+            </div>
+            {generationError && <p className="mt-3 text-sm text-red-600">{generationError}</p>}
+          </div>
+        ) : generationStatus === "failed" ? (
+          <div className="mb-8 rounded-xl border border-red-100 bg-red-50 p-6">
+            <p className="font-medium text-red-800">Could not generate photos.</p>
+            <p className="mt-1 text-sm text-red-500">
+              {generationError ?? "Credits were refunded if applicable."}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReset}
+              className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Try again
+            </Button>
+          </div>
+        ) : signedUrls?.length ? (
+          <div className="mb-8">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Results</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void downloadAll(signedUrls)}
+                className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download all
+              </Button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {signedUrls.map((url, i) => (
+                <div key={url} className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => onSelectImage(url)}
+                    className="relative block aspect-square w-full bg-zinc-100"
+                  >
+                    <img
+                      src={url}
+                      alt={`Edited headshot ${i + 1}`}
+                      className="h-full w-full object-cover transition-opacity hover:opacity-90"
+                    />
+                  </button>
+                  <div className="flex items-center justify-between p-2.5">
+                    <span className="text-xs font-medium text-zinc-500">#{i + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => void downloadUrl(url, `gpt-headshot-${i + 1}.jpg`)}
+                      className="text-zinc-400 transition-colors hover:text-zinc-700"
+                      aria-label="Download"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-3xl rounded-xl border border-zinc-200 bg-white p-6">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+              GPT Image 2 edit
+            </p>
+
+            <div className="mb-5">
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-sm font-medium text-zinc-700">
+                  Reference photos ({QUICK_MIN_PHOTOS}-{MAX_PHOTOS})
+                </label>
+                <span className="text-sm text-zinc-400">{photos.length} / {MAX_PHOTOS}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  onAddFiles(e.dataTransfer.files);
+                }}
+                disabled={uploading}
+                className="flex min-h-28 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-6 py-6 text-center transition-colors hover:border-zinc-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Upload className="mb-2 h-6 w-6 text-zinc-400" />
+                <span className="text-sm font-medium text-zinc-700">Drag or click to select</span>
+                <span className="mt-1 text-xs text-zinc-400">JPG or PNG · More photos improve consistency</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                multiple
+                className="hidden"
+                onChange={e => {
+                  if (e.target.files) onAddFiles(e.target.files);
+                  e.currentTarget.value = "";
+                }}
+              />
+              {photos.length > 0 && (
+                <div className="mt-4 grid grid-cols-5 gap-2">
+                  {photos.map(photo => (
+                    <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
+                      <Image src={photo.previewUrl} alt="" fill unoptimized className="object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => onRemovePhoto(photo.id)}
+                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white"
+                      >
+                        <X className="h-3 w-3 text-zinc-700" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-5">
+              <label className="mb-2 block text-sm font-medium text-zinc-700">Prompt</label>
+              <textarea
+                value={prompt}
+                onChange={e => onPromptChange(e.target.value)}
+                rows={5}
+                maxLength={2000}
+                className="w-full resize-none rounded-lg border border-zinc-200 bg-white px-3.5 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-100"
+              />
+            </div>
+
+            <div className="mb-6 grid gap-5 sm:grid-cols-2">
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-zinc-700">Quality</p>
+                <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+                  {(["low", "medium", "high"] as const).map(q => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => onQualityChange(q)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-all",
+                        quality === q ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                      )}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-zinc-700">Count</p>
+                <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+                  {IMAGE_COUNTS.map(count => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => onNumImagesChange(count)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
+                        numImages === count ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                      )}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                onClick={onGenerate}
+                disabled={uploading || photos.length < QUICK_MIN_PHOTOS}
+                className="bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {uploading ? (message ?? "Uploading...") : "Generate with GPT Image 2"}
+              </Button>
+              {message &&
+                (message.toLowerCase().includes("credit") ? (
+                  <div className="flex items-center gap-2 text-sm text-red-600">
+                    <span>{message}</span>
+                    <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                      <Link href="/pricing">Buy credits</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className={cn("text-sm", uploading ? "text-zinc-500" : "text-red-600")}>{message}</p>
+                ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {selectedImageUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={onCloseImage}
+        >
+          <div className="relative max-h-[90vh] max-w-5xl" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={onCloseImage}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-colors hover:bg-white/20"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4 text-white" />
+            </button>
+            <img src={selectedImageUrl} alt="Edited headshot" className="max-h-[90vh] rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

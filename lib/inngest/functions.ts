@@ -2,6 +2,7 @@ import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
 import { storeAiResult, storeLoraFileR2 } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
+import { generateGptImageEditUrls } from "@/lib/ai/providers/gpt-image-edit";
 import {
   buildFluxLoraTrainerInput,
   FLUX_LORA_TRAINER_ENDPOINT,
@@ -33,6 +34,13 @@ type HeadshotGenerateInput = {
   background?: "white" | "gray" | "dark" | "outdoor";
   attire?: "suit" | "dress" | "business_casual" | "casual";
   attire_color?: string;
+};
+
+type HeadshotEditInput = {
+  image_urls: string[];
+  prompt: string;
+  quality?: "low" | "medium" | "high" | "auto";
+  num_images?: number;
 };
 
 type WorkerJob = {
@@ -276,6 +284,21 @@ async function processHeadshotGenerateJob(job: WorkerJob) {
   );
 }
 
+async function processHeadshotEditJob(job: WorkerJob) {
+  const input = job.input as HeadshotEditInput;
+  const generatedUrls = await generateGptImageEditUrls(input);
+  return Promise.all(
+    generatedUrls.map((imageUrl, index) =>
+      storeHeadshotImage({
+        userId: job.userId,
+        jobId: job.id,
+        index,
+        imageUrl
+      })
+    )
+  );
+}
+
 export const runAiJob = inngest.createFunction(
   {
     id: "run-ai-job",
@@ -364,6 +387,19 @@ export const runAiJob = inngest.createFunction(
             job.userId,
             "Tus headshots están listos",
             "Tus headshots están listos. Entrá a tu dashboard para verlos y descargarlos."
+          )
+        );
+        return { result: resultUrls };
+      }
+
+      if (job.type === "headshot-edit") {
+        const resultUrls = await step.run("edit and store headshots", async () => processHeadshotEditJob(workerJob));
+        await step.run("mark done", async () => markJobDone(job.id, resultUrls[0] ?? "", resultUrls));
+        await step.run("send ready email", async () =>
+          sendUserEmail(
+            job.userId,
+            "Tus fotos están listas",
+            "Tus fotos editadas están listas. Entrá a tu dashboard para verlas y descargarlas."
           )
         );
         return { result: resultUrls };

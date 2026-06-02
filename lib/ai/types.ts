@@ -25,7 +25,14 @@ export type HeadshotGenerateInput = {
   attire_color?: string;
 };
 
-export type AiInput = ImageInput | TtsInput | HeadshotTrainingInput | HeadshotGenerateInput;
+export type HeadshotEditInput = {
+  image_urls: string[];
+  prompt: string;
+  quality?: "low" | "medium" | "high" | "auto";
+  num_images?: number;
+};
+
+export type AiInput = ImageInput | TtsInput | HeadshotTrainingInput | HeadshotGenerateInput | HeadshotEditInput;
 
 export type AiResult = {
   bytes: ArrayBuffer;

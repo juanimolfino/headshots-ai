@@ -114,6 +114,47 @@ describe("createJobSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts headshot edit jobs with reference photos", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-edit",
+      input: {
+        image_urls: [
+          "https://v3b.fal.media/files/example/photo-1.jpg",
+          "https://v3b.fal.media/files/example/photo-2.jpg",
+          "https://v3b.fal.media/files/example/photo-3.jpg",
+          "https://v3b.fal.media/files/example/photo-4.jpg"
+        ],
+        prompt: "Create a polished professional headshot.",
+        quality: "low",
+        num_images: 1
+      }
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe("headshot-edit");
+      if (result.data.type !== "headshot-edit") throw new Error("Expected headshot-edit job");
+      expect(result.data.input.quality).toBe("low");
+      expect(result.data.input.num_images).toBe(1);
+    }
+  });
+
+  it("rejects headshot edit jobs with fewer than four reference photos", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-edit",
+      input: {
+        image_urls: [
+          "https://v3b.fal.media/files/example/photo-1.jpg",
+          "https://v3b.fal.media/files/example/photo-2.jpg",
+          "https://v3b.fal.media/files/example/photo-3.jpg"
+        ],
+        prompt: "Create a polished professional headshot."
+      }
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects unsupported job types", () => {
     const result = createJobSchema.safeParse({
       type: "video",
