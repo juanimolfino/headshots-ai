@@ -43,5 +43,6 @@ export type AiResult = {
 export type AiProvider<TInput extends AiInput = AiInput> = {
   type: JobType;
   costCredits: number;
+  calculateCredits?(input: TInput): number;
   generate(input: TInput): Promise<AiResult>;
 };

@@ -53,6 +53,7 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
 export const gptImageEditProvider: AiProvider<HeadshotEditInput> = {
   type: "headshot-edit",
   costCredits: 1,
+  calculateCredits: (input) => input.num_images ?? 1,
   async generate(input) {
     const imageUrls = await generateGptImageEditUrls(input);
 

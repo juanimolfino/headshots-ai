@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 const MIN_PHOTOS = 10;
 const MAX_PHOTOS = 15;
 const QUICK_MIN_PHOTOS = 4;
+const TRAINING_CREDITS = 15;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 8000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -1116,7 +1117,9 @@ function NewModelPanel({
               {formMessage ? (
                 <p className="text-sm text-red-600">{formMessage}</p>
               ) : (
-                <p className="text-sm text-zinc-400">Takes 15–30 minutes.</p>
+                <p className="text-sm text-zinc-400">
+                  Costs {TRAINING_CREDITS} credits · Takes 15–30 minutes.
+                </p>
               )}
             </div>
           </div>
@@ -1389,6 +1392,9 @@ function QuickEditPanel({
                     </button>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-zinc-400">
+                  {numImages} {numImages === 1 ? "credit" : "credits"} · 1 credit per photo
+                </p>
               </div>
             </div>
 
@@ -1733,6 +1739,9 @@ function ModelWorkspace({
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-xs text-zinc-400">
+                {numImages} {numImages === 1 ? "credit" : "credits"} · 1 credit per photo
+              </p>
             </div>
 
             {/* Generate */}
