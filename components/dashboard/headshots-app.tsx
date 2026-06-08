@@ -308,6 +308,7 @@ export function HeadshotsApp({
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
+  const [signedUrlsKind, setSignedUrlsKind] = useState<GenerationJobKind | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [generationElapsed, setGenerationElapsed] = useState(0);
   const [generationCreatedAt, setGenerationCreatedAt] = useState<string | null>(null);
@@ -435,6 +436,7 @@ export function HeadshotsApp({
         const sRes = await fetch(`/api/jobs/${generationJobId}/signed-urls`, { method: "POST" });
         const sData = (await sRes.json()) as { signedUrls?: string[] };
         setSignedUrls(sData.signedUrls ?? []);
+        setSignedUrlsKind(generationJobKind);
         void loadHistory();
         void loadEditHistory();
       }
@@ -442,7 +444,7 @@ export function HeadshotsApp({
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [generationJobId, generationStatus, signedUrls, loadHistory, loadEditHistory]);
+  }, [generationJobId, generationJobKind, generationStatus, signedUrls, loadHistory, loadEditHistory]);
 
   useEffect(() => {
     if (!generationJobId || signedUrls || generationStatus === "failed") return;
@@ -482,6 +484,7 @@ export function HeadshotsApp({
     setGenerationError(null);
     setGenerationMessage(null);
     setSignedUrls(null);
+    setSignedUrlsKind(null);
     setSelectedImageUrl(null);
     setGenerationElapsed(0);
     setGenerationCreatedAt(null);
@@ -690,6 +693,7 @@ export function HeadshotsApp({
     setGenerationStatus("pending");
     setGenerationError(null);
     setSignedUrls(null);
+    setSignedUrlsKind(null);
     setGenerationElapsed(0);
     await loadHistory();
   }
@@ -759,6 +763,7 @@ export function HeadshotsApp({
       setGenerationStatus("pending");
       setGenerationError(null);
       setSignedUrls(null);
+      setSignedUrlsKind(null);
       setGenerationElapsed(0);
       setQuickMessage(null);
       await loadEditHistory();
@@ -874,7 +879,7 @@ export function HeadshotsApp({
             generationStatus={generationJobKind === "edit" ? generationStatus : null}
             generationError={generationJobKind === "edit" ? generationError : null}
             generationElapsed={generationJobKind === "edit" ? generationElapsed : 0}
-            signedUrls={generationJobKind === "edit" ? signedUrls : null}
+            signedUrls={generationJobKind === "edit" && signedUrlsKind === "edit" ? signedUrls : null}
             selectedImageUrl={selectedImageUrl}
             fileInputRef={quickFileInputRef}
             onPromptChange={setQuickPrompt}
