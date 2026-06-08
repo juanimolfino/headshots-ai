@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import {
   DashboardWorkspace,
   type ActiveGenerationJob,
+  type CountValue,
   type DashboardMode
 } from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ const POLL_INTERVAL_MS = 8000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_UPLOAD_DIMENSION = 1024;
 const UPLOAD_JPEG_QUALITY = 0.88;
+const ACTIVE_JOB_STATUSES = new Set<JobStatus>(["pending", "processing"]);
 
 const STYLE_OPTIONS = [
   {
@@ -93,6 +95,7 @@ const ATTIRE_COLORS = [
 
 type StyleValue = "professional" | "cinematic" | "natural";
 type JobStatus = "pending" | "processing" | "done" | "failed";
+type GenerationJobKind = "generate" | "edit";
 
 type TrainingJob = {
   id: string;
@@ -132,6 +135,49 @@ function formatElapsed(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m === 0 ? `${s}s` : `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+function isActiveJob(job: GenerateJob) {
+  return ACTIVE_JOB_STATUSES.has(job.status);
+}
+
+function getJobCount(job: GenerateJob): CountValue {
+  const count = (job.input as { num_images?: unknown } | null)?.num_images;
+  return count === 1 || count === 2 || count === 4 ? count : 1;
+}
+
+function getJobStyle(job: GenerateJob): StyleValue {
+  const style = (job.input as { style?: unknown } | null)?.style;
+  return style === "cinematic" || style === "natural" || style === "professional"
+    ? style
+    : "professional";
+}
+
+function getJobBackground(job: GenerateJob): "white" | "gray" | "dark" | "outdoor" | null {
+  const background = (job.input as { background?: unknown } | null)?.background;
+  return background === "white" || background === "gray" || background === "dark" || background === "outdoor"
+    ? background
+    : null;
+}
+
+function estimateJobProgress(job: GenerateJob) {
+  if (job.status === "done") return 100;
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 1000));
+  return Math.min(95, Math.max(12, Math.round((elapsedSeconds / 60) * 70)));
+}
+
+function toActiveGenerationJob(job: GenerateJob, title?: string): ActiveGenerationJob {
+  return {
+    id: job.id,
+    status: job.status,
+    progress: estimateJobProgress(job),
+    style: getJobStyle(job),
+    title,
+    count: getJobCount(job),
+    background: getJobBackground(job),
+    elapsed: Math.max(0, Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 1000)),
+    createdAt: job.createdAt
+  };
 }
 
 async function downloadUrl(url: string, filename: string) {
@@ -257,12 +303,14 @@ export function HeadshotsApp({
   const [attireType, setAttireType] = useState<"suit" | "dress" | "business_casual" | "casual" | null>(null);
   const [attireColor, setAttireColor] = useState<string | null>(null);
   const [generationJobId, setGenerationJobId] = useState<string | null>(null);
+  const [generationJobKind, setGenerationJobKind] = useState<GenerationJobKind | null>(null);
   const [generationStatus, setGenerationStatus] = useState<JobStatus | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [generationElapsed, setGenerationElapsed] = useState(0);
+  const [generationCreatedAt, setGenerationCreatedAt] = useState<string | null>(null);
   const generationStartRef = useRef<number | null>(null);
 
   // History (all generate jobs, filtered per model client-side)
@@ -352,6 +400,20 @@ export function HeadshotsApp({
   }, [activeTrainingJob, loadModels]);
 
   useEffect(() => {
+    const hasActiveGenerateJobs = generateJobs.some(job => ACTIVE_JOB_STATUSES.has(job.status));
+    const hasActiveEditJobs = editJobs.some(job => ACTIVE_JOB_STATUSES.has(job.status));
+    if (!hasActiveGenerateJobs && !hasActiveEditJobs) return;
+
+    const poll = () => {
+      if (hasActiveGenerateJobs) void loadHistory();
+      if (hasActiveEditJobs) void loadEditHistory();
+    };
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [editJobs, generateJobs, loadEditHistory, loadHistory]);
+
+  useEffect(() => {
     if (!activeTrainingJob) return;
     const tick = () => {
       if (trainingStartRef.current)
@@ -399,31 +461,30 @@ export function HeadshotsApp({
     setSelectedModelId(modelId);
     setShowNewModelForm(false);
     setShowQuickEditForm(false);
-    resetGeneration();
   }
 
   function handleNewModel() {
     setSelectedModelId(null);
     setShowNewModelForm(true);
     setShowQuickEditForm(false);
-    resetGeneration();
   }
 
   function handleQuickEdit() {
     setSelectedModelId(null);
     setShowNewModelForm(false);
     setShowQuickEditForm(true);
-    resetGeneration();
   }
 
   function resetGeneration() {
     setGenerationJobId(null);
+    setGenerationJobKind(null);
     setGenerationStatus(null);
     setGenerationError(null);
     setGenerationMessage(null);
     setSignedUrls(null);
     setSelectedImageUrl(null);
     setGenerationElapsed(0);
+    setGenerationCreatedAt(null);
     generationStartRef.current = null;
     setBackground(null);
     setAttireType(null);
@@ -621,12 +682,16 @@ export function HeadshotsApp({
       setGenerationMessage(data.error ?? "Could not start generation.");
       return;
     }
-    generationStartRef.current = Date.now();
+    const startedAt = Date.now();
+    generationStartRef.current = startedAt;
+    setGenerationCreatedAt(new Date(startedAt).toISOString());
     setGenerationJobId(data.jobId!);
+    setGenerationJobKind("generate");
     setGenerationStatus("pending");
     setGenerationError(null);
     setSignedUrls(null);
     setGenerationElapsed(0);
+    await loadHistory();
   }
 
   async function startQuickEdit() {
@@ -686,13 +751,17 @@ export function HeadshotsApp({
       if (res.status === 402) throw new Error("Not enough credits.");
       if (!res.ok) throw new Error(data.error ?? "Could not start generation.");
 
-      generationStartRef.current = Date.now();
+      const startedAt = Date.now();
+      generationStartRef.current = startedAt;
+      setGenerationCreatedAt(new Date(startedAt).toISOString());
       setGenerationJobId(data.jobId!);
+      setGenerationJobKind("edit");
       setGenerationStatus("pending");
       setGenerationError(null);
       setSignedUrls(null);
       setGenerationElapsed(0);
       setQuickMessage(null);
+      await loadEditHistory();
     } catch (err) {
       setQuickMessage(err instanceof Error ? err.message : "Could not generate photos.");
     } finally {
@@ -706,26 +775,36 @@ export function HeadshotsApp({
 
   const modelGenerateJobs = selectedModel
     ? generateJobs.filter(j => {
-        if (j.id === generationJobId) return false;
         const loraUrl = (j.input as { lora_url?: string } | null)?.lora_url;
         const modelLora = selectedModel.result?.lora_url;
         return loraUrl && modelLora && loraUrl === modelLora;
       })
     : [];
 
-  const activeGenerationJob: ActiveGenerationJob | null =
+  const localActiveGenerationJob: ActiveGenerationJob | null =
     generationJobId && !signedUrls && generationStatus !== "failed"
       ? {
           id: generationJobId,
           status: generationStatus,
           progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
           style,
+          title: generationJobKind === "edit" ? "GPT edit" : undefined,
           count: numImages,
           background,
           elapsed: generationElapsed,
-          createdAt: generationStartRef.current ? new Date(generationStartRef.current).toISOString() : new Date().toISOString()
+          createdAt: generationCreatedAt ?? new Date().toISOString()
         }
       : null;
+  const activeAccountGenerateJob = generateJobs.find(isActiveJob) ?? null;
+  const activeSelectedModelJob = modelGenerateJobs.find(isActiveJob) ?? null;
+  const activeEditJob = editJobs.find(isActiveJob) ?? null;
+  const activeTaskJob =
+    activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob) :
+    activeEditJob ? toActiveGenerationJob(activeEditJob, "GPT edit") :
+    localActiveGenerationJob;
+  const activeGenerationJob =
+    activeSelectedModelJob ? toActiveGenerationJob(activeSelectedModelJob) :
+    generationJobKind === "generate" ? localActiveGenerationJob : null;
 
   const mode: DashboardMode = showNewModelForm
     ? "new-model"
@@ -753,6 +832,7 @@ export function HeadshotsApp({
         selectedModelId={selectedModelId}
         activeTrainingJob={activeTrainingJob}
         trainingElapsed={trainingElapsed}
+        activeTaskJob={activeTaskJob}
         activeGenerationJob={activeGenerationJob}
         style={style}
         count={numImages}
@@ -790,11 +870,11 @@ export function HeadshotsApp({
             message={quickMessage}
             editJobs={editJobs}
             onDeleteEdit={deleteEditJob}
-            generationJobId={generationJobId}
-            generationStatus={generationStatus}
-            generationError={generationError}
-            generationElapsed={generationElapsed}
-            signedUrls={signedUrls}
+            generationJobId={generationJobKind === "edit" ? generationJobId : null}
+            generationStatus={generationJobKind === "edit" ? generationStatus : null}
+            generationError={generationJobKind === "edit" ? generationError : null}
+            generationElapsed={generationJobKind === "edit" ? generationElapsed : 0}
+            signedUrls={generationJobKind === "edit" ? signedUrls : null}
             selectedImageUrl={selectedImageUrl}
             fileInputRef={quickFileInputRef}
             onPromptChange={setQuickPrompt}
@@ -1743,8 +1823,9 @@ function ResultsHistory({
 }) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const activeJobs = jobs.filter(isActiveJob);
   const doneJobs = jobs.filter(j => j.status === "done");
-  if (doneJobs.length === 0) return null;
+  if (activeJobs.length === 0 && doneJobs.length === 0) return null;
 
   const visibleJobs = doneJobs.slice(0, visibleCount);
   const remaining = doneJobs.length - visibleCount;
@@ -1755,6 +1836,9 @@ function ResultsHistory({
         History
       </p>
       <div className="space-y-2">
+        {activeJobs.map(job => (
+          <RunningHistoryRow key={job.id} job={job} kind={kind} />
+        ))}
         {visibleJobs.map(job => (
           <HistoryRow
             key={job.id}
@@ -1802,6 +1886,42 @@ function ResultsHistory({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RunningHistoryRow({
+  job,
+  kind = "generate"
+}: {
+  job: GenerateJob;
+  kind?: "generate" | "edit";
+}) {
+  const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
+  const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
+  const label = kind === "edit" ? "GPT edit" : styleLabel;
+  const count = (job.input as { num_images?: number } | null)?.num_images ?? 1;
+  const progress = estimateJobProgress(job);
+
+  return (
+    <div className="rounded-xl border border-sage-line bg-sage-tint px-4 py-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface">
+          <Loader2 className="dsh-task-spin h-4 w-4 text-sage" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-ink">
+            {label} · {count} {count === 1 ? "photo" : "photos"}
+          </p>
+          <p className="text-xs text-ink-muted">Generating · runs in background</p>
+          <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-surface">
+            <span className="block h-full rounded-full bg-sage" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+        <span className="rounded-full border border-sage-line bg-surface px-3 py-1 text-xs font-semibold text-sage-deep">
+          {progress}%
+        </span>
+      </div>
     </div>
   );
 }

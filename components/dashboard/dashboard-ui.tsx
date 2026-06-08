@@ -48,6 +48,7 @@ export type ActiveGenerationJob = {
   status: JobStatus | null;
   progress: number;
   style: StyleValue;
+  title?: string;
   count: CountValue;
   background: BackgroundValue;
   elapsed: number;
@@ -66,6 +67,7 @@ export type DashboardWorkspaceProps = {
   selectedModelId: string | null;
   activeTrainingJob: TrainingJobLike | null;
   trainingElapsed: number;
+  activeTaskJob: ActiveGenerationJob | null;
   activeGenerationJob: ActiveGenerationJob | null;
   style: StyleValue;
   count: CountValue;
@@ -248,7 +250,7 @@ function DashboardSidebar({
   );
 }
 
-function DashboardTopBar({ selectedModel, activeGenerationJob, mode, activeTrainingJob }: DashboardWorkspaceProps) {
+function DashboardTopBar({ selectedModel, activeTaskJob, mode, activeTrainingJob }: DashboardWorkspaceProps) {
   const title =
     mode === "new-model" ? "New model" :
     mode === "quick-edit" ? "Quick GPT edit" :
@@ -268,7 +270,7 @@ function DashboardTopBar({ selectedModel, activeGenerationJob, mode, activeTrain
           </span>
         ) : null}
       </div>
-      {activeGenerationJob ? <TaskPill job={activeGenerationJob} /> : null}
+      {activeTaskJob ? <TaskPill job={activeTaskJob} /> : null}
     </header>
   );
 }
@@ -398,7 +400,7 @@ function RunningGenerationRow({ job }: { job: ActiveGenerationJob }) {
     <div className="flex items-center gap-4 rounded-[14px] border border-sage-line bg-sage-tint px-4 py-[13px]">
       <div className="dsh-shimmer relative size-14 shrink-0 overflow-hidden rounded-[9px] bg-[#e6ddcf]" />
       <div className="min-w-0 flex-1">
-        <div className="text-[14.5px] font-bold text-ink">{styleLabel(job.style)} · {job.count} {job.count === 1 ? "photo" : "photos"}</div>
+        <div className="text-[14.5px] font-bold text-ink">{job.title ?? styleLabel(job.style)} · {job.count} {job.count === 1 ? "photo" : "photos"}</div>
         <div className="text-[12.5px] text-ink-muted">{formatBackground(job.background)} · {formatRelativeTime(job.createdAt)}</div>
         <ProgressBar value={job.progress} className="mt-1.5 max-w-[300px]" />
       </div>
