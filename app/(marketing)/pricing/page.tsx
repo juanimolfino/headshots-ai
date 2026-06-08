@@ -1,64 +1,93 @@
 import Link from "next/link";
 import { CheckCircle2, CreditCard, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CREDIT_PACKS, PLANS } from "@/lib/stripe/pricing";
 
 export const metadata = { title: "Pricing" };
 
 export default function PricingPage() {
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
+    <main className="mx-auto max-w-6xl px-6 py-12 text-ink">
       <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <h1 className="text-4xl font-semibold">Pricing</h1>
-          <p className="mt-3 max-w-2xl text-muted-foreground">
+          <h1 className="font-serif text-4xl font-medium tracking-[-0.02em] text-ink">Pricing</h1>
+          <p className="mt-3 max-w-2xl text-ink-soft">
             Sell monthly plans and non-expiring credit packs at the same time.
           </p>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild variant="pillGhost" size="pillSm">
           <Link href="/dashboard">Back to dashboard</Link>
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        {PLANS.map((plan) => (
-          <section key={plan.id} className="rounded-lg border bg-card p-6">
-            <h2 className="text-2xl font-semibold">{plan.name}</h2>
-            <p className="mt-2 text-3xl font-semibold">${plan.priceMonthly}<span className="text-base text-muted-foreground">/mo</span></p>
-            <ul className="mt-6 space-y-3 text-sm">
-              {plan.features.map((feature) => (
-                <li key={feature} className="flex gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-primary" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-            {plan.id === "pro" ? (
-              <form action="/api/stripe/checkout" method="post" className="mt-6">
-                <input type="hidden" name="mode" value="subscription" />
-                <Button type="submit" className="w-full">
-                  <CreditCard className="h-4 w-4" />
-                  Upgrade to Pro
+        {PLANS.map((plan) => {
+          const isPro = plan.id === "pro";
+          return (
+            <section
+              key={plan.id}
+              className={
+                isPro
+                  ? "relative rounded-plan border border-navy bg-navy p-8 text-navy-foreground"
+                  : "rounded-plan border border-line bg-surface p-8"
+              }
+            >
+              {isPro ? (
+                <Badge variant="gold" className="absolute -top-3 left-8">
+                  Most popular
+                </Badge>
+              ) : null}
+              <h2 className="font-serif text-2xl font-medium">{plan.name}</h2>
+              <p className="mt-2 font-serif text-5xl font-medium tracking-[-0.02em]">
+                ${plan.priceMonthly}
+                <span
+                  className={
+                    isPro
+                      ? "ml-1 font-sans text-base text-navy-foreground/70"
+                      : "ml-1 font-sans text-base text-ink-muted"
+                  }
+                >
+                  /mo
+                </span>
+              </p>
+              <ul className="mt-6 space-y-3 text-sm">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex gap-2">
+                    <CheckCircle2
+                      className={isPro ? "h-4 w-4 flex-none text-gold" : "h-4 w-4 flex-none text-navy"}
+                    />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              {isPro ? (
+                <form action="/api/stripe/checkout" method="post" className="mt-6">
+                  <input type="hidden" name="mode" value="subscription" />
+                  <Button type="submit" variant="pillGold" size="pill" className="w-full">
+                    <CreditCard className="h-4 w-4" />
+                    Upgrade to Pro
+                  </Button>
+                </form>
+              ) : (
+                <Button disabled variant="pillGhost" size="pill" className="mt-6 w-full">
+                  Current starter plan
                 </Button>
-              </form>
-            ) : (
-              <Button disabled variant="outline" className="mt-6 w-full">
-                Current starter plan
-              </Button>
-            )}
-          </section>
-        ))}
+              )}
+            </section>
+          );
+        })}
       </div>
-      <h2 className="mt-12 text-2xl font-semibold">Credit packs</h2>
+      <h2 className="mt-12 font-serif text-2xl font-medium">Credit packs</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
         {CREDIT_PACKS.map((pack) => (
-          <section key={pack.id} className="rounded-lg border bg-card p-6">
-            <h3 className="text-xl font-semibold">{pack.credits} credits</h3>
-            <p className="mt-2 text-3xl font-semibold">${pack.price}</p>
-            <p className="mt-3 text-sm text-muted-foreground">Credits do not expire.</p>
+          <section key={pack.id} className="rounded-plan border border-line bg-surface p-6">
+            <h3 className="font-serif text-xl font-medium">{pack.credits} credits</h3>
+            <p className="mt-2 font-serif text-4xl font-medium tracking-[-0.02em]">${pack.price}</p>
+            <p className="mt-3 text-sm text-ink-soft">Credits do not expire.</p>
             <form action="/api/stripe/checkout" method="post" className="mt-6">
               <input type="hidden" name="mode" value="credits" />
               <input type="hidden" name="packId" value={pack.id} />
-              <Button type="submit" className="w-full">
+              <Button type="submit" variant="pill" size="pill" className="w-full">
                 <Wallet className="h-4 w-4" />
                 Buy {pack.credits} credits
               </Button>

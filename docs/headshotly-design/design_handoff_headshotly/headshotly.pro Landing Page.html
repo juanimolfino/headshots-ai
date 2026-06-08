@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Headshot Generator — Studio Quality in Minutes | headshotly.pro</title>
+<meta name="description" content="Upload your selfies and get professional AI headshots for LinkedIn, resumes, and your website. Personal model trained on your face. Ready in 10 minutes. From $5.90." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script>document.documentElement.className = "js";</script>
+<style>
+:root{
+  --bg:#f5f3ef;
+  --bg-2:#edeae3;
+  --surface:#fffefb;
+  --ink:#1c1a17;
+  --ink-soft:#4a4640;
+  --muted:#807a70;
+  --line:#e4ddd0;
+  --line-strong:#d6cdbc;
+  --navy:#1b2440;
+  --navy-deep:#141b32;
+  --navy-tint:#eef0f5;
+  --blue:#3f6dd6;
+  --gold:#c79a3e;
+  --serif:"Newsreader",Georgia,serif;
+  --sans:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"SFMono-Regular",ui-monospace,"Cascadia Code",Menlo,monospace;
+  --maxw:1180px;
+  --radius:14px;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+h1,h2,h3{font-family:var(--serif);font-weight:500;line-height:1.08;letter-spacing:-.01em}
+::selection{background:var(--navy);color:#fff}
+
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+.eyebrow{
+  font-family:var(--sans);
+  font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);display:inline-flex;align-items:center;gap:9px;
+}
+.eyebrow::before{content:"";width:22px;height:1px;background:var(--line-strong)}
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:.5em;justify-content:center;
+  font-family:var(--sans);font-weight:600;font-size:15px;letter-spacing:.005em;
+  padding:14px 24px;border-radius:999px;border:1px solid transparent;
+  cursor:pointer;transition:transform .35s var(--ease),background .25s,color .25s,border-color .25s;
+  white-space:nowrap;
+}
+.btn-primary{background:var(--navy);color:#fdfcf9}
+.btn-primary:hover{background:var(--navy-deep)}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--line-strong)}
+.btn-ghost:hover{border-color:var(--ink)}
+.btn-sm{padding:11px 19px;font-size:14px}
+.btn .arr{transition:transform .35s var(--ease)}
+.btn:hover .arr{transform:translateX(4px)}
+
+.linklike{font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:.45em;border-bottom:1px solid var(--line-strong);padding-bottom:2px;transition:border-color .25s}
+.linklike:hover{border-color:var(--ink)}
+
+/* ---------- Nav ---------- */
+.nav{
+  position:sticky;top:0;z-index:50;
+  background:color-mix(in srgb,var(--bg) 82%,transparent);
+  backdrop-filter:saturate(1.1) blur(10px);
+  border-bottom:1px solid transparent;
+  transition:border-color .3s,background .3s,padding .3s;
+}
+.nav.scrolled{border-color:var(--line);background:color-mix(in srgb,var(--bg) 92%,transparent)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:72px}
+.logo{font-family:var(--serif);font-size:22px;font-weight:600;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+.logo .dot{width:9px;height:9px;border-radius:50%;background:var(--navy);display:inline-block;margin-top:3px}
+.logo b{font-weight:600}
+.logo .tld{color:var(--muted);font-weight:400}
+.nav-links{display:flex;align-items:center;gap:34px}
+.nav-links a{font-size:14.5px;font-weight:500;color:var(--ink-soft);transition:color .2s;position:relative}
+.nav-links a:hover{color:var(--ink)}
+.nav-links a::after{content:"";position:absolute;left:0;bottom:-6px;height:1px;width:0;background:var(--ink);transition:width .3s var(--ease)}
+.nav-links a:hover::after{width:100%}
+.nav-cta{display:flex;align-items:center;gap:18px}
+.menu-btn{display:none;background:none;border:0;cursor:pointer;flex-direction:column;gap:5px;padding:8px}
+.menu-btn span{width:22px;height:1.5px;background:var(--ink);display:block;transition:.3s}
+
+/* ---------- Hero ---------- */
+.hero{padding:78px 0 96px;position:relative}
+.hero-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:64px;align-items:center}
+.hero h1{
+  font-size:clamp(40px,6.2vw,72px);
+  letter-spacing:-.025em;margin-bottom:26px;
+  text-wrap:balance;
+}
+.hero h1 em{font-style:italic;color:var(--navy)}
+.hero .sub{font-size:clamp(17px,1.4vw,19px);color:var(--ink-soft);max-width:30em;margin-bottom:36px;line-height:1.55}
+.hero-cta{display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-bottom:34px}
+.social-proof{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:14px}
+.avatars{display:flex}
+.avatars .av{width:30px;height:30px;border-radius:50%;border:2px solid var(--bg);margin-left:-9px;background:var(--bg-2);overflow:hidden}
+.avatars .av:first-child{margin-left:0}
+.av i{display:block;width:100%;height:100%;background-image:repeating-linear-gradient(135deg,#d9d1c2 0 5px,#e7e0d2 5px 10px)}
+.av:nth-child(2) i{background-image:repeating-linear-gradient(135deg,#cdd2dd 0 5px,#dde1ea 5px 10px)}
+.av:nth-child(3) i{background-image:repeating-linear-gradient(135deg,#d8cfc0 0 5px,#e6ddcd 5px 10px)}
+.av:nth-child(4) i{background-image:repeating-linear-gradient(135deg,#cfd6d0 0 5px,#dfe5df 5px 10px)}
+.social-proof b{color:var(--ink-soft);font-weight:600}
+
+/* image placeholders */
+.ph{
+  position:relative;border-radius:var(--radius);overflow:hidden;
+  background:var(--bg-2);
+  background-image:repeating-linear-gradient(135deg,rgba(120,112,98,.07) 0 8px,rgba(120,112,98,0) 8px 16px);
+  border:1px solid var(--line);
+  display:flex;align-items:flex-end;
+}
+.ph::after{
+  content:attr(data-label);
+  font-family:var(--mono);font-size:11px;letter-spacing:.02em;
+  color:var(--muted);background:color-mix(in srgb,var(--surface) 88%,transparent);
+  padding:5px 9px;border-radius:7px;margin:10px;border:1px solid var(--line);
+  backdrop-filter:blur(2px);
+}
+
+.hero-shots{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.hero-shots .ph{aspect-ratio:4/5}
+.hero-shots .ph:nth-child(1){transform:translateY(-14px)}
+.hero-shots .ph:nth-child(4){transform:translateY(-14px)}
+
+/* ---------- Section scaffolding ---------- */
+section{padding:96px 0}
+.sec-head{max-width:32em;margin-bottom:54px}
+.sec-head.center{margin-left:auto;margin-right:auto;text-align:center}
+.sec-head.center .eyebrow{justify-content:center}
+.sec-head h2{font-size:clamp(30px,4vw,46px);letter-spacing:-.02em;margin-top:18px;text-wrap:balance}
+.sec-head p{color:var(--ink-soft);font-size:17px;margin-top:16px}
+
+/* ---------- How it works ---------- */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;counter-reset:step}
+.step{position:relative;padding-top:34px;border-top:1px solid var(--line-strong)}
+.step .num{font-family:var(--serif);font-size:15px;color:var(--navy);font-weight:600;letter-spacing:.04em;margin-bottom:18px;display:block}
+.step h3{font-size:23px;margin-bottom:10px;letter-spacing:-.01em}
+.step p{color:var(--ink-soft);font-size:15.5px}
+.step .ph{aspect-ratio:16/11;margin-bottom:26px}
+
+/* ---------- Styles cards ---------- */
+.style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.style-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;transition:box-shadow .4s,border-color .3s}
+.style-card:hover{box-shadow:0 14px 34px -30px rgba(28,26,23,.35);border-color:var(--line-strong)}
+.style-card .ph{aspect-ratio:3/4;border-radius:0;border:0;border-bottom:1px solid var(--line)}
+.style-card .body{padding:24px 24px 28px}
+.style-card h3{font-size:22px;margin-bottom:7px}
+.style-card p{color:var(--ink-soft);font-size:15px}
+.style-card .tag{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+
+/* ---------- Why not photographer ---------- */
+.why{background:var(--navy);color:#efeee9;border-radius:26px;padding:78px 64px}
+.why .eyebrow{color:#9aa3bd}
+.why .eyebrow::before{background:rgba(255,255,255,.22)}
+.why .sec-head h2{color:#fdfcf9}
+.why-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:38px 34px;margin-top:8px}
+.why-item .ic{width:30px;height:30px;color:#c3cae0;margin-bottom:18px}
+.why-item h3{color:#fff;font-size:20px;margin-bottom:9px}
+.why-item p{color:#bfc4d4;font-size:15px;line-height:1.5}
+
+/* ---------- Pricing ---------- */
+.price-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:26px;max-width:880px;margin:0 auto;align-items:stretch}
+.plan{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:38px 34px;display:flex;flex-direction:column;position:relative}
+.plan.pro{background:var(--navy);color:#eceef4;border-color:var(--navy);box-shadow:0 30px 70px -40px rgba(20,27,50,.85)}
+.plan .badge{position:absolute;top:-13px;left:34px;background:var(--gold);color:#241c08;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:6px 13px;border-radius:999px}
+.plan .pname{font-family:var(--sans);font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.plan.pro .pname{color:#9aa3bd}
+.plan .price{font-family:var(--serif);font-size:46px;font-weight:500;letter-spacing:-.02em;margin:14px 0 2px;display:flex;align-items:baseline;gap:9px}
+.plan .price small{font-family:var(--sans);font-size:14px;font-weight:500;color:var(--muted)}
+.plan.pro .price small{color:#9aa3bd}
+.plan .pdesc{font-size:14.5px;color:var(--ink-soft);margin-bottom:26px}
+.plan.pro .pdesc{color:#b9bfd0}
+.plan ul{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:30px;flex:1}
+.plan li{display:flex;gap:11px;font-size:14.5px;line-height:1.45;align-items:flex-start}
+.plan li svg{flex:none;margin-top:3px;color:var(--navy)}
+.plan.pro li svg{color:var(--gold)}
+.plan li .hl{font-weight:600}
+.plan .btn{width:100%}
+.plan.pro .btn-primary{background:var(--gold);color:#241c08}
+.plan.pro .btn-primary:hover{background:#d6a948}
+
+.addons{max-width:880px;margin:24px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.addon{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--bg-2);border:1px solid var(--line);border-radius:13px;padding:16px 20px}
+.addon span{font-size:14.5px;color:var(--ink-soft)}
+.addon span b{color:var(--ink);font-weight:600}
+.addon .ad-price{font-family:var(--serif);font-size:19px;color:var(--ink);white-space:nowrap}
+.credits-note{max-width:880px;margin:26px auto 0;background:transparent;border:1px dashed var(--line-strong);border-radius:13px;padding:20px 24px;display:flex;flex-direction:column;gap:11px}
+.credits-note .row{display:flex;gap:11px;align-items:flex-start;font-size:14px;color:var(--ink-soft);line-height:1.5}
+.cdot{width:11px;height:11px;border-radius:50%;flex:none;margin-top:5px}
+.cdot.blue{background:var(--blue)}
+.cdot.gold{background:var(--gold)}
+.credits-note b{color:var(--ink);font-weight:600}
+
+/* ---------- FAQ ---------- */
+.faq-wrap{max-width:760px;margin:0 auto}
+.faq{border-top:1px solid var(--line-strong)}
+details{border-bottom:1px solid var(--line);padding:0}
+details summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:24px;
+  padding:26px 4px;font-family:var(--serif);font-size:21px;font-weight:500;letter-spacing:-.01em;
+  transition:color .2s;
+}
+details summary::-webkit-details-marker{display:none}
+details summary:hover{color:var(--navy)}
+.faq .mk{flex:none;position:relative;width:18px;height:18px}
+.faq .mk::before,.faq .mk::after{content:"";position:absolute;background:var(--ink-soft);transition:transform .3s var(--ease),opacity .3s}
+.faq .mk::before{top:8px;left:0;width:18px;height:1.6px}
+.faq .mk::after{top:0;left:8px;width:1.6px;height:18px}
+details[open] .mk::after{transform:scaleY(0)}
+details[open] summary{color:var(--navy)}
+.faq .ans{overflow:hidden}
+.faq .ans p{padding:0 4px 28px;color:var(--ink-soft);font-size:16px;line-height:1.65;max-width:62ch}
+.faq .ans a{color:var(--navy);border-bottom:1px solid var(--line-strong)}
+
+/* ---------- Footer ---------- */
+footer{background:var(--bg-2);border-top:1px solid var(--line);padding:64px 0 40px;margin-top:24px}
+.foot-top{display:flex;justify-content:space-between;align-items:flex-start;gap:40px;flex-wrap:wrap;padding-bottom:42px;border-bottom:1px solid var(--line)}
+.foot-brand{max-width:30em}
+.foot-brand .logo{font-size:24px;margin-bottom:14px}
+.foot-brand p{color:var(--ink-soft);font-size:16px;font-family:var(--serif);font-style:italic}
+.foot-links{display:flex;gap:30px;align-items:center}
+.foot-links a{font-size:14.5px;color:var(--ink-soft);transition:color .2s}
+.foot-links a:hover{color:var(--ink)}
+.foot-bottom{display:flex;justify-content:space-between;align-items:center;gap:20px;padding-top:26px;flex-wrap:wrap}
+.foot-bottom small{color:var(--muted);font-size:13.5px}
+.cta-band{text-align:center;max-width:640px;margin:0 auto 30px}
+.cta-band h2{font-size:clamp(28px,4vw,42px);margin-bottom:24px;text-wrap:balance}
+
+/* ---------- Reveal animation ---------- */
+.js .reveal{opacity:0;transform:translateY(14px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.js .reveal.in{opacity:1;transform:none}
+.js .reveal.d1{transition-delay:.08s}
+.js .reveal.d2{transition-delay:.16s}
+.js .reveal.d3{transition-delay:.24s}
+@media (prefers-reduced-motion:reduce){
+  .js .reveal{opacity:1;transform:none;transition:none}
+  html{scroll-behavior:auto}
+  .btn,.style-card,.plan{transition:none}
+}
+
+/* ---------- Mobile nav panel ---------- */
+.mobile-panel{display:none}
+
+/* ---------- Responsive ---------- */
+@media (max-width:920px){
+  .hero-grid{grid-template-columns:1fr;gap:48px}
+  .hero-shots{max-width:460px}
+  .why-grid{grid-template-columns:1fr 1fr;gap:34px}
+  .why{padding:60px 40px}
+  .steps{grid-template-columns:1fr;gap:42px}
+  .step{display:grid;grid-template-columns:auto 1fr;gap:8px 22px;align-items:start;padding-top:28px}
+  .step .ph{grid-column:1/-1;order:-1;margin-bottom:8px}
+  .step .num{margin:0}
+  .style-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .nav-links{display:none}
+  .nav-cta .btn-ghost{display:none}
+  .menu-btn{display:flex}
+  .mobile-panel{
+    display:block;position:fixed;inset:72px 0 auto 0;z-index:49;
+    background:var(--bg);border-bottom:1px solid var(--line);
+    padding:14px 28px 26px;transform:translateY(-120%);transition:transform .4s var(--ease);
+  }
+  .mobile-panel.open{transform:translateY(0)}
+  .mobile-panel a{display:block;padding:14px 0;font-size:18px;font-family:var(--serif);border-bottom:1px solid var(--line)}
+  .mobile-panel .btn{width:100%;margin-top:18px}
+  section{padding:72px 0}
+  .hero{padding:52px 0 64px}
+  .style-grid{grid-template-columns:1fr;max-width:420px;margin:0 auto}
+  .price-grid{grid-template-columns:1fr;max-width:440px}
+  .addons,.credits-note{grid-template-columns:1fr}
+  .addons{max-width:440px}
+  .why-grid{grid-template-columns:1fr}
+  .why{padding:48px 28px;border-radius:20px}
+  .foot-top{flex-direction:column;gap:28px}
+  .wrap{padding:0 22px}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= NAV ================= -->
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a href="#top" class="logo" aria-label="headshotly.pro home"><span class="dot"></span><b>headshotly</b><span class="tld">.pro</span></a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#how-it-works">How it works</a>
+      <a href="#styles">Styles</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="#pricing" class="btn btn-ghost btn-sm">Sign in</a>
+      <a href="#pricing" class="btn btn-primary btn-sm">Get started</a>
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+<div class="mobile-panel" id="mobilePanel">
+  <a href="#how-it-works">How it works</a>
+  <a href="#styles">Styles</a>
+  <a href="#pricing">Pricing</a>
+  <a href="#faq">FAQ</a>
+  <a href="#pricing" class="btn btn-primary">Get started</a>
+</div>
+
+<main id="top">
+
+  <!--
+    ============================================================
+    IMAGE PLACEHOLDERS — how to drop in real photos
+    Every gray striped block is a <div class="ph" ...>.
+    To replace one with a real image, swap the div for an <img>:
+
+      <div class="ph" data-label="professional · f" role="img"
+           aria-label="..."></div>
+      ->
+      <img class="ph" src="images/headshot-pro-1.jpg"
+           alt="Professional AI headshot, business attire, neutral background" />
+
+    Keep the class="ph" (it preserves the rounded frame + aspect ratio)
+    and carry the descriptive alt text over from aria-label for SEO.
+    ============================================================
+  -->
+
+  <!-- ================= HERO ================= -->
+  <section class="hero" aria-labelledby="hero-h1">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow reveal">AI headshot studio</span>
+        <h1 id="hero-h1" class="reveal d1">Your professional headshot, <em>generated by AI</em></h1>
+        <p class="sub reveal d2">Upload your selfies, we train a model on your face, you get studio-quality headshots in minutes. No photographer. No studio.</p>
+        <div class="hero-cta reveal d2">
+          <a href="#pricing" class="btn btn-primary">Get my headshots <span class="arr">→</span></a>
+          <a href="#how-it-works" class="linklike">See how it works ↓</a>
+        </div>
+        <div class="social-proof reveal d3">
+          <div class="avatars" aria-hidden="true">
+            <span class="av"><i></i></span><span class="av"><i></i></span><span class="av"><i></i></span><span class="av"><i></i></span>
+          </div>
+          <span>Trusted by <b>1,200+ professionals</b> worldwide</span>
+        </div>
+      </div>
+      <div class="hero-visual reveal d1">
+        <div class="hero-shots" role="group" aria-label="Sample AI headshots">
+          <div class="ph" data-label="professional · f" role="img" aria-label="Sample AI headshot: woman in business attire against a neutral background, professional style"></div>
+          <div class="ph" data-label="cinematic · m" role="img" aria-label="Sample AI headshot: man with dramatic editorial lighting, cinematic style"></div>
+          <div class="ph" data-label="natural · m" role="img" aria-label="Sample AI headshot: man in soft daylight with a candid, approachable expression, natural style"></div>
+          <div class="ph" data-label="professional · f" role="img" aria-label="Sample AI headshot: woman with sharp focus and a confident expression, professional style"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HOW IT WORKS ================= -->
+  <section id="how-it-works" aria-labelledby="how-h2">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">How it works</span>
+        <h2 id="how-h2">Three steps to a studio-quality headshot</h2>
+      </div>
+      <div class="steps">
+        <article class="step reveal">
+          <div class="ph" data-label="upload · selfies" role="img" aria-label="Illustration of a grid of casual selfies being uploaded"></div>
+          <span class="num">Step 01</span>
+          <h3>Upload 10–20 selfies</h3>
+          <p>Any lighting, any angle. Just be yourself — variety helps the model learn your face.</p>
+        </article>
+        <article class="step reveal d1">
+          <div class="ph" data-label="train · ~10 min" role="img" aria-label="Illustration of an AI model training progress indicator"></div>
+          <span class="num">Step 02</span>
+          <h3>We train your personal AI model</h3>
+          <p>Your own model, ready in about ten minutes. We'll email you the moment it's done.</p>
+        </article>
+        <article class="step reveal d2">
+          <div class="ph" data-label="generate · hi-res" role="img" aria-label="Illustration of finished high-resolution headshots ready to download"></div>
+          <span class="num">Step 03</span>
+          <h3>Generate headshots in any style</h3>
+          <p>Pick a look, generate as many as you like, and download in high resolution.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= STYLES ================= -->
+  <section id="styles" aria-labelledby="styles-h2">
+    <div class="wrap">
+      <div class="sec-head center reveal">
+        <span class="eyebrow">Styles</span>
+        <h2 id="styles-h2">Choose your look</h2>
+        <p>Every plan includes all three. Generate as many variations as your credits allow.</p>
+      </div>
+      <div class="style-grid">
+        <article class="style-card reveal">
+          <div class="ph" data-label="professional" role="img" aria-label="Professional style headshot sample: business attire, neutral background, sharp focus"></div>
+          <div class="body">
+            <span class="tag">01 — Professional</span>
+            <h3>Professional</h3>
+            <p>Business attire, neutral background, sharp focus.</p>
+          </div>
+        </article>
+        <article class="style-card reveal d1">
+          <div class="ph" data-label="cinematic" role="img" aria-label="Cinematic style headshot sample: dramatic lighting, editorial feel, high contrast"></div>
+          <div class="body">
+            <span class="tag">02 — Cinematic</span>
+            <h3>Cinematic</h3>
+            <p>Dramatic lighting, editorial feel, high contrast.</p>
+          </div>
+        </article>
+        <article class="style-card reveal d2">
+          <div class="ph" data-label="natural" role="img" aria-label="Natural style headshot sample: soft light, candid, approachable"></div>
+          <div class="body">
+            <span class="tag">03 — Natural</span>
+            <h3>Natural</h3>
+            <p>Soft light, candid, approachable.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WHY NOT A PHOTOGRAPHER ================= -->
+  <section aria-labelledby="why-h2">
+    <div class="wrap">
+      <div class="why reveal">
+        <div class="sec-head">
+          <span class="eyebrow">Why headshotly</span>
+          <h2 id="why-h2">Better than a photoshoot. Here's why.</h2>
+        </div>
+        <div class="why-grid">
+          <div class="why-item">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M14.4 9.4c-.5-.8-1.4-1.2-2.4-1.2-1.4 0-2.4.8-2.4 1.9 0 2.4 5 1.3 5 3.8 0 1.1-1.1 1.9-2.6 1.9-1.1 0-2-.5-2.5-1.3"/></svg>
+            <h3>Cost</h3>
+            <p>A fraction of a studio session. No travel, no booking.</p>
+          </div>
+          <div class="why-item">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>
+            <h3>Speed</h3>
+            <p>Ready in minutes, not weeks.</p>
+          </div>
+          <div class="why-item">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.4"/><rect x="13" y="4" width="7" height="7" rx="1.4"/><rect x="4" y="13" width="7" height="7" rx="1.4"/><rect x="13" y="13" width="7" height="7" rx="1.4"/></svg>
+            <h3>Variety</h3>
+            <p>Dozens of looks from a single upload.</p>
+          </div>
+          <div class="why-item">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5 19c0-3.3 3.1-6 7-6s7 2.7 7 6"/><circle cx="12" cy="8" r="3.4"/></svg>
+            <h3>Comfort</h3>
+            <p>No awkward poses or strangers pointing cameras at you.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PRICING ================= -->
+  <section id="pricing" aria-labelledby="pricing-h2">
+    <div class="wrap">
+      <div class="sec-head center reveal">
+        <span class="eyebrow">Pricing</span>
+        <h2 id="pricing-h2">Simple, one-time pricing. No subscriptions.</h2>
+      </div>
+      <div class="price-grid">
+        <article class="plan reveal">
+          <span class="pname">Starter</span>
+          <div class="price">$5.90 <small>one-time</small></div>
+          <p class="pdesc">Try AI headshots fast, with no model training.</p>
+          <ul>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span><span class="hl">20 blue credits</span> to generate images</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span>Generic AI generation — no personal model</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span>3 styles: professional, cinematic, natural</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span>High-resolution download</span></li>
+          </ul>
+          <a href="#" class="btn btn-ghost">Get started <span class="arr">→</span></a>
+        </article>
+        <article class="plan pro reveal d1">
+          <span class="badge">Most popular</span>
+          <span class="pname">Pro</span>
+          <div class="price">$11.90 <small>one-time</small></div>
+          <p class="pdesc">Headshots that actually look like you.</p>
+          <ul>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span><span class="hl">1 golden credit</span> to train your personal AI model</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span><span class="hl">20 blue credits</span> to generate headshots of your face</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span>Everything in Starter</span></li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7.5"/></svg><span>Model trained on your photos — results look like you</span></li>
+          </ul>
+          <a href="#" class="btn btn-primary">Go Pro <span class="arr">→</span></a>
+        </article>
+      </div>
+
+      <div class="addons reveal">
+        <div class="addon">
+          <span>Need more images? <b>+20 blue credits</b></span>
+          <span class="ad-price">$4.90</span>
+        </div>
+        <div class="addon">
+          <span>Need another model? <b>+1 golden credit</b></span>
+          <span class="ad-price">$6.90</span>
+        </div>
+      </div>
+
+      <div class="credits-note reveal">
+        <div class="row"><span class="cdot blue"></span><span><b>Blue credits</b> generate images — low quality: 1 cr · medium: 2 cr · high: 3 cr.</span></div>
+        <div class="row"><span class="cdot gold"></span><span><b>Golden credits</b> train a personal AI model on your photos — 1 model = 1 golden credit.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section id="faq" aria-labelledby="faq-h2">
+    <div class="wrap">
+      <div class="sec-head center reveal">
+        <span class="eyebrow">FAQ</span>
+        <h2 id="faq-h2">Common questions</h2>
+      </div>
+      <div class="faq-wrap reveal">
+        <div class="faq">
+          <details open>
+            <summary><h3 style="font:inherit;margin:0">What's the difference between Starter and Pro?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>Starter generates professional-looking headshots using a generic AI model — great for quick results. Pro trains a model specifically on your face, so the results actually look like you. For LinkedIn and professional use, Pro is the right choice.</p></div>
+          </details>
+          <details>
+            <summary><h3 style="font:inherit;margin:0">How long does training take?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>About 10 minutes. You'll get an email when your model is ready.</p></div>
+          </details>
+          <details>
+            <summary><h3 style="font:inherit;margin:0">How many selfies do I need to upload?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>Between 10 and 20. Variety helps — different angles, lighting, expressions. Avoid sunglasses or heavy filters.</p></div>
+          </details>
+          <details>
+            <summary><h3 style="font:inherit;margin:0">What styles are available?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>Professional (business attire, neutral background), Cinematic (dramatic editorial lighting), and Natural (soft, candid look). All three are included in every plan.</p></div>
+          </details>
+          <details>
+            <summary><h3 style="font:inherit;margin:0">Are my photos stored securely?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>Your uploaded selfies are used only for training your model and deleted afterward. Generated headshots are stored in your account for download.</p></div>
+          </details>
+          <details>
+            <summary><h3 style="font:inherit;margin:0">Can I get a refund?</h3><span class="mk" aria-hidden="true"></span></summary>
+            <div class="ans"><p>If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Reach out at <a href="mailto:hello@headshotly.pro">hello@headshotly.pro</a>.</p></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= FOOTER ================= -->
+<footer>
+  <div class="wrap">
+    <div class="cta-band reveal">
+      <h2>Your next headshot is ten minutes away.</h2>
+      <a href="#pricing" class="btn btn-primary">Get my headshots <span class="arr">→</span></a>
+    </div>
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a href="#top" class="logo"><span class="dot"></span><b>headshotly</b><span class="tld">.pro</span></a>
+        <p>Studio-quality headshots, generated by AI.</p>
+      </div>
+      <nav class="foot-links" aria-label="Footer">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="mailto:hello@headshotly.pro">Contact</a>
+      </nav>
+    </div>
+    <div class="foot-bottom">
+      <small>© 2026 headshotly.pro</small>
+      <small>Made for professionals worldwide.</small>
+    </div>
+  </div>
+</footer>
+
+<!-- ================= STRUCTURED DATA ================= -->
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"FAQPage",
+  "mainEntity":[
+    {"@type":"Question","name":"What's the difference between Starter and Pro?","acceptedAnswer":{"@type":"Answer","text":"Starter generates professional-looking headshots using a generic AI model — great for quick results. Pro trains a model specifically on your face, so the results actually look like you. For LinkedIn and professional use, Pro is the right choice."}},
+    {"@type":"Question","name":"How long does training take?","acceptedAnswer":{"@type":"Answer","text":"About 10 minutes. You'll get an email when your model is ready."}},
+    {"@type":"Question","name":"How many selfies do I need to upload?","acceptedAnswer":{"@type":"Answer","text":"Between 10 and 20. Variety helps — different angles, lighting, expressions. Avoid sunglasses or heavy filters."}},
+    {"@type":"Question","name":"What styles are available?","acceptedAnswer":{"@type":"Answer","text":"Professional (business attire, neutral background), Cinematic (dramatic editorial lighting), and Natural (soft, candid look). All three are included in every plan."}},
+    {"@type":"Question","name":"Are my photos stored securely?","acceptedAnswer":{"@type":"Answer","text":"Your uploaded selfies are used only for training your model and deleted afterward. Generated headshots are stored in your account for download."}},
+    {"@type":"Question","name":"Can I get a refund?","acceptedAnswer":{"@type":"Answer","text":"If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Reach out at hello@headshotly.pro."}}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"Product",
+  "name":"headshotly.pro AI Headshot Generator",
+  "description":"Upload your selfies and get professional AI headshots for LinkedIn, resumes, and your website. Personal model trained on your face. Ready in 10 minutes.",
+  "brand":{"@type":"Brand","name":"headshotly.pro"},
+  "offers":[
+    {"@type":"Offer","name":"Starter","price":"5.90","priceCurrency":"USD","description":"20 blue credits, generic AI generation, 3 styles, high-resolution download.","availability":"https://schema.org/InStock"},
+    {"@type":"Offer","name":"Pro","price":"11.90","priceCurrency":"USD","description":"1 golden credit to train a personal model plus 20 blue credits to generate headshots of your face.","availability":"https://schema.org/InStock"}
+  ]
+}
+</script>
+
+<!-- ================= BEHAVIOR ================= -->
+<script>
+(function(){
+  // sticky nav shadow
+  var nav=document.getElementById('nav');
+  var onScroll=function(){ nav.classList.toggle('scrolled', window.scrollY>8); };
+  onScroll(); window.addEventListener('scroll',onScroll,{passive:true});
+
+  // mobile menu
+  var mb=document.getElementById('menuBtn'), panel=document.getElementById('mobilePanel');
+  mb.addEventListener('click',function(){
+    var open=panel.classList.toggle('open');
+    mb.setAttribute('aria-expanded',open);
+  });
+  panel.querySelectorAll('a').forEach(function(a){a.addEventListener('click',function(){panel.classList.remove('open');mb.setAttribute('aria-expanded',false);});});
+
+  // scroll reveal — robust: reveal in-view immediately, fall back if IO never fires
+  var reveals=[].slice.call(document.querySelectorAll('.reveal'));
+  var revealAll=function(){ reveals.forEach(function(el){el.classList.add('in');}); };
+  var vh=function(){ return window.innerHeight||document.documentElement.clientHeight; };
+  if('IntersectionObserver' in window){
+    var ioFired=false;
+    var io=new IntersectionObserver(function(entries){
+      ioFired=true;
+      entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    },{rootMargin:'0px 0px -8% 0px',threshold:.08});
+    reveals.forEach(function(el){
+      io.observe(el);
+      // above-the-fold safety: anything already on screen shows right away
+      var r=el.getBoundingClientRect();
+      if(r.top < vh() && r.bottom>0){ el.classList.add('in'); }
+    });
+    // if the observer never reports (some embedded/preview contexts), reveal everything
+    setTimeout(function(){ if(!ioFired) revealAll(); },700);
+  } else {
+    revealAll();
+  }
+
+  // smooth-close other FAQ items (single-open accordion feel, optional)
+  var dets=document.querySelectorAll('.faq details');
+  dets.forEach(function(d){
+    d.addEventListener('toggle',function(){
+      if(d.open){ dets.forEach(function(o){ if(o!==d) o.open=false; }); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

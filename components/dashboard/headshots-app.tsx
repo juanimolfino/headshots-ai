@@ -17,12 +17,18 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  Trash2,
   Upload,
   User,
   Wallet,
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DashboardWorkspace,
+  type ActiveGenerationJob,
+  type DashboardMode
+} from "@/components/dashboard/dashboard-ui";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -262,6 +268,9 @@ export function HeadshotsApp({
   // History (all generate jobs, filtered per model client-side)
   const [generateJobs, setGenerateJobs] = useState<GenerateJob[]>([]);
 
+  // Quick GPT edit history (all headshot-edit jobs)
+  const [editJobs, setEditJobs] = useState<GenerateJob[]>([]);
+
   useEffect(() => {
     photosRef.current = photos;
   }, [photos]);
@@ -310,12 +319,31 @@ export function HeadshotsApp({
     setGenerateJobs(data.jobs ?? []);
   }, []);
 
+  const loadEditHistory = useCallback(async () => {
+    const res = await fetch("/api/jobs?type=headshot-edit&limit=50");
+    if (!res.ok) return;
+    const data = (await res.json()) as { jobs?: GenerateJob[] };
+    setEditJobs(data.jobs ?? []);
+  }, []);
+
+  const deleteEditJob = useCallback(async (jobId: string) => {
+    const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+    if (!res.ok) return;
+    setEditJobs(prev => prev.filter(j => j.id !== jobId));
+  }, []);
+
   useEffect(() => {
-    loadModels();
+    const id = window.setTimeout(() => void loadModels(), 0);
+    return () => window.clearTimeout(id);
   }, [loadModels]);
   useEffect(() => {
-    loadHistory();
+    const id = window.setTimeout(() => void loadHistory(), 0);
+    return () => window.clearTimeout(id);
   }, [loadHistory]);
+  useEffect(() => {
+    const id = window.setTimeout(() => void loadEditHistory(), 0);
+    return () => window.clearTimeout(id);
+  }, [loadEditHistory]);
 
   useEffect(() => {
     if (!activeTrainingJob) return;
@@ -346,12 +374,13 @@ export function HeadshotsApp({
         const sData = (await sRes.json()) as { signedUrls?: string[] };
         setSignedUrls(sData.signedUrls ?? []);
         void loadHistory();
+        void loadEditHistory();
       }
     };
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [generationJobId, generationStatus, signedUrls, loadHistory]);
+  }, [generationJobId, generationStatus, signedUrls, loadHistory, loadEditHistory]);
 
   useEffect(() => {
     if (!generationJobId || signedUrls || generationStatus === "failed") return;
@@ -684,186 +713,54 @@ export function HeadshotsApp({
       })
     : [];
 
+  const activeGenerationJob: ActiveGenerationJob | null =
+    generationJobId && !signedUrls && generationStatus !== "failed"
+      ? {
+          id: generationJobId,
+          status: generationStatus,
+          progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
+          style,
+          count: numImages,
+          background,
+          elapsed: generationElapsed,
+          createdAt: generationStartRef.current ? new Date(generationStartRef.current).toISOString() : new Date().toISOString()
+        }
+      : null;
+
+  const mode: DashboardMode = showNewModelForm
+    ? "new-model"
+    : showQuickEditForm
+      ? "quick-edit"
+      : loadingModels
+        ? "loading"
+        : selectedModel
+          ? "model"
+          : activeTrainingJob
+            ? "training-only"
+            : "empty";
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* ── Sidebar ── */}
-      <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-950">
-        {/* Logo */}
-        <div className="flex h-14 items-center gap-2.5 border-b border-zinc-800 px-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
-            <Sparkles className="h-3.5 w-3.5 text-zinc-900" />
-          </div>
-          <span className="text-sm font-semibold text-white">Headshots AI</span>
-        </div>
-
-        {/* Models nav */}
-        <div className="flex-1 overflow-y-auto py-4">
-          <p className="mb-2 px-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
-            Your models
-          </p>
-
-          {loadingModels ? (
-            <div className="flex items-center gap-2 px-4 py-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-              <span className="text-xs text-zinc-400">Loading...</span>
-            </div>
-          ) : (
-            <>
-              {trainedModels.map(model => {
-                const name = getModelName(model);
-                const isSelected = selectedModelId === model.id && !showNewModelForm;
-                const isEditing = editingModelId === model.id;
-                return (
-                  <div
-                    key={model.id}
-                    onClick={() => !isEditing && handleSelectModel(model.id)}
-                    className={cn(
-                      "group/model flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition-colors",
-                      isSelected
-                        ? "bg-zinc-800 text-white"
-                        : "text-zinc-300 hover:bg-zinc-800/50 hover:text-white"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold uppercase",
-                        isSelected ? "bg-white text-zinc-900" : "bg-zinc-800 text-zinc-300"
-                      )}
-                    >
-                      {name.charAt(0)}
-                    </div>
-                    {isEditing ? (
-                      <input
-                        autoFocus
-                        className="flex-1 truncate bg-transparent text-sm outline-none"
-                        value={editingName}
-                        maxLength={60}
-                        onChange={e => setEditingName(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === "Enter") {
-                            void renameModel(model.id, editingName);
-                            setEditingModelId(null);
-                          }
-                          if (e.key === "Escape") setEditingModelId(null);
-                        }}
-                        onBlur={() => {
-                          void renameModel(model.id, editingName);
-                          setEditingModelId(null);
-                        }}
-                        onClick={e => e.stopPropagation()}
-                      />
-                    ) : (
-                      <>
-                        <span className="flex-1 truncate text-sm">{name}</span>
-                        <button
-                          type="button"
-                          className="shrink-0 opacity-0 transition-opacity group-hover/model:opacity-100"
-                          title="Rename"
-                          onClick={e => {
-                            e.stopPropagation();
-                            setEditingModelId(model.id);
-                            setEditingName(name);
-                          }}
-                        >
-                          <Pencil className="h-3 w-3 text-zinc-500 hover:text-zinc-300" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-
-              {activeTrainingJob && (
-                <div className="mx-3 mt-1 flex items-center gap-2 rounded-md bg-zinc-900 px-2.5 py-2">
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-zinc-500" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-zinc-200">
-                      {getModelName(activeTrainingJob)}
-                    </p>
-                    <p className="text-[10px] text-zinc-400">
-                      Training · {formatElapsed(trainingElapsed)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTrainingJob(null);
-                      trainingStartRef.current = null;
-                    }}
-                    className="text-zinc-500 hover:text-zinc-400"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )}
-
-              {trainedModels.length === 0 && !activeTrainingJob && (
-                <p className="px-4 py-1 text-xs text-zinc-500">No trained models yet.</p>
-              )}
-
-              <div className="mt-3 px-3">
-                <button
-                  type="button"
-                  onClick={handleQuickEdit}
-                  className={cn(
-                    "mb-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors",
-                    showQuickEditForm
-                      ? "bg-zinc-800 text-white"
-                      : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300"
-                  )}
-                >
-                  <Images className="h-3.5 w-3.5" />
-                  Quick GPT edit
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNewModel}
-                  className="flex w-full items-center gap-2 rounded-md border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-300"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  New model
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Bottom */}
-        <div className="border-t border-zinc-800 px-4 py-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-zinc-400">Credits</span>
-            <span className="text-xs font-semibold text-zinc-200">{initialCredits}</span>
-          </div>
-          <Link
-            href="/pricing"
-            className="mb-4 flex items-center gap-1.5 text-xs text-zinc-400 transition-colors hover:text-zinc-200"
-          >
-            <Wallet className="h-3.5 w-3.5" />
-            Buy credits
-          </Link>
-          <div className="flex items-center gap-2 border-t border-zinc-800 pt-3">
-            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800">
-              <User className="h-3.5 w-3.5 text-zinc-400" />
-            </div>
-            <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">{userEmail}</span>
-            <form action="/logout" method="post">
-              <button
-                type="submit"
-                className="text-zinc-500 transition-colors hover:text-zinc-300"
-                aria-label="Sign out"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
-            </form>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main area ── */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-zinc-50">
-        {showNewModelForm ? (
+    <>
+      <DashboardWorkspace
+        mode={mode}
+        userEmail={userEmail}
+        credits={{ blue: initialCredits, gold: Math.floor(initialCredits / TRAINING_CREDITS) }}
+        models={trainedModels}
+        loadingModels={loadingModels}
+        selectedModel={selectedModel}
+        selectedModelId={selectedModelId}
+        activeTrainingJob={activeTrainingJob}
+        trainingElapsed={trainingElapsed}
+        activeGenerationJob={activeGenerationJob}
+        style={style}
+        count={numImages}
+        background={background}
+        attire={attireType}
+        generationMessage={generationMessage}
+        jobs={modelGenerateJobs}
+        newModelContent={
           <NewModelPanel
             modelName={modelName}
             photos={photos}
@@ -882,7 +779,8 @@ export function HeadshotsApp({
               if (trainedModels[0]) setSelectedModelId(trainedModels[0].id);
             }}
           />
-        ) : showQuickEditForm ? (
+        }
+        quickEditContent={
           <QuickEditPanel
             photos={quickPhotos}
             prompt={quickPrompt}
@@ -890,6 +788,8 @@ export function HeadshotsApp({
             numImages={quickNumImages}
             uploading={quickUploading}
             message={quickMessage}
+            editJobs={editJobs}
+            onDeleteEdit={deleteEditJob}
             generationJobId={generationJobId}
             generationStatus={generationStatus}
             generationError={generationError}
@@ -911,37 +811,38 @@ export function HeadshotsApp({
               if (trainedModels[0]) setSelectedModelId(trainedModels[0].id);
             }}
           />
-        ) : selectedModel ? (
-          <ModelWorkspace
-            model={selectedModel}
-            style={style}
-            numImages={numImages}
-            background={background}
-            attireType={attireType}
-            attireColor={attireColor}
-            generationJobId={generationJobId}
-            generationStatus={generationStatus}
-            generationError={generationError}
-            generationMessage={generationMessage}
-            generationElapsed={generationElapsed}
-            signedUrls={signedUrls}
-            selectedImageUrl={selectedImageUrl}
-            modelGenerateJobs={modelGenerateJobs}
-            onStyleChange={setStyle}
-            onNumImagesChange={setNumImages}
-            onBackgroundChange={setBackground}
-            onAttireTypeChange={v => { setAttireType(v); setAttireColor(null); }}
-            onAttireColorChange={setAttireColor}
-            onGenerate={() => void startGeneration()}
-            onReset={resetGeneration}
-            onSelectImage={setSelectedImageUrl}
-            onCloseImage={() => setSelectedImageUrl(null)}
-          />
-        ) : !loadingModels ? (
-          <EmptyState onNewModel={handleNewModel} />
-        ) : null}
-      </div>
-    </div>
+        }
+        onSelectModel={handleSelectModel}
+        onNewModel={handleNewModel}
+        onQuickEdit={handleQuickEdit}
+        onStyleChange={setStyle}
+        onCountChange={setNumImages}
+        onBackgroundChange={setBackground}
+        onAttireChange={v => { setAttireType(v); setAttireColor(null); }}
+        onGenerate={() => void startGeneration()}
+        onOpenImage={setSelectedImageUrl}
+      />
+      {selectedImageUrl && mode === "model" ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setSelectedImageUrl(null)}
+        >
+          <div className="relative max-h-[90vh] max-w-5xl" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setSelectedImageUrl(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-colors hover:bg-white/20"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4 text-white" />
+            </button>
+            <img src={selectedImageUrl} alt="Headshot" className="max-h-[90vh] rounded-xl object-contain" />
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -982,18 +883,18 @@ function NewModelPanel({
         <button
           type="button"
           onClick={onCancel}
-          className="flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-zinc-700"
+          className="flex items-center gap-1 text-sm text-ink-muted transition-colors hover:text-ink-soft"
         >
           <ChevronLeft className="h-4 w-4" />
           Cancel
         </button>
-        <span className="text-zinc-300">/</span>
-        <h1 className="text-sm font-semibold text-zinc-900">New model</h1>
+        <span className="text-line-strong">/</span>
+        <p className="text-sm font-semibold text-ink">New model</p>
       </div>
 
       <div className="max-w-lg space-y-6">
         <div>
-          <label className="mb-1.5 block text-sm font-medium text-zinc-700">Model name</label>
+          <label className="mb-1.5 block text-sm font-medium text-ink-soft">Model name</label>
           <input
             type="text"
             value={modelName}
@@ -1001,17 +902,17 @@ function NewModelPanel({
             placeholder="e.g. Alex, Jordan…"
             maxLength={60}
             disabled={uploading || !!uploadedUrls || trainingCreating}
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-100 disabled:opacity-60"
+            className="w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20 disabled:opacity-60"
           />
         </div>
 
         {!uploadedUrls ? (
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-sm font-medium text-zinc-700">
+              <label className="text-sm font-medium text-ink-soft">
                 Photos ({MIN_PHOTOS}–{MAX_PHOTOS})
               </label>
-              <span className="text-sm text-zinc-400">
+              <span className="text-sm text-ink-muted">
                 {photos.length} / {MAX_PHOTOS}
               </span>
             </div>
@@ -1024,11 +925,11 @@ function NewModelPanel({
                 onAddFiles(e.dataTransfer.files);
               }}
               disabled={uploading}
-              className="flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-6 text-center transition-colors hover:border-zinc-400 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-surface px-6 py-6 text-center transition-colors hover:border-navy hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Upload className="mb-2 h-6 w-6 text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-700">Drag or click to select</span>
-              <span className="mt-1 text-xs text-zinc-400">JPG or PNG · Max 10 MB per photo</span>
+              <Upload className="mb-2 h-6 w-6 text-ink-muted" />
+              <span className="text-sm font-medium text-ink-soft">Drag or click to select</span>
+              <span className="mt-1 text-xs text-ink-muted">JPG or PNG · Max 10 MB per photo</span>
             </button>
             <input
               ref={fileInputRef}
@@ -1047,7 +948,7 @@ function NewModelPanel({
                 {photos.map(photo => (
                   <div
                     key={photo.id}
-                    className="relative aspect-square overflow-hidden rounded-md border border-zinc-200 bg-zinc-100"
+                    className="relative aspect-square overflow-hidden rounded-md border border-line bg-bg-2"
                   >
                     <Image
                       src={photo.previewUrl}
@@ -1061,7 +962,7 @@ function NewModelPanel({
                       onClick={() => onRemovePhoto(photo.id)}
                       className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white"
                     >
-                      <X className="h-3 w-3 text-zinc-700" />
+                      <X className="h-3 w-3 text-ink-soft" />
                     </button>
                   </div>
                 ))}
@@ -1069,7 +970,7 @@ function NewModelPanel({
             )}
 
             {formMessage && (
-              <p className={cn("mt-3 text-sm", uploading ? "text-zinc-500" : "text-red-600")}>
+              <p className={cn("mt-3 text-sm", uploading ? "text-ink-soft" : "text-red-600")}>
                 {formMessage}
               </p>
             )}
@@ -1080,7 +981,8 @@ function NewModelPanel({
                   type="button"
                   onClick={onUpload}
                   disabled={uploading}
-                  className="bg-zinc-900 text-white hover:bg-zinc-800"
+                  variant="pill"
+                size="pill"
                 >
                   {uploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1090,7 +992,7 @@ function NewModelPanel({
                   {uploading ? (formMessage ?? "Uploading...") : "Confirm photos"}
                 </Button>
               ) : (
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-ink-muted">
                   {photos.length === 0
                     ? "Select 10–15 photos of yourself with different angles and good lighting."
                     : `Add ${MIN_PHOTOS - photos.length} more photo${MIN_PHOTOS - photos.length === 1 ? "" : "s"}.`}
@@ -1109,7 +1011,8 @@ function NewModelPanel({
                 type="button"
                 onClick={onStartTraining}
                 disabled={trainingCreating || !modelName.trim()}
-                className="bg-zinc-900 text-white hover:bg-zinc-800"
+                variant="pill"
+                size="pill"
               >
                 {trainingCreating && <Loader2 className="h-4 w-4 animate-spin" />}
                 {trainingCreating ? "Starting..." : "Train model"}
@@ -1117,7 +1020,7 @@ function NewModelPanel({
               {formMessage ? (
                 <p className="text-sm text-red-600">{formMessage}</p>
               ) : (
-                <p className="text-sm text-zinc-400">
+                <p className="text-sm text-ink-muted">
                   Costs {TRAINING_CREDITS} credits · Takes 15–30 minutes.
                 </p>
               )}
@@ -1138,6 +1041,8 @@ function QuickEditPanel({
   numImages,
   uploading,
   message,
+  editJobs,
+  onDeleteEdit,
   generationJobId,
   generationStatus,
   generationError,
@@ -1162,6 +1067,8 @@ function QuickEditPanel({
   numImages: (typeof IMAGE_COUNTS)[number];
   uploading: boolean;
   message: string | null;
+  editJobs: GenerateJob[];
+  onDeleteEdit: (id: string) => void;
   generationJobId: string | null;
   generationStatus: JobStatus | null;
   generationError: string | null;
@@ -1184,18 +1091,18 @@ function QuickEditPanel({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-8">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-8">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-zinc-700"
+            className="flex items-center gap-1 text-sm text-ink-muted transition-colors hover:text-ink-soft"
           >
             <ChevronLeft className="h-4 w-4" />
             Back
           </button>
-          <span className="text-zinc-300">/</span>
-          <h1 className="font-semibold text-zinc-900">Quick GPT edit</h1>
+          <span className="text-line-strong">/</span>
+          <p className="font-semibold text-ink">Quick GPT edit</p>
         </div>
         {signedUrls?.length ? (
           <Button
@@ -1203,7 +1110,7 @@ function QuickEditPanel({
             variant="outline"
             size="sm"
             onClick={onReset}
-            className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+            className="border-line text-ink-soft hover:bg-bg"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Generate again
@@ -1213,14 +1120,14 @@ function QuickEditPanel({
 
       <div className="flex-1 overflow-y-auto px-8 py-8">
         {isGenerating ? (
-          <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6">
+          <div className="mb-8 rounded-xl border border-line bg-surface p-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-2">
+                <Loader2 className="h-5 w-5 animate-spin text-ink-soft" />
               </div>
               <div>
-                <p className="font-medium text-zinc-900">Generating with GPT Image 2...</p>
-                <p className="mt-0.5 text-sm text-zinc-400">
+                <p className="font-medium text-ink">Generating with GPT Image 2...</p>
+                <p className="mt-0.5 text-sm text-ink-muted">
                   {formatElapsed(generationElapsed)} · Usually finishes in about a minute
                 </p>
               </div>
@@ -1247,13 +1154,13 @@ function QuickEditPanel({
         ) : signedUrls?.length ? (
           <div className="mb-8">
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Results</p>
+              <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">Results</p>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => void downloadAll(signedUrls)}
-                className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                className="border-line text-ink-soft hover:bg-bg"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download all
@@ -1261,11 +1168,11 @@ function QuickEditPanel({
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {signedUrls.map((url, i) => (
-                <div key={url} className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                <div key={url} className="overflow-hidden rounded-xl border border-line bg-surface">
                   <button
                     type="button"
                     onClick={() => onSelectImage(url)}
-                    className="relative block aspect-square w-full bg-zinc-100"
+                    className="relative block aspect-square w-full bg-bg-2"
                   >
                     <img
                       src={url}
@@ -1274,11 +1181,11 @@ function QuickEditPanel({
                     />
                   </button>
                   <div className="flex items-center justify-between p-2.5">
-                    <span className="text-xs font-medium text-zinc-500">#{i + 1}</span>
+                    <span className="text-xs font-medium text-ink-soft">#{i + 1}</span>
                     <button
                       type="button"
                       onClick={() => void downloadUrl(url, `gpt-headshot-${i + 1}.jpg`)}
-                      className="text-zinc-400 transition-colors hover:text-zinc-700"
+                      className="text-ink-muted transition-colors hover:text-ink-soft"
                       aria-label="Download"
                     >
                       <Download className="h-3.5 w-3.5" />
@@ -1289,17 +1196,17 @@ function QuickEditPanel({
             </div>
           </div>
         ) : (
-          <div className="max-w-3xl rounded-xl border border-zinc-200 bg-white p-6">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+          <div className="max-w-3xl rounded-xl border border-line bg-surface p-6">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-ink-muted">
               GPT Image 2 edit
             </p>
 
             <div className="mb-5">
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-zinc-700">
+                <label className="text-sm font-medium text-ink-soft">
                   Reference photos ({QUICK_MIN_PHOTOS}-{MAX_PHOTOS})
                 </label>
-                <span className="text-sm text-zinc-400">{photos.length} / {MAX_PHOTOS}</span>
+                <span className="text-sm text-ink-muted">{photos.length} / {MAX_PHOTOS}</span>
               </div>
               <button
                 type="button"
@@ -1310,11 +1217,11 @@ function QuickEditPanel({
                   onAddFiles(e.dataTransfer.files);
                 }}
                 disabled={uploading}
-                className="flex min-h-28 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-6 py-6 text-center transition-colors hover:border-zinc-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-28 w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-bg px-6 py-6 text-center transition-colors hover:border-navy hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Upload className="mb-2 h-6 w-6 text-zinc-400" />
-                <span className="text-sm font-medium text-zinc-700">Drag or click to select</span>
-                <span className="mt-1 text-xs text-zinc-400">JPG or PNG · More photos improve consistency</span>
+                <Upload className="mb-2 h-6 w-6 text-ink-muted" />
+                <span className="text-sm font-medium text-ink-soft">Drag or click to select</span>
+                <span className="mt-1 text-xs text-ink-muted">JPG or PNG · More photos improve consistency</span>
               </button>
               <input
                 ref={fileInputRef}
@@ -1330,14 +1237,14 @@ function QuickEditPanel({
               {photos.length > 0 && (
                 <div className="mt-4 grid grid-cols-5 gap-2">
                   {photos.map(photo => (
-                    <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
+                    <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border border-line bg-bg-2">
                       <Image src={photo.previewUrl} alt="" fill unoptimized className="object-cover" />
                       <button
                         type="button"
                         onClick={() => onRemovePhoto(photo.id)}
                         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white"
                       >
-                        <X className="h-3 w-3 text-zinc-700" />
+                        <X className="h-3 w-3 text-ink-soft" />
                       </button>
                     </div>
                   ))}
@@ -1346,20 +1253,20 @@ function QuickEditPanel({
             </div>
 
             <div className="mb-5">
-              <label className="mb-2 block text-sm font-medium text-zinc-700">Prompt</label>
+              <label className="mb-2 block text-sm font-medium text-ink-soft">Prompt</label>
               <textarea
                 value={prompt}
                 onChange={e => onPromptChange(e.target.value)}
                 rows={5}
                 maxLength={2000}
-                className="w-full resize-none rounded-lg border border-zinc-200 bg-white px-3.5 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-100"
+                className="w-full resize-none rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
               />
             </div>
 
             <div className="mb-6 grid gap-5 sm:grid-cols-2">
               <div>
-                <p className="mb-2.5 text-sm font-medium text-zinc-700">Quality</p>
-                <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+                <p className="mb-2.5 text-sm font-medium text-ink-soft">Quality</p>
+                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
                   {(["low", "medium", "high"] as const).map(q => (
                     <button
                       key={q}
@@ -1367,7 +1274,7 @@ function QuickEditPanel({
                       onClick={() => onQualityChange(q)}
                       className={cn(
                         "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-all",
-                        quality === q ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                        quality === q ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
                       )}
                     >
                       {q}
@@ -1376,8 +1283,8 @@ function QuickEditPanel({
                 </div>
               </div>
               <div>
-                <p className="mb-2.5 text-sm font-medium text-zinc-700">Count</p>
-                <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+                <p className="mb-2.5 text-sm font-medium text-ink-soft">Count</p>
+                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
                   {IMAGE_COUNTS.map(count => (
                     <button
                       key={count}
@@ -1385,14 +1292,14 @@ function QuickEditPanel({
                       onClick={() => onNumImagesChange(count)}
                       className={cn(
                         "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
-                        numImages === count ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-400 hover:text-zinc-600"
+                        numImages === count ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
                       )}
                     >
                       {count}
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-xs text-zinc-400">
+                <p className="mt-2 text-xs text-ink-muted">
                   {numImages} {numImages === 1 ? "credit" : "credits"} · 1 credit per photo
                 </p>
               </div>
@@ -1403,7 +1310,8 @@ function QuickEditPanel({
                 type="button"
                 onClick={onGenerate}
                 disabled={uploading || photos.length < QUICK_MIN_PHOTOS}
-                className="bg-zinc-900 text-white hover:bg-zinc-800"
+                variant="pill"
+                size="pill"
               >
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {uploading ? (message ?? "Uploading...") : "Generate with GPT Image 2"}
@@ -1417,9 +1325,16 @@ function QuickEditPanel({
                     </Button>
                   </div>
                 ) : (
-                  <p className={cn("text-sm", uploading ? "text-zinc-500" : "text-red-600")}>{message}</p>
+                  <p className={cn("text-sm", uploading ? "text-ink-soft" : "text-red-600")}>{message}</p>
                 ))}
             </div>
+          </div>
+        )}
+
+        {/* Saved Quick GPT edits */}
+        {editJobs.length > 0 && (
+          <div className="mt-8">
+            <ResultsHistory jobs={editJobs} kind="edit" onDelete={onDeleteEdit} />
           </div>
         )}
       </div>
@@ -1506,15 +1421,15 @@ function ModelWorkspace({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-8">
-        <h1 className="font-semibold text-zinc-900">{modelName}</h1>
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-8">
+        <h1 className="font-semibold text-ink">{modelName}</h1>
         {signedUrls?.length ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onReset}
-            className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+            className="border-line text-ink-soft hover:bg-bg"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Generate again
@@ -1525,14 +1440,14 @@ function ModelWorkspace({
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-8 py-8">
         {isGenerating ? (
-          <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6">
+          <div className="mb-8 rounded-xl border border-line bg-surface p-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100">
-                <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-2">
+                <Loader2 className="h-5 w-5 animate-spin text-ink-soft" />
               </div>
               <div>
-                <p className="font-medium text-zinc-900">Generating headshots…</p>
-                <p className="mt-0.5 text-sm text-zinc-400">
+                <p className="font-medium text-ink">Generating headshots…</p>
+                <p className="mt-0.5 text-sm text-ink-muted">
                   {formatElapsed(generationElapsed)} · May take up to 1 minute
                 </p>
               </div>
@@ -1562,7 +1477,7 @@ function ModelWorkspace({
           /* Current session results */
           <div className="mb-8">
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">
+              <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
                 Results
               </p>
               <Button
@@ -1570,7 +1485,7 @@ function ModelWorkspace({
                 variant="outline"
                 size="sm"
                 onClick={() => void downloadAll(signedUrls)}
-                className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                className="border-line text-ink-soft hover:bg-bg"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download all
@@ -1580,12 +1495,12 @@ function ModelWorkspace({
               {signedUrls.map((url, i) => (
                 <div
                   key={url}
-                  className="overflow-hidden rounded-xl border border-zinc-200 bg-white"
+                  className="overflow-hidden rounded-xl border border-line bg-surface"
                 >
                   <button
                     type="button"
                     onClick={() => onSelectImage(url)}
-                    className="relative block aspect-square w-full bg-zinc-100"
+                    className="relative block aspect-square w-full bg-bg-2"
                   >
                     <img
                       src={url}
@@ -1594,11 +1509,11 @@ function ModelWorkspace({
                     />
                   </button>
                   <div className="flex items-center justify-between p-2.5">
-                    <span className="text-xs font-medium text-zinc-500">#{i + 1}</span>
+                    <span className="text-xs font-medium text-ink-soft">#{i + 1}</span>
                     <button
                       type="button"
                       onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                      className="text-zinc-400 transition-colors hover:text-zinc-700"
+                      className="text-ink-muted transition-colors hover:text-ink-soft"
                       aria-label="Download"
                     >
                       <Download className="h-3.5 w-3.5" />
@@ -1610,14 +1525,14 @@ function ModelWorkspace({
           </div>
         ) : (
           /* Generation form */
-          <div className="mb-8 rounded-xl border border-zinc-200 bg-white p-6">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+          <div className="mb-8 rounded-xl border border-line bg-surface p-6">
+            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-ink-muted">
               New generation
             </p>
 
             {/* Style */}
             <div className="mb-5">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">Style</p>
+              <p className="mb-2.5 text-sm font-medium text-ink-soft">Style</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {STYLE_OPTIONS.map(opt => (
                   <button
@@ -1627,15 +1542,15 @@ function ModelWorkspace({
                     className={cn(
                       "rounded-lg border p-3.5 text-left transition-all",
                       style === opt.value
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-zinc-300 hover:bg-white"
+                        ? "border-navy bg-navy text-navy-foreground"
+                        : "border-line bg-bg text-ink-soft hover:border-line-strong hover:bg-surface"
                     )}
                   >
                     <span className="block text-sm font-medium">{opt.label}</span>
                     <span
                       className={cn(
                         "mt-1 block text-xs leading-relaxed",
-                        style === opt.value ? "text-zinc-300" : "text-zinc-400"
+                        style === opt.value ? "text-navy-foreground/70" : "text-ink-muted"
                       )}
                     >
                       {opt.description}
@@ -1647,9 +1562,9 @@ function ModelWorkspace({
 
             {/* Background */}
             <div className="mb-5">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">
+              <p className="mb-2.5 text-sm font-medium text-ink-soft">
                 Background{" "}
-                <span className="font-normal text-zinc-400">(optional)</span>
+                <span className="font-normal text-ink-muted">(optional)</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {BACKGROUND_OPTIONS.map(opt => (
@@ -1660,8 +1575,8 @@ function ModelWorkspace({
                     className={cn(
                       "rounded-full border px-3 py-1 text-xs font-medium transition-all",
                       background === opt.value
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                        ? "border-navy bg-navy text-navy-foreground"
+                        : "border-line bg-surface text-ink-soft hover:border-line-strong"
                     )}
                   >
                     {opt.label}
@@ -1672,9 +1587,9 @@ function ModelWorkspace({
 
             {/* Attire */}
             <div className="mb-5">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">
+              <p className="mb-2.5 text-sm font-medium text-ink-soft">
                 Attire{" "}
-                <span className="font-normal text-zinc-400">(optional)</span>
+                <span className="font-normal text-ink-muted">(optional)</span>
               </p>
               <div className="flex flex-wrap gap-2">
                 {ATTIRE_OPTIONS.map(opt => (
@@ -1685,8 +1600,8 @@ function ModelWorkspace({
                     className={cn(
                       "rounded-full border px-3 py-1 text-xs font-medium transition-all",
                       attireType === opt.value
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                        ? "border-navy bg-navy text-navy-foreground"
+                        : "border-line bg-surface text-ink-soft hover:border-line-strong"
                     )}
                   >
                     {opt.label}
@@ -1697,7 +1612,7 @@ function ModelWorkspace({
               {/* Color swatches — only when an attire type is selected */}
               {attireType && (
                 <div className="mt-3">
-                  <p className="mb-2 text-xs text-zinc-500">Color</p>
+                  <p className="mb-2 text-xs text-ink-soft">Color</p>
                   <div className="flex flex-wrap gap-2">
                     {ATTIRE_COLORS.map(c => (
                       <button
@@ -1708,8 +1623,8 @@ function ModelWorkspace({
                         className={cn(
                           "h-6 w-6 rounded-full border-2 transition-all",
                           attireColor === c.value
-                            ? "border-zinc-900 scale-110"
-                            : "border-transparent hover:border-zinc-400"
+                            ? "border-navy scale-110"
+                            : "border-transparent hover:border-line-strong"
                         )}
                         style={{ backgroundColor: c.hex }}
                       />
@@ -1721,8 +1636,8 @@ function ModelWorkspace({
 
             {/* Count */}
             <div className="mb-6">
-              <p className="mb-2.5 text-sm font-medium text-zinc-700">Count</p>
-              <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5">
+              <p className="mb-2.5 text-sm font-medium text-ink-soft">Count</p>
+              <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
                 {IMAGE_COUNTS.map(count => (
                   <button
                     key={count}
@@ -1731,15 +1646,15 @@ function ModelWorkspace({
                     className={cn(
                       "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
                       numImages === count
-                        ? "bg-white text-zinc-900 shadow-sm"
-                        : "text-zinc-400 hover:text-zinc-600"
+                        ? "bg-surface text-ink shadow-sm"
+                        : "text-ink-muted hover:text-ink-soft"
                     )}
                   >
                     {count} {count === 1 ? "photo" : "photos"}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-xs text-zinc-400">
+              <p className="mt-2 text-xs text-ink-muted">
                 {numImages} {numImages === 1 ? "credit" : "credits"} · 1 credit per photo
               </p>
             </div>
@@ -1749,7 +1664,8 @@ function ModelWorkspace({
               <Button
                 type="button"
                 onClick={onGenerate}
-                className="bg-zinc-900 text-white hover:bg-zinc-800"
+                variant="pill"
+                size="pill"
               >
                 <Sparkles className="h-4 w-4" />
                 Generate headshots
@@ -1776,7 +1692,7 @@ function ModelWorkspace({
 
         {/* Past generates for this model */}
         {modelGenerateJobs.length > 0 && (
-          <ModelHistory jobs={modelGenerateJobs} />
+          <ResultsHistory jobs={modelGenerateJobs} />
         )}
       </div>
 
@@ -1812,11 +1728,19 @@ function ModelWorkspace({
   );
 }
 
-// ── Model history (per-model past generates) ──────────────────────────────────
+// ── Results history (per-model generates, or Quick GPT edits with delete) ──────
 
 const HISTORY_PAGE_SIZE = 10;
 
-function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
+function ResultsHistory({
+  jobs,
+  kind = "generate",
+  onDelete
+}: {
+  jobs: GenerateJob[];
+  kind?: "generate" | "edit";
+  onDelete?: (id: string) => void;
+}) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const doneJobs = jobs.filter(j => j.status === "done");
@@ -1827,19 +1751,25 @@ function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
 
   return (
     <div>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-ink-muted">
         History
       </p>
       <div className="space-y-2">
         {visibleJobs.map(job => (
-          <HistoryRow key={job.id} job={job} onOpenImage={setSelectedImage} />
+          <HistoryRow
+            key={job.id}
+            job={job}
+            kind={kind}
+            onOpenImage={setSelectedImage}
+            onDelete={onDelete}
+          />
         ))}
       </div>
       {remaining > 0 && (
         <button
           type="button"
           onClick={() => setVisibleCount(v => v + HISTORY_PAGE_SIZE)}
-          className="mt-3 text-xs text-zinc-400 transition-colors hover:text-zinc-600"
+          className="mt-3 text-xs text-ink-muted transition-colors hover:text-ink-soft"
         >
           Load {Math.min(HISTORY_PAGE_SIZE, remaining)} more ({remaining} remaining)
         </button>
@@ -1878,10 +1808,14 @@ function ModelHistory({ jobs }: { jobs: GenerateJob[] }) {
 
 function HistoryRow({
   job,
-  onOpenImage
+  kind = "generate",
+  onOpenImage,
+  onDelete
 }: {
   job: GenerateJob;
+  kind?: "generate" | "edit";
   onOpenImage: (url: string) => void;
+  onDelete?: (id: string) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
@@ -1905,6 +1839,7 @@ function HistoryRow({
   const thumbnails = signedUrls?.slice(0, 4) ?? [];
   const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
   const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
+  const label = kind === "edit" ? "GPT edit" : styleLabel;
   const count = (job.input as { num_images?: number } | null)?.num_images ?? thumbnails.length;
   const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("en-US", {
     day: "2-digit",
@@ -1913,42 +1848,59 @@ function HistoryRow({
   });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-      <button
-        type="button"
-        onClick={() => setIsExpanded(v => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
-      >
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <div className="flex items-center">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(v => !v)}
+          className="flex flex-1 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg"
+        >
         {/* Thumbnails or skeleton placeholders */}
         <div className="flex shrink-0 gap-0.5">
           {signedUrls === null
             ? Array.from({ length: Math.min(count, 4) }).map((_, i) => (
-                <div key={i} className="h-10 w-10 animate-pulse rounded-md bg-zinc-100" />
+                <div key={i} className="h-10 w-10 animate-pulse rounded-md bg-bg-2" />
               ))
             : thumbnails.map((url, i) => (
-                <div key={i} className="h-10 w-10 overflow-hidden rounded-md bg-zinc-100">
+                <div key={i} className="h-10 w-10 overflow-hidden rounded-md bg-bg-2">
                   <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
                 </div>
               ))}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-zinc-800">
-            {styleLabel} · {count} {count === 1 ? "photo" : "photos"}
+          <p className="text-sm font-medium text-ink">
+            {label} · {count} {count === 1 ? "photo" : "photos"}
           </p>
-          <p className="text-xs text-zinc-400">{date}</p>
+          <p className="text-xs text-ink-muted">{date}</p>
         </div>
         <ChevronDown
           className={cn(
-            "h-4 w-4 shrink-0 text-zinc-400 transition-transform",
+            "h-4 w-4 shrink-0 text-ink-muted transition-transform",
             isExpanded && "rotate-180"
           )}
         />
-      </button>
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Delete this result? The images are removed permanently.")) {
+                onDelete(job.id);
+              }
+            }}
+            className="shrink-0 self-stretch px-4 text-ink-muted transition-colors hover:text-red-600"
+            aria-label="Delete result"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {isExpanded && (
-        <div className="border-t border-zinc-100 p-4">
+        <div className="border-t border-line p-4">
           {signedUrls === null ? (
-            <div className="flex items-center gap-2 py-2 text-sm text-zinc-400">
+            <div className="flex items-center gap-2 py-2 text-sm text-ink-muted">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading…
             </div>
@@ -1960,7 +1912,7 @@ function HistoryRow({
                   variant="outline"
                   size="sm"
                   onClick={() => void downloadAll(signedUrls)}
-                  className="border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                  className="border-line text-ink-soft hover:bg-bg"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Download all
@@ -1970,12 +1922,12 @@ function HistoryRow({
                 {signedUrls.map((url, i) => (
                   <div
                     key={url}
-                    className="overflow-hidden rounded-lg border border-zinc-100"
+                    className="overflow-hidden rounded-lg border border-line"
                   >
                     <button
                       type="button"
                       onClick={() => onOpenImage(url)}
-                      className="block aspect-square w-full bg-zinc-100"
+                      className="block aspect-square w-full bg-bg-2"
                     >
                       <img
                         src={url}
@@ -1984,11 +1936,11 @@ function HistoryRow({
                       />
                     </button>
                     <div className="flex items-center justify-between p-2">
-                      <span className="text-xs text-zinc-400">#{i + 1}</span>
+                      <span className="text-xs text-ink-muted">#{i + 1}</span>
                       <button
                         type="button"
                         onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                        className="text-zinc-400 transition-colors hover:text-zinc-700"
+                        className="text-ink-muted transition-colors hover:text-ink-soft"
                         aria-label="Download"
                       >
                         <Download className="h-3 w-3" />
@@ -1999,7 +1951,7 @@ function HistoryRow({
               </div>
             </>
           ) : (
-            <p className="py-1 text-sm text-zinc-400">Could not load photos.</p>
+            <p className="py-1 text-sm text-ink-muted">Could not load photos.</p>
           )}
         </div>
       )}
@@ -2012,18 +1964,20 @@ function HistoryRow({
 function EmptyState({ onNewModel }: { onNewModel: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
-      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-900">
+      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-navy">
         <Sparkles className="h-7 w-7 text-white" />
       </div>
-      <h2 className="text-xl font-semibold text-zinc-900">Get started with your first model</h2>
-      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-zinc-500">
+      <h2 className="text-xl font-semibold text-ink">Get started with your first model</h2>
+      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
         Upload 10–15 photos of yourself to train a personalized model. Each model can be used to
         generate unlimited headshots.
       </p>
       <Button
         type="button"
         onClick={onNewModel}
-        className="mt-6 bg-zinc-900 text-white hover:bg-zinc-800"
+        variant="pill"
+        size="pill"
+        className="mt-6"
       >
         <Plus className="h-4 w-4" />
         Train your first model

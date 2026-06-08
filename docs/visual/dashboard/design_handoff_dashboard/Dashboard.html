@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>headshotly.pro — Dashboard (reference)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<!--
+  This is a high-fidelity STATIC reference for /dashboard.
+  Base design tokens (below) already live in your globals.css.
+  The dashboard-specific tokens + classes live in dashboard.css.
+  Rebuild idiomatically in Next.js + Tailwind + shadcn/ui — see README.md.
+-->
+<style>
+  /* Base tokens (already in your globals.css — included here so this file renders standalone) */
+  :root{
+    --bg:#f5f3ef; --bg-2:#edeae3; --surface:#fffefb;
+    --ink:#1c1a17; --ink-soft:#4a4640; --muted:#807a70;
+    --line:#e4ddd0; --line-strong:#d6cdbc;
+    --navy:#1b2440; --blue:#3f6dd6; --gold:#c79a3e;
+    --sans:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg)}
+</style>
+<link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+<div class="dsh">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="dsh-side">
+    <div class="dsh-brand">
+      <span class="dsh-brand-mark">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/><path d="M18.5 14.5l.7 1.9 1.8.7-1.8.6-.7 1.9-.7-1.9-1.8-.6 1.8-.7z"/></svg>
+      </span>
+      <span class="dsh-brand-word">headshotly<span class="dsh-brand-tld">.pro</span></span>
+    </div>
+
+    <nav class="dsh-nav" aria-label="Models">
+      <div class="dsh-navlabel">Your models</div>
+
+      <button class="dsh-model is-active" type="button" aria-current="true">
+        <span class="dsh-avatar">J</span>
+        <span class="dsh-model-txt">
+          <span class="dsh-model-name">juan</span>
+          <span class="dsh-model-sub">Ready · 18 photos</span>
+        </span>
+        <span class="dsh-dot-ready"></span>
+      </button>
+
+      <button class="dsh-model is-training" type="button">
+        <span class="dsh-avatar muted">S</span>
+        <span class="dsh-model-txt">
+          <span class="dsh-model-name">sofia</span>
+          <span class="dsh-model-sub">Training · ~6 min left</span>
+        </span>
+        <span class="dsh-ring" aria-label="Training"></span>
+      </button>
+
+      <button class="dsh-newmodel" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        New model
+      </button>
+
+      <div class="dsh-divider"></div>
+      <div class="dsh-navlabel">Tools</div>
+
+      <button class="dsh-tool" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M3 12l4-4 4 4 3-3"/><circle cx="8.5" cy="7.5" r="1.1"/><path d="M17 17l4 4"/></svg>
+        Quick edit <span class="dsh-soon">GPT</span>
+      </button>
+      <button class="dsh-tool" type="button">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="12" rx="2"/><path d="M7 21h11a2 2 0 0 0 2-2V9M6 14l3-3 4 4"/><circle cx="9" cy="9" r="1.2"/></svg>
+        Gallery <span class="dsh-soon">Soon</span>
+      </button>
+    </nav>
+
+    <div class="dsh-side-foot">
+      <div class="dsh-credits">
+        <div class="dsh-credit-row"><span class="dsh-cdot blue"></span><span class="dsh-credit-label">Blue credits</span><span class="dsh-credit-val">46</span></div>
+        <div class="dsh-credit-row"><span class="dsh-cdot gold"></span><span class="dsh-credit-label">Golden credits</span><span class="dsh-credit-val">1</span></div>
+        <button class="dsh-buy" type="button">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v6c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12.5c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
+          Buy credits
+        </button>
+      </div>
+      <div class="dsh-profile">
+        <span class="dsh-avatar sm">J</span>
+        <span class="dsh-profile-mail">juanimolfinooo@gmail.com</span>
+        <button class="dsh-iconbtn" type="button" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2M9 12h11m0 0l-3-3m3 3l-3 3"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="dsh-main">
+    <header class="dsh-top">
+      <div class="dsh-top-l">
+        <h1 class="dsh-title">juan</h1>
+        <span class="dsh-status-chip"><span class="dsh-dot-ready"></span>Model ready</span>
+      </div>
+      <div class="dsh-top-r">
+        <div class="dsh-task" role="status">
+          <span class="dsh-task-spin"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg></span>
+          <span class="dsh-task-txt"><b>Generating</b> · 4 photos</span>
+          <span class="dsh-task-pct">· 70%</span>
+          <span class="dsh-task-bar"><span class="dsh-task-fill" style="width:70%"></span></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="dsh-scroll">
+
+      <!-- New generation -->
+      <section class="dsh-card" aria-label="New generation">
+        <div class="dsh-card-head">
+          <span class="dsh-eyebrow">New generation</span>
+          <span class="dsh-card-hint">1 blue credit per photo</span>
+        </div>
+
+        <div class="dsh-field">
+          <label class="dsh-flabel">Style</label>
+          <div class="dsh-styles" role="radiogroup" aria-label="Style">
+            <button class="dsh-style is-active" type="button" role="radio" aria-checked="true">
+              <span class="dsh-style-check"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7.5"/></svg></span>
+              <span class="dsh-style-name">Professional</span>
+              <span class="dsh-style-desc">Neutral background, studio lighting. Ideal for LinkedIn and CV.</span>
+            </button>
+            <button class="dsh-style" type="button" role="radio" aria-checked="false">
+              <span class="dsh-style-check"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7.5"/></svg></span>
+              <span class="dsh-style-name">Cinematic</span>
+              <span class="dsh-style-desc">Editorial style with higher contrast. For creative profiles.</span>
+            </button>
+            <button class="dsh-style" type="button" role="radio" aria-checked="false">
+              <span class="dsh-style-check"><svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7.5"/></svg></span>
+              <span class="dsh-style-name">Natural</span>
+              <span class="dsh-style-desc">No extra filters. The result closest to your real photos.</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="dsh-row2">
+          <div class="dsh-field">
+            <label class="dsh-flabel">Background <span class="dsh-opt">optional</span></label>
+            <div class="dsh-chips">
+              <button class="dsh-chip is-active" type="button">Default</button>
+              <button class="dsh-chip" type="button">White</button>
+              <button class="dsh-chip" type="button">Gray</button>
+              <button class="dsh-chip" type="button">Dark</button>
+              <button class="dsh-chip" type="button">Outdoor</button>
+            </div>
+          </div>
+          <div class="dsh-field">
+            <label class="dsh-flabel">Attire <span class="dsh-opt">optional</span></label>
+            <div class="dsh-chips">
+              <button class="dsh-chip is-active" type="button">None</button>
+              <button class="dsh-chip" type="button">Suit</button>
+              <button class="dsh-chip" type="button">Dress</button>
+              <button class="dsh-chip" type="button">Business casual</button>
+              <button class="dsh-chip" type="button">Casual</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dsh-genbar">
+          <div class="dsh-count">
+            <label class="dsh-flabel">Count</label>
+            <div class="dsh-seg" role="radiogroup" aria-label="Count">
+              <button class="dsh-seg-btn" type="button" role="radio" aria-checked="false">1</button>
+              <button class="dsh-seg-btn" type="button" role="radio" aria-checked="false">2</button>
+              <button class="dsh-seg-btn is-active" type="button" role="radio" aria-checked="true">4</button>
+              <span class="dsh-seg-unit">photos</span>
+            </div>
+            <span class="dsh-cost"><span class="dsh-cdot blue"></span>4 blue credits</span>
+          </div>
+          <button class="dsh-generate" type="button">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/><path d="M18.5 14.5l.7 1.9 1.8.7-1.8.6-.7 1.9-.7-1.9-1.8-.6 1.8-.7z"/></svg>
+            Generate headshots
+          </button>
+        </div>
+      </section>
+
+      <!-- Recent / history -->
+      <section class="dsh-results" aria-label="Recent generations">
+        <div class="dsh-results-head">
+          <span class="dsh-eyebrow">Recent</span>
+          <button class="dsh-link" type="button">View all <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+
+        <!-- in-progress, runs in background -->
+        <div class="dsh-item is-running">
+          <div class="dsh-item-thumb shimmer"></div>
+          <div class="dsh-item-main">
+            <div class="dsh-item-title">Professional · 4 photos</div>
+            <div class="dsh-item-meta">White background · started 2 min ago</div>
+            <div class="dsh-prog"><span class="dsh-prog-fill" style="width:70%"></span></div>
+          </div>
+          <div class="dsh-item-side">
+            <span class="dsh-badge running"><span class="dsh-task-spin"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg></span>Generating 70%</span>
+            <span class="dsh-item-note">Runs in background — keep working</span>
+          </div>
+        </div>
+
+        <!-- completed -->
+        <div class="dsh-item">
+          <div class="dsh-item-thumb">
+            <div class="dsh-thumbgrid"><div class="dsh-thumb" data-tone="0"></div><div class="dsh-thumb" data-tone="1"></div><div class="dsh-thumb" data-tone="2"></div><div class="dsh-thumb" data-tone="3"></div></div>
+          </div>
+          <div class="dsh-item-main">
+            <div class="dsh-item-title">Professional · 4 photos</div>
+            <div class="dsh-item-meta">White background · Jun 04, 2026</div>
+          </div>
+          <div class="dsh-item-side">
+            <span class="dsh-badge done"><span class="dsh-dot-ready"></span>Ready</span>
+            <div class="dsh-item-actions">
+              <button class="dsh-iconbtn" type="button" aria-label="Download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5M5 19h14"/></svg></button>
+              <button class="dsh-ghost-sm" type="button">View</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dsh-item">
+          <div class="dsh-item-thumb">
+            <div class="dsh-thumbgrid"><div class="dsh-thumb" data-tone="0"></div><div class="dsh-thumb" data-tone="1"></div><div class="dsh-thumb" data-tone="2"></div><div class="dsh-thumb" data-tone="3"></div></div>
+          </div>
+          <div class="dsh-item-main">
+            <div class="dsh-item-title">Cinematic · 2 photos</div>
+            <div class="dsh-item-meta">Dark background · Jun 02, 2026</div>
+          </div>
+          <div class="dsh-item-side">
+            <span class="dsh-badge done"><span class="dsh-dot-ready"></span>Ready</span>
+            <div class="dsh-item-actions">
+              <button class="dsh-iconbtn" type="button" aria-label="Download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5M5 19h14"/></svg></button>
+              <button class="dsh-ghost-sm" type="button">View</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="dsh-item">
+          <div class="dsh-item-thumb"><div class="dsh-thumb" data-tone="0"></div></div>
+          <div class="dsh-item-main">
+            <div class="dsh-item-title">Natural · 1 photo</div>
+            <div class="dsh-item-meta">Outdoor background · May 29, 2026</div>
+          </div>
+          <div class="dsh-item-side">
+            <span class="dsh-badge done"><span class="dsh-dot-ready"></span>Ready</span>
+            <div class="dsh-item-actions">
+              <button class="dsh-iconbtn" type="button" aria-label="Download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5M5 19h14"/></svg></button>
+              <button class="dsh-ghost-sm" type="button">View</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

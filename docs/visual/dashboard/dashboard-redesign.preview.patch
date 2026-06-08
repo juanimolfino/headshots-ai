@@ -1,0 +1,864 @@
+Dashboard redesign preview patch
+================================
+
+Status: REVIEW ONLY. This file is for design/implementation review and has not been
+applied to the working tree.
+
+Important implementation decisions included here:
+- Keep `--navy-deep:#141b32` intact for landing/button hover.
+- Add `--navy-sidebar:#151c33` for the dashboard sidebar.
+- Add sage/ready tokens and expose them in Tailwind.
+- Add Button `sage` variant.
+- Implement Style/Count as keyboard-accessible radio groups with roving tabindex and
+  ArrowLeft/ArrowRight/ArrowUp/ArrowDown handling, avoiding a Radix install for now.
+- Keep TaskPill local to `/dashboard/headshots` for this pass because there is no
+  `app/(dashboard)/layout.tsx` and no additional real route under `/dashboard` yet.
+  TODO remains in the component to lift it to a provider when dashboard routes grow.
+
+diff --git a/app/globals.css b/app/globals.css
+--- a/app/globals.css
++++ b/app/globals.css
+@@
+   --line:#e4ddd0;
+   --line-strong:#d6cdbc;
+   --navy:#1b2440;
+   --navy-deep:#141b32;
++  --navy-sidebar:#151c33;
+   --navy-tint:#eef0f5;
+   --navy-foreground:#fdfcf9;
+   --blue:#3f6dd6;
+   --gold:#c79a3e;
+   --gold-foreground:#241c08;
++  --sage:#5f7152;
++  --sage-deep:#4d5d42;
++  --sage-tint:#ebeee4;
++  --sage-line:#cdd7c0;
++  --sage-side:#a4b58c;
++  --ready:#46a274;
++  --ready-bg:#e8f0ea;
++  --ready-line:#cfe3d6;
+   --serif:var(--font-serif),Georgia,serif;
+   --sans:var(--font-sans),-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+   --mono:"SFMono-Regular",ui-monospace,"Cascadia Code",Menlo,monospace;
+@@
+   --ease:cubic-bezier(.2,.7,.2,1);
+ }
++
++@layer components {
++  .dsh {
++    --ac: var(--sage);
++    --ac-deep: var(--sage-deep);
++    --ac-tint: var(--sage-tint);
++    --ac-line: var(--sage-line);
++    --ac-on: #ffffff;
++    --ac-side: var(--sage-side);
++    display: flex;
++    min-height: 100vh;
++    background: var(--bg);
++    color: var(--ink);
++    font-family: var(--sans);
++    font-size: 15px;
++    line-height: 1.5;
++    -webkit-font-smoothing: antialiased;
++  }
++
++  .dsh button {
++    font-family: inherit;
++  }
++
++  .dsh-focus {
++    outline: none;
++  }
++
++  .dsh-focus:focus-visible {
++    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac) 24%, transparent);
++  }
++
++  .dsh-ring,
++  .dsh-task-spin {
++    animation: dshspin .9s linear infinite;
++  }
++
++  .dsh-shimmer::after {
++    content: "";
++    position: absolute;
++    inset: 0;
++    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .65), transparent);
++    transform: translateX(-100%);
++    animation: dshshim 1.6s ease-in-out infinite;
++  }
++}
++
++@keyframes dshspin {
++  to { transform: rotate(360deg); }
++}
++
++@keyframes dshshim {
++  100% { transform: translateX(100%); }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .dsh-ring,
++  .dsh-task-spin,
++  .dsh-shimmer::after {
++    animation: none;
++  }
++}
+
+diff --git a/tailwind.config.ts b/tailwind.config.ts
+--- a/tailwind.config.ts
++++ b/tailwind.config.ts
+@@
+         navy: {
+           DEFAULT: "var(--navy)",
+           deep: "var(--navy-deep)",
++          sidebar: "var(--navy-sidebar)",
+           tint: "var(--navy-tint)",
+           foreground: "var(--navy-foreground)"
+         },
+         blue: "var(--blue)",
+         gold: {
+           DEFAULT: "var(--gold)",
+           foreground: "var(--gold-foreground)"
++        },
++        sage: {
++          DEFAULT: "var(--sage)",
++          deep: "var(--sage-deep)",
++          tint: "var(--sage-tint)",
++          line: "var(--sage-line)",
++          side: "var(--sage-side)"
++        },
++        ready: {
++          DEFAULT: "var(--ready)",
++          bg: "var(--ready-bg)",
++          line: "var(--ready-line)"
+         }
+       },
+
+diff --git a/components/ui/button.tsx b/components/ui/button.tsx
+--- a/components/ui/button.tsx
++++ b/components/ui/button.tsx
+@@
+         // design system — CTAs pill (misma fuente de verdad, sin clase .btn paralela)
+         pill: "group rounded-full bg-navy font-semibold tracking-[0.005em] text-navy-foreground hover:bg-navy-deep",
+         pillGhost: "group rounded-full border border-line-strong bg-transparent font-semibold tracking-[0.005em] text-ink hover:border-ink",
+         // design system — CTA gold del Pro card (hover #d6a948 encapsulado acá)
+-        pillGold: "group rounded-full bg-gold font-semibold tracking-[0.005em] text-gold-foreground hover:bg-[#d6a948]"
++        pillGold: "group rounded-full bg-gold font-semibold tracking-[0.005em] text-gold-foreground hover:bg-[#d6a948]",
++        // dashboard accent CTA
++        sage: "bg-sage font-bold text-white shadow-[0_14px_28px_-16px_var(--sage)] hover:bg-sage-deep"
+       },
+
+diff --git a/components/dashboard/dashboard-ui.tsx b/components/dashboard/dashboard-ui.tsx
+new file mode 100644
+--- /dev/null
++++ b/components/dashboard/dashboard-ui.tsx
+@@
++"use client";
++
++import type React from "react";
++import Link from "next/link";
++import { useRef } from "react";
++import {
++  Check,
++  ChevronRight,
++  Download,
++  ImageIcon,
++  Images,
++  Loader2,
++  LogOut,
++  Plus,
++  Sparkles,
++  Wallet
++} from "lucide-react";
++import { Button } from "@/components/ui/button";
++import { cn } from "@/lib/utils";
++
++type StyleValue = "professional" | "cinematic" | "natural";
++type CountValue = 1 | 2 | 4;
++type BackgroundValue = "white" | "gray" | "dark" | "outdoor" | null;
++type AttireValue = "suit" | "dress" | "business_casual" | "casual" | null;
++type JobStatus = "pending" | "processing" | "done" | "failed";
++
++type TrainingJobLike = {
++  id: string;
++  status: JobStatus;
++  input: Record<string, unknown> | null;
++  result: { lora_url?: string; trigger_word?: string } | null;
++  createdAt: string;
++};
++
++type GenerateJobLike = {
++  id: string;
++  status: JobStatus;
++  input: Record<string, unknown> | null;
++  result: string[] | null;
++  createdAt: string;
++  completedAt: string | null;
++};
++
++export type ActiveGenerationJob = {
++  id: string;
++  status: JobStatus | null;
++  progress: number;
++  style: StyleValue;
++  count: CountValue;
++  background: BackgroundValue;
++  elapsed: number;
++};
++
++export type DashboardWorkspaceProps = {
++  userEmail: string;
++  credits: { blue: number; gold: number };
++  models: TrainingJobLike[];
++  loadingModels: boolean;
++  selectedModel: TrainingJobLike | null;
++  selectedModelId: string | null;
++  activeTrainingJob: TrainingJobLike | null;
++  trainingElapsed: number;
++  activeGenerationJob: ActiveGenerationJob | null;
++  style: StyleValue;
++  count: CountValue;
++  background: BackgroundValue;
++  attire: AttireValue;
++  generationMessage: string | null;
++  jobs: GenerateJobLike[];
++  onSelectModel: (id: string) => void;
++  onNewModel: () => void;
++  onQuickEdit: () => void;
++  onStyleChange: (value: StyleValue) => void;
++  onCountChange: (value: CountValue) => void;
++  onBackgroundChange: (value: BackgroundValue) => void;
++  onAttireChange: (value: AttireValue) => void;
++  onGenerate: () => void;
++  onDownload: (urls: string[]) => void;
++  onOpenImage: (url: string) => void;
++};
++
++const STYLE_OPTIONS = [
++  {
++    label: "Professional",
++    value: "professional",
++    description: "Neutral background, studio lighting. Ideal for LinkedIn and CV."
++  },
++  {
++    label: "Cinematic",
++    value: "cinematic",
++    description: "Editorial style with higher contrast. For creative profiles."
++  },
++  {
++    label: "Natural",
++    value: "natural",
++    description: "No extra filters. The result closest to your real photos."
++  }
++] as const;
++
++const COUNT_OPTIONS = [1, 2, 4] as const;
++const BACKGROUND_OPTIONS = [
++  { label: "Default", value: null },
++  { label: "White", value: "white" },
++  { label: "Gray", value: "gray" },
++  { label: "Dark", value: "dark" },
++  { label: "Outdoor", value: "outdoor" }
++] as const;
++const ATTIRE_OPTIONS = [
++  { label: "None", value: null },
++  { label: "Suit", value: "suit" },
++  { label: "Dress", value: "dress" },
++  { label: "Business casual", value: "business_casual" },
++  { label: "Casual", value: "casual" }
++] as const;
++
++export function DashboardWorkspace(props: DashboardWorkspaceProps) {
++  // TODO: when more real routes exist under /dashboard, lift activeGenerationJob
++  // into app/(dashboard)/layout.tsx via provider so TaskPill persists across pages.
++  return (
++    <div className="dsh">
++      <DashboardSidebar {...props} />
++      <main className="flex min-w-0 flex-1 flex-col bg-bg">
++        <DashboardTopBar {...props} />
++        {props.selectedModel ? (
++          <div className="flex w-full max-w-[1180px] flex-1 flex-col gap-6 px-[30px] py-[26px] max-[860px]:px-5">
++            <GenerationCard {...props} />
++            <RecentList {...props} />
++          </div>
++        ) : (
++          <EmptyModelsState onNewModel={props.onNewModel} />
++        )}
++      </main>
++    </div>
++  );
++}
++
++function DashboardSidebar({
++  userEmail,
++  credits,
++  models,
++  loadingModels,
++  selectedModelId,
++  activeTrainingJob,
++  trainingElapsed,
++  onSelectModel,
++  onNewModel,
++  onQuickEdit
++}: DashboardWorkspaceProps) {
++  return (
++    <aside className="sticky top-0 flex h-screen w-[266px] shrink-0 flex-col bg-navy-sidebar px-3.5 pb-3.5 pt-5 text-[#cfd3e0]">
++      <div className="flex items-center gap-[11px] px-2 pb-5 pt-1">
++        <span className="flex size-[34px] items-center justify-center rounded-[10px] bg-sage-side text-navy-sidebar">
++          <Sparkles className="size-[18px]" />
++        </span>
++        <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
++          headshotly<span className="font-medium text-[#7e87a6]">.pro</span>
++        </span>
++      </div>
++      <nav className="flex flex-1 flex-col gap-[3px]" aria-label="Models">
++        <NavLabel>Your models</NavLabel>
++        {loadingModels ? (
++          <div className="flex items-center gap-2 px-3 py-2 text-xs text-white/50">
++            <Loader2 className="dsh-ring size-3.5" />
++            Loading
++          </div>
++        ) : (
++          <>
++            {models.map(model => (
++              <ModelButton
++                key={model.id}
++                model={model}
++                active={selectedModelId === model.id}
++                onClick={() => onSelectModel(model.id)}
++              />
++            ))}
++            {activeTrainingJob ? (
++              <ModelButton
++                model={activeTrainingJob}
++                active={selectedModelId === activeTrainingJob.id}
++                trainingElapsed={trainingElapsed}
++                onClick={() => onSelectModel(activeTrainingJob.id)}
++              />
++            ) : null}
++            <button
++              type="button"
++              onClick={onNewModel}
++              className="dsh-focus mt-[7px] flex w-full items-center gap-2.5 rounded-xl border border-dashed border-[#2f3a5c] px-3 py-2.5 text-[13.5px] font-semibold text-[#aeb6d4] transition hover:border-sage-side hover:text-white"
++            >
++              <Plus className="size-4" />
++              New model
++            </button>
++          </>
++        )}
++        <div className="mx-2.5 my-3.5 h-px bg-white/[.06]" />
++        <NavLabel>Tools</NavLabel>
++        <button
++          type="button"
++          onClick={onQuickEdit}
++          className="dsh-focus flex w-full items-center gap-[11px] rounded-[10px] px-2.5 py-[9px] text-[13.5px] font-medium text-[#aeb6d4] transition hover:bg-white/[.045] hover:text-[#eef0f6]"
++        >
++          <Images className="size-[17px]" />
++          Quick edit <span className="ml-auto rounded-[5px] bg-white/[.07] px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-[.08em] text-[#8a92b2]">GPT</span>
++        </button>
++        <button
++          type="button"
++          className="dsh-focus flex w-full items-center gap-[11px] rounded-[10px] px-2.5 py-[9px] text-[13.5px] font-medium text-[#aeb6d4] transition hover:bg-white/[.045] hover:text-[#eef0f6]"
++        >
++          <ImageIcon className="size-[17px]" />
++          Gallery <span className="ml-auto rounded-[5px] bg-white/[.07] px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-[.08em] text-[#8a92b2]">Soon</span>
++        </button>
++      </nav>
++      <div className="flex flex-col gap-[11px]">
++        <div className="rounded-[14px] border border-white/[.07] bg-white/[.04] px-[13px] py-3">
++          <CreditRow tone="blue" label="Blue credits" value={credits.blue} />
++          <CreditRow tone="gold" label="Golden credits" value={credits.gold} />
++          <Button asChild className="mt-[9px] h-auto w-full rounded-[10px] bg-white px-3 py-2.5 text-[13px] font-bold text-navy-sidebar hover:bg-[#eceae4]">
++            <Link href="/pricing"><Wallet className="size-[15px]" />Buy credits</Link>
++          </Button>
++        </div>
++        <div className="flex items-center gap-2.5 px-1.5 pb-0.5 pt-1.5">
++          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-xs font-bold text-navy-sidebar">
++            {userEmail.charAt(0).toUpperCase()}
++          </span>
++          <span className="min-w-0 flex-1 truncate text-xs text-[#8b93ad]">{userEmail}</span>
++          <form action="/logout" method="post">
++            <button type="submit" className="dsh-focus rounded-lg p-1.5 text-[#8b93ad] hover:bg-white/[.07] hover:text-white" aria-label="Sign out">
++              <LogOut className="size-4" />
++            </button>
++          </form>
++        </div>
++      </div>
++    </aside>
++  );
++}
++
++function DashboardTopBar({ selectedModel, activeGenerationJob }: DashboardWorkspaceProps) {
++  const modelName = selectedModel ? getModelName(selectedModel) : "Dashboard";
++  return (
++    <header className="sticky top-0 z-10 flex h-[68px] shrink-0 items-center justify-between border-b border-line bg-[color-mix(in_srgb,var(--bg)_88%,#fff)] px-[30px]">
++      <div className="flex items-center gap-[13px]">
++        <h1 className="m-0 text-xl font-bold tracking-[-.01em] text-ink">{modelName}</h1>
++        {selectedModel ? (
++          <span className="inline-flex items-center gap-[7px] rounded-full border border-ready-line bg-ready-bg px-[11px] py-1 text-[12.5px] font-semibold text-[#3a6b4f]">
++            <span className="size-[7px] rounded-full bg-ready" />
++            Model ready
++          </span>
++        ) : null}
++      </div>
++      {activeGenerationJob ? <TaskPill job={activeGenerationJob} /> : null}
++    </header>
++  );
++}
++
++function TaskPill({ job }: { job: ActiveGenerationJob }) {
++  return (
++    <div role="status" className="flex items-center gap-2.5 rounded-full border border-line bg-surface py-[7px] pl-[13px] pr-[9px]">
++      <Loader2 className="dsh-task-spin size-[15px] text-sage" />
++      <span className="text-[13px] text-ink-soft"><b className="font-bold text-ink">Generating</b> · {job.count} photos</span>
++      <span className="text-[12.5px] font-bold text-sage">· {job.progress}%</span>
++      <ProgressBar value={job.progress} className="w-[60px]" />
++    </div>
++  );
++}
++
++function GenerationCard({
++  selectedModel,
++  activeTrainingJob,
++  activeGenerationJob,
++  credits,
++  style,
++  count,
++  background,
++  attire,
++  generationMessage,
++  onStyleChange,
++  onCountChange,
++  onBackgroundChange,
++  onAttireChange,
++  onGenerate
++}: DashboardWorkspaceProps) {
++  const selectedIsTraining = activeTrainingJob?.id === selectedModel?.id;
++  const noCredits = credits.blue < count;
++  const disabled = !selectedModel || selectedIsTraining || noCredits || !!activeGenerationJob;
++  return (
++    <section className="rounded-[18px] border border-line bg-surface px-7 py-[26px] shadow-[0_22px_48px_-38px_rgba(28,26,23,.5)]" aria-label="New generation">
++      <div className="mb-[22px] flex items-center justify-between">
++        <span className="text-[11px] font-bold uppercase tracking-[.15em] text-ink-muted">New generation</span>
++        <span className="text-[12.5px] text-ink-muted">1 blue credit per photo</span>
++      </div>
++      <div className="mb-5">
++        <label className="mb-[11px] block text-[13.5px] font-semibold text-ink">Style</label>
++        <RovingRadioGroup
++          label="Style"
++          value={style}
++          options={STYLE_OPTIONS.map(option => option.value)}
++          onChange={onStyleChange}
++          className="grid grid-cols-3 gap-[13px]"
++          render={(value, active) => {
++            const option = STYLE_OPTIONS.find(item => item.value === value)!;
++            return (
++              <span className={cn(
++                "relative flex min-h-[116px] flex-col gap-1.5 rounded-[13px] border-[1.5px] px-[17px] py-4 text-left transition",
++                active ? "border-sage bg-sage-tint" : "border-line bg-bg hover:border-line-strong"
++              )}>
++                <span className={cn(
++                  "absolute right-3.5 top-3.5 flex size-[18px] items-center justify-center rounded-full bg-sage text-white transition",
++                  active ? "scale-100 opacity-100" : "scale-75 opacity-0"
++                )}>
++                  <Check className="size-[11px]" />
++                </span>
++                <span className="pr-5 text-[15px] font-bold text-ink">{option.label}</span>
++                <span className="text-[12.5px] leading-[1.45] text-ink-soft">{option.description}</span>
++              </span>
++            );
++          }}
++        />
++      </div>
++      <div className="mb-1 flex gap-10">
++        <ChipGroup label="Background" optional options={BACKGROUND_OPTIONS} value={background} onChange={onBackgroundChange} />
++        <ChipGroup label="Attire" optional options={ATTIRE_OPTIONS} value={attire} onChange={onAttireChange} />
++      </div>
++      <div className="mt-1 flex flex-wrap items-center justify-between gap-5 border-t border-line pt-[22px]">
++        <div className="flex flex-wrap items-center gap-3.5">
++          <span className="text-[13.5px] font-semibold text-ink">Count</span>
++          <RovingRadioGroup
++            label="Count"
++            value={count}
++            options={COUNT_OPTIONS}
++            onChange={onCountChange}
++            className="inline-flex items-center gap-[3px] rounded-[11px] border border-line bg-bg-2 p-1"
++            render={(value, active) => (
++              <span className={cn(
++                "block min-w-[38px] rounded-lg px-3 py-[7px] text-center text-sm font-semibold transition",
++                active ? "bg-surface text-ink shadow-sm" : "text-ink-soft"
++              )}>{value}</span>
++            )}
++            after={<span className="px-2 pl-[5px] text-[12.5px] text-ink-muted">photos</span>}
++          />
++          {noCredits ? (
++            <Link href="/pricing" className="text-[13px] font-semibold text-sage-deep underline underline-offset-4">Buy blue credits</Link>
++          ) : (
++            <span className="inline-flex items-center gap-[7px] text-[13px] font-semibold text-ink-soft"><CreditDot tone="blue" />{count} blue credits</span>
++          )}
++        </div>
++        <Button type="button" variant="sage" onClick={onGenerate} disabled={disabled} className="h-auto rounded-xl px-[26px] py-3.5 text-[15px]">
++          {activeGenerationJob ? <Loader2 className="dsh-task-spin size-[18px]" /> : <Sparkles className="size-[18px]" />}
++          Generate headshots
++        </Button>
++      </div>
++      {selectedIsTraining ? <p className="mt-3 text-sm text-ink-muted">Model is still training. You can keep working, but generation unlocks when it is ready.</p> : null}
++      {generationMessage ? <p className="mt-3 text-sm text-red-600">{generationMessage}</p> : null}
++    </section>
++  );
++}
++
++function RecentList({ activeGenerationJob, jobs, onDownload, onOpenImage }: DashboardWorkspaceProps) {
++  const doneJobs = jobs.filter(job => job.status === "done").slice(0, 3);
++  return (
++    <section className="flex flex-col gap-[11px]" aria-label="Recent generations">
++      <div className="flex items-center justify-between px-0.5 pb-0.5">
++        <span className="text-[11px] font-bold uppercase tracking-[.15em] text-ink-muted">Recent</span>
++        <button type="button" className="dsh-focus inline-flex items-center gap-[3px] text-[13px] font-semibold text-ink-soft hover:text-ink">
++          View all <ChevronRight className="size-3.5" />
++        </button>
++      </div>
++      {activeGenerationJob ? <GenerationRow job={activeGenerationJob} running /> : null}
++      {doneJobs.map(job => <GenerationRow key={job.id} job={job} onDownload={onDownload} onOpenImage={onOpenImage} />)}
++    </section>
++  );
++}
++
++function GenerationRow({
++  job,
++  running = false,
++  onDownload,
++  onOpenImage
++}: {
++  job: GenerateJobLike | ActiveGenerationJob;
++  running?: boolean;
++  onDownload?: (urls: string[]) => void;
++  onOpenImage?: (url: string) => void;
++}) {
++  const input = "input" in job ? job.input : null;
++  const styleValue = ("style" in job ? job.style : input?.style) ?? "professional";
++  const styleLabel = STYLE_OPTIONS.find(option => option.value === styleValue)?.label ?? "Professional";
++  const count = ("count" in job ? job.count : (input?.num_images as number | undefined)) ?? 4;
++  const urls = "result" in job && Array.isArray(job.result) ? job.result : [];
++  return (
++    <div className={cn("flex items-center gap-4 rounded-[14px] border px-4 py-[13px]", running ? "border-sage-line bg-sage-tint" : "border-line bg-surface")}>
++      <div className={cn("relative size-14 shrink-0 overflow-hidden rounded-[9px]", running && "dsh-shimmer bg-[#e6ddcf]")}>
++        {!running ? <ThumbGrid urls={urls} /> : null}
++      </div>
++      <div className="min-w-0 flex-1">
++        <div className="text-[14.5px] font-bold text-ink">{styleLabel} · {count} {count === 1 ? "photo" : "photos"}</div>
++        <div className="text-[12.5px] text-ink-muted">
++          {running ? "White background · started now" : "White background · recent"}
++        </div>
++        {running && "progress" in job ? <ProgressBar value={job.progress} className="mt-1.5 max-w-[300px]" /> : null}
++      </div>
++      <div className="flex flex-col items-end gap-2">
++        {running && "progress" in job ? (
++          <>
++            <span className="inline-flex items-center gap-1.5 rounded-full border border-sage-line bg-surface px-[11px] py-1 text-xs font-semibold text-sage-deep">
++              <Loader2 className="dsh-task-spin size-3" />Generating {job.progress}%
++            </span>
++            <span className="text-[11.5px] text-ink-muted">Runs in background - keep working</span>
++          </>
++        ) : (
++          <>
++            <span className="inline-flex items-center gap-1.5 rounded-full border border-ready-line bg-ready-bg px-[11px] py-1 text-xs font-semibold text-[#3a6b4f]">
++              <span className="size-[7px] rounded-full bg-ready" />Ready
++            </span>
++            <div className="flex items-center gap-1.5">
++              <button type="button" aria-label="Download" onClick={() => onDownload?.(urls)} className="dsh-focus rounded-lg p-1.5 text-ink-soft hover:bg-bg-2 hover:text-ink">
++                <Download className="size-4" />
++              </button>
++              <button type="button" onClick={() => urls[0] && onOpenImage?.(urls[0])} className="dsh-focus rounded-lg border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink hover:border-ink">
++                View
++              </button>
++            </div>
++          </>
++        )}
++      </div>
++    </div>
++  );
++}
++
++function RovingRadioGroup<T extends string | number>({
++  label,
++  value,
++  options,
++  onChange,
++  render,
++  className,
++  after
++}: {
++  label: string;
++  value: T;
++  options: readonly T[];
++  onChange: (value: T) => void;
++  render: (option: T, active: boolean) => React.ReactNode;
++  className?: string;
++  after?: React.ReactNode;
++}) {
++  const refs = useRef<Array<HTMLButtonElement | null>>([]);
++  return (
++    <div role="radiogroup" aria-label={label} className={className}>
++      {options.map((option, index) => {
++        const active = option === value;
++        return (
++          <button
++            key={String(option)}
++            ref={node => { refs.current[index] = node; }}
++            type="button"
++            role="radio"
++            aria-checked={active}
++            tabIndex={active ? 0 : -1}
++            onClick={() => onChange(option)}
++            onKeyDown={event => {
++              const dir = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 :
++                ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
++              if (!dir) return;
++              event.preventDefault();
++              const next = (index + dir + options.length) % options.length;
++              onChange(options[next]);
++              refs.current[next]?.focus();
++            }}
++            className="dsh-focus"
++          >
++            {render(option, active)}
++          </button>
++        );
++      })}
++      {after}
++    </div>
++  );
++}
++
++function ChipGroup<T extends string | null>({
++  label,
++  optional,
++  options,
++  value,
++  onChange
++}: {
++  label: string;
++  optional?: boolean;
++  options: readonly { label: string; value: T }[];
++  value: T;
++  onChange: (value: T) => void;
++}) {
++  return (
++    <div className="min-w-0 flex-1">
++      <label className="mb-[11px] block text-[13.5px] font-semibold text-ink">
++        {label} {optional ? <span className="text-[12.5px] font-medium text-ink-muted">optional</span> : null}
++      </label>
++      <div className="flex flex-wrap gap-2">
++        {options.map(option => {
++          const active = option.value === value;
++          return (
++            <button
++              key={option.label}
++              type="button"
++              aria-pressed={active}
++              onClick={() => onChange(option.value)}
++              className={cn(
++                "dsh-focus rounded-full border px-[15px] py-2 text-[13px] font-semibold transition",
++                active ? "border-sage bg-sage text-white" : "border-line-strong bg-surface text-ink-soft hover:border-ink-soft hover:text-ink"
++              )}
++            >
++              {option.label}
++            </button>
++          );
++        })}
++      </div>
++    </div>
++  );
++}
++
++function ProgressBar({ value, className }: { value: number; className?: string }) {
++  const pct = Math.max(0, Math.min(100, value));
++  return (
++    <span role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className={cn("block h-[5px] overflow-hidden rounded-full bg-sage-tint", className)}>
++      <span className="block h-full rounded-full bg-sage" style={{ width: `${pct}%` }} />
++    </span>
++  );
++}
++
++function EmptyModelsState({ onNewModel }: { onNewModel: () => void }) {
++  return (
++    <div className="flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
++      <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-navy-sidebar text-sage-side">
++        <Sparkles className="size-7" />
++      </div>
++      <h2 className="text-xl font-bold text-ink">Train your first model</h2>
++      <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
++        Upload 10-15 photos to unlock personalized headshots and keep generation consistent.
++      </p>
++      <Button type="button" variant="sage" onClick={onNewModel} className="mt-6 h-auto rounded-xl px-[26px] py-3.5">
++        <Plus className="size-4" />Train your first model
++      </Button>
++    </div>
++  );
++}
++
++function ModelButton({
++  model,
++  active,
++  trainingElapsed,
++  onClick
++}: {
++  model: TrainingJobLike;
++  active: boolean;
++  trainingElapsed?: number;
++  onClick: () => void;
++}) {
++  const name = getModelName(model);
++  const training = model.status === "pending" || model.status === "processing";
++  return (
++    <button
++      type="button"
++      aria-current={active ? "true" : undefined}
++      onClick={onClick}
++      className={cn(
++        "dsh-focus relative flex w-full items-center gap-[11px] rounded-xl p-2.5 text-left transition hover:bg-white/[.045]",
++        active && "bg-[color-mix(in_srgb,var(--sage-side)_17%,transparent)] before:absolute before:bottom-[9px] before:left-[-14px] before:top-[9px] before:w-[3px] before:rounded-r-[3px] before:bg-sage-side"
++      )}
++    >
++      <span className={cn("flex size-[34px] shrink-0 items-center justify-center rounded-[10px] text-sm font-bold", training ? "bg-[#2a3354] text-[#aeb6d4]" : "bg-white text-navy-sidebar")}>
++        {name.charAt(0).toUpperCase()}
++      </span>
++      <span className="min-w-0 flex-1">
++        <span className="block truncate text-[14.5px] font-semibold text-[#eef0f6]">{name}</span>
++        <span className="block truncate text-[11.5px] text-[#7e87a6]">
++          {training ? `Training · ${trainingElapsed ? formatElapsed(trainingElapsed) : "~6 min left"}` : "Ready · 18 photos"}
++        </span>
++      </span>
++      {training ? <Loader2 className="dsh-ring size-[15px] shrink-0 text-sage-side" aria-label="Training" /> : <span className="size-[7px] shrink-0 rounded-full bg-ready" />}
++    </button>
++  );
++}
++
++function CreditRow({ tone, label, value }: { tone: "blue" | "gold"; label: string; value: number }) {
++  return (
++    <div className="flex items-center gap-[9px] px-0.5 py-1">
++      <CreditDot tone={tone} />
++      <span className="flex-1 text-[13px] text-[#aeb6d4]">{label}</span>
++      <span className="text-sm font-bold text-white">{value}</span>
++    </div>
++  );
++}
++
++function CreditDot({ tone }: { tone: "blue" | "gold" }) {
++  return <span className={cn("size-[9px] shrink-0 rounded-full", tone === "blue" ? "bg-blue" : "bg-gold")} />;
++}
++
++function ThumbGrid({ urls }: { urls: string[] }) {
++  if (urls.length <= 1) {
++    return urls[0] ? <img src={urls[0]} alt="" className="size-full object-cover" /> : <PlaceholderThumb tone={0} />;
++  }
++  return (
++    <div className="grid size-full grid-cols-2 gap-[3px]">
++      {Array.from({ length: 4 }).map((_, index) =>
++        urls[index] ? <img key={urls[index]} src={urls[index]} alt="" className="size-full rounded-md object-cover" /> : <PlaceholderThumb key={index} tone={index} />
++      )}
++    </div>
++  );
++}
++
++function PlaceholderThumb({ tone }: { tone: number }) {
++  const colors = ["#dfe3ea", "#e7ddcd", "#dde6df", "#e8dde6"];
++  return (
++    <span
++      className="block size-full rounded-md bg-bg-2 [background-image:repeating-linear-gradient(135deg,rgba(120,112,98,.10)_0_6px,rgba(120,112,98,0)_6px_12px)]"
++      style={{ backgroundColor: colors[tone % colors.length] }}
++    />
++  );
++}
++
++function NavLabel({ children }: { children: React.ReactNode }) {
++  return <div className="px-2.5 pb-2 pt-3.5 text-[10.5px] font-bold uppercase tracking-[.14em] text-[#6b7497]">{children}</div>;
++}
++
++function getModelName(job: TrainingJobLike): string {
++  const name = job.input?.name;
++  if (typeof name === "string" && name.trim()) return name.trim();
++  return new Date(job.createdAt).toLocaleDateString("en-US", {
++    day: "2-digit",
++    month: "short",
++    year: "numeric"
++  });
++}
++
++function formatElapsed(seconds: number) {
++  const m = Math.floor(seconds / 60);
++  const s = seconds % 60;
++  return m === 0 ? `${s}s` : `${m}m ${String(s).padStart(2, "0")}s`;
++}
+
+diff --git a/components/dashboard/headshots-app.tsx b/components/dashboard/headshots-app.tsx
+--- a/components/dashboard/headshots-app.tsx
++++ b/components/dashboard/headshots-app.tsx
+@@
+ import { Button } from "@/components/ui/button";
++import { DashboardWorkspace, type ActiveGenerationJob } from "@/components/dashboard/dashboard-ui";
+ import { cn } from "@/lib/utils";
+@@
+   const selectedModel = trainedModels.find(m => m.id === selectedModelId) ?? null;
++
++  const activeGenerationJob: ActiveGenerationJob | null =
++    generationJobId && !signedUrls && generationStatus !== "failed"
++      ? {
++          id: generationJobId,
++          status: generationStatus,
++          progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
++          style,
++          count: numImages,
++          background,
++          elapsed: generationElapsed
++        }
++      : null;
+ 
+   const modelGenerateJobs = selectedModel
+     ? generateJobs.filter(j => {
+@@
+       })
+     : [];
++
++  /*
++    Integration direction for the applied patch:
++    - Replace the current main dashboard render with <DashboardWorkspace />.
++    - Keep NewModelPanel and QuickEditPanel available for the existing flows.
++    - The final applied diff will wire the New model / Quick edit branches instead of
++      deleting them.
++  */
++
++  return (
++    <DashboardWorkspace
++      userEmail={userEmail}
++      credits={{ blue: initialCredits, gold: 1 }}
++      models={trainedModels}
++      loadingModels={loadingModels}
++      selectedModel={selectedModel}
++      selectedModelId={selectedModelId}
++      activeTrainingJob={activeTrainingJob}
++      trainingElapsed={trainingElapsed}
++      activeGenerationJob={activeGenerationJob}
++      style={style}
++      count={numImages}
++      background={background}
++      attire={attireType}
++      generationMessage={generationMessage}
++      jobs={modelGenerateJobs}
++      onSelectModel={handleSelectModel}
++      onNewModel={handleNewModel}
++      onQuickEdit={handleQuickEdit}
++      onStyleChange={setStyle}
++      onCountChange={setNumImages}
++      onBackgroundChange={setBackground}
++      onAttireChange={v => {
++        setAttireType(v);
++        setAttireColor(null);
++      }}
++      onGenerate={() => void startGeneration()}
++      onDownload={downloadAll}
++      onOpenImage={setSelectedImageUrl}
++    />
++  );

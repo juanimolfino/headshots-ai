@@ -1,6 +1,17 @@
-# AI SaaS Boilerplate
+# headshots-ai
 
-Production-oriented starter for launching AI micro-SaaS products with Next.js App Router, Supabase Auth/Postgres/Storage, Drizzle, Upstash Redis, Inngest, Stripe, Resend, fal.ai, and OpenAI TTS.
+Production AI SaaS for professional headshots. Users upload photos, train a personal Flux LoRA, generate headshots from that LoRA, and can run quick image edits.
+
+Read [CONTEXT.md](./CONTEXT.md) before starting a new chat or implementation session. It contains the current architecture, active AI models, flows, env vars, and known constraints.
+
+## Active AI Models
+
+- `headshot-training`: fal.ai `fal-ai/flux-lora-portrait-trainer`
+- `headshot-generate`: fal.ai `fal-ai/flux-lora`
+- `headshot-edit`: fal.ai proxy `openai/gpt-image-2/edit`
+- `tts`: OpenAI `gpt-4o-mini-tts`
+
+`fal-ai/flux/schnell` remains in the repo as a generic `image` provider, but it is not an active product feature in the current UI.
 
 ## Setup
 
@@ -16,7 +27,7 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Create the Supabase project, private storage bucket `ai-results`, Stripe products/prices, Upstash Redis database, Inngest app, Resend API key, fal.ai key, and OpenAI API key. Use fresh credentials per product; never reuse the template project's secrets.
+3. Create/configure Supabase, private storage bucket `ai-results`, Cloudflare R2, Stripe products/prices, Upstash Redis, Inngest, Resend, fal.ai, and OpenAI.
 
 4. Run database migrations:
 
@@ -34,13 +45,15 @@ npm run dev
 npm run inngest
 ```
 
-## AI Provider Pattern
+## Architecture
 
-Each provider implements `AiProvider` from [lib/ai/types.ts](./lib/ai/types.ts). Add a new provider in `lib/ai/providers`, register it in [lib/ai/providers/index.ts](./lib/ai/providers/index.ts), add a job type to the Drizzle enum, and extend [lib/ai/validation.ts](./lib/ai/validation.ts).
+Each provider implements `AiProvider` from [lib/ai/types.ts](./lib/ai/types.ts). Providers are registered in [lib/ai/providers/index.ts](./lib/ai/providers/index.ts), job types live in the Drizzle enum, and inputs are validated in [lib/ai/validation.ts](./lib/ai/validation.ts).
 
-The reusable pipeline is:
+The reusable job pipeline is:
 
 `POST /api/jobs/create` validates auth and input, reserves a Redis concurrency slot, debits credits atomically, stores a pending job, sends `ai/job.created` to Inngest, and returns `{ jobId }`. The worker generates the result, uploads it to Supabase Storage, marks the job done, or refunds credits on failure.
+
+LoRA training is webhook-driven because fal.ai training takes longer than Vercel serverless timeouts. Generated images are stored in Supabase Storage; trained LoRA `.safetensors` files are stored in Cloudflare R2.
 
 ## Stripe Plans and Prices
 
@@ -64,7 +77,7 @@ Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe even
 
 ## Security Defaults
 
-- Generated files should live in a private Supabase Storage bucket. The app stores object paths and serves authenticated, short-lived signed URLs through `/api/jobs/result/[id]`.
+- Generated files live in Supabase Storage. Headshot result URLs are normalized and served back to authenticated users as short-lived signed URLs through `/api/jobs/[id]/signed-urls`.
 - `/api/health` is protected in production with `HEALTHCHECK_SECRET`; call it with `Authorization: Bearer <secret>`.
 - Public auth/session debug endpoints are not part of the template.
 - Credit debits, purchases, subscription grants, and refunds are recorded in `transactions`.
