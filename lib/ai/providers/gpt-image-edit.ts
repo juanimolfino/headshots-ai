@@ -2,6 +2,14 @@ import { fal } from "@fal-ai/client";
 import type { AiProvider, HeadshotEditInput } from "@/lib/ai/types";
 
 const GPT_IMAGE_EDIT_ENDPOINT = "openai/gpt-image-2/edit";
+const MAX_REFERENCE_IMAGES = 4;
+
+const QUALITY_BLUE_COST = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  auto: 2
+} as const;
 
 type FalImage = {
   url?: string;
@@ -21,7 +29,7 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
   const result = await fal.subscribe(GPT_IMAGE_EDIT_ENDPOINT, {
     input: {
       prompt: input.prompt,
-      image_urls: input.image_urls,
+      image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
       image_size: "portrait_4_3",
       quality: input.quality ?? "low",
       num_images: input.num_images ?? 1,
@@ -53,7 +61,8 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
 export const gptImageEditProvider: AiProvider<HeadshotEditInput> = {
   type: "headshot-edit",
   costCredits: 1,
-  calculateCredits: (input) => input.num_images ?? 1,
+  creditKind: "blue",
+  calculateCredits: (input) => (input.num_images ?? 1) * QUALITY_BLUE_COST[input.quality ?? "low"],
   async generate(input) {
     const imageUrls = await generateGptImageEditUrls(input);
 

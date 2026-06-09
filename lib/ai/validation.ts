@@ -102,9 +102,9 @@ export const createJobSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("headshot-edit"),
     input: z.object({
-      image_urls: z.array(referenceImageUrlSchema).min(4).max(15),
+      image_urls: z.array(referenceImageUrlSchema).min(1).max(4),
       prompt: z.string().min(10).max(2000),
-      quality: z.enum(["low", "medium", "high", "auto"]).default("low"),
+      quality: z.enum(["low", "medium", "high"]).default("low"),
       num_images: z.number().int().min(1).max(4).default(1)
     })
   })

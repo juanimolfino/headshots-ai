@@ -1,4 +1,5 @@
 import type { JobType } from "@/lib/db/schema";
+import type { CreditKind } from "@/lib/db/schema";
 
 export type ImageInput = {
   prompt: string;
@@ -43,6 +44,7 @@ export type AiResult = {
 export type AiProvider<TInput extends AiInput = AiInput> = {
   type: JobType;
   costCredits: number;
+  creditKind?: CreditKind;
   calculateCredits?(input: TInput): number;
   generate(input: TInput): Promise<AiResult>;
 };

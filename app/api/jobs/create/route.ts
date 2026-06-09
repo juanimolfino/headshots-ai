@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   const profile = await ensureUserProfile(user);
   const provider = getAiProvider(validationResult.data.type);
   const creditsUsed = provider.calculateCredits?.(validationResult.data.input as never) ?? provider.costCredits;
+  const creditKind = provider.creditKind ?? "blue";
   let reserved = false;
   let job: Job | null = null;
 
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
       userId: profile.id,
       type: validationResult.data.type,
       payload: validationResult.data.input,
-      creditsUsed
+      creditsUsed,
+      creditKind
     });
 
     await inngest.send({

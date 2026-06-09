@@ -4,6 +4,7 @@ import type { AiProvider, ImageInput } from "@/lib/ai/types";
 export const falImageProvider: AiProvider<ImageInput> = {
   type: "image",
   costCredits: 1,
+  creditKind: "blue",
   async generate(input) {
     fal.config({ credentials: process.env.FAL_KEY });
 

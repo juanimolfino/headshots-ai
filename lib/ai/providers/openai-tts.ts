@@ -11,6 +11,7 @@ function getOpenAI() {
 export const openAiTtsProvider: AiProvider<TtsInput> = {
   type: "tts",
   costCredits: 1,
+  creditKind: "blue",
   async generate(input) {
     const response = await getOpenAI().audio.speech.create({
       model: "gpt-4o-mini-tts",

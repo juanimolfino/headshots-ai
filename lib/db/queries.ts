@@ -1,8 +1,13 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { credits, jobs, subscriptions, transactions, users, type JobType } from "@/lib/db/schema";
+import { credits, jobs, subscriptions, transactions, users, type CreditKind, type JobType } from "@/lib/db/schema";
 import { sendPurchaseConfirmationEmail, sendWelcomeEmail } from "@/lib/email/send";
 import type { User } from "@supabase/supabase-js";
+
+export type CreditGrant = {
+  blue?: number;
+  gold?: number;
+};
 
 export async function ensureUserProfile(authUser: User) {
   const db = getDb();
@@ -10,7 +15,8 @@ export async function ensureUserProfile(authUser: User) {
   const existing = await db.query.users.findFirst({ where: eq(users.authUserId, authUser.id) });
   if (existing) return existing;
 
-  const signupCredits = Number(process.env.FREE_SIGNUP_CREDITS ?? 5);
+  const signupBlueCredits = Number(process.env.FREE_SIGNUP_BLUE_CREDITS ?? 5);
+  const signupGoldCredits = Number(process.env.FREE_SIGNUP_GOLD_CREDITS ?? 0);
 
   const { profile, createdProfile } = await db.transaction(async (tx) => {
     const [created] = await tx
@@ -27,19 +33,35 @@ export async function ensureUserProfile(authUser: User) {
     if (!profile) throw new Error("Could not create user profile");
 
     if (created) {
-      await tx.insert(credits).values({ userId: profile.id, balance: signupCredits }).onConflictDoNothing();
-      await tx.insert(subscriptions).values({ userId: profile.id, plan: "free", status: "active" });
-      await tx.insert(transactions).values({
+      await tx.insert(credits).values({
         userId: profile.id,
-        type: "signup_bonus",
-        credits: signupCredits,
-        metadata: { source: "first_login" }
-      });
+        blueBalance: signupBlueCredits,
+        goldBalance: signupGoldCredits
+      }).onConflictDoNothing();
+      await tx.insert(subscriptions).values({ userId: profile.id, plan: "free", status: "active" });
+      if (signupBlueCredits > 0) {
+        await tx.insert(transactions).values({
+          userId: profile.id,
+          type: "signup_bonus",
+          credits: signupBlueCredits,
+          creditKind: "blue",
+          metadata: { source: "first_login" }
+        });
+      }
+      if (signupGoldCredits > 0) {
+        await tx.insert(transactions).values({
+          userId: profile.id,
+          type: "signup_bonus",
+          credits: signupGoldCredits,
+          creditKind: "gold",
+          metadata: { source: "first_login" }
+        });
+      }
     }
 
     return { profile, createdProfile: Boolean(created) };
   });
-  if (createdProfile) await sendWelcomeEmail(email, signupCredits);
+  if (createdProfile) await sendWelcomeEmail(email, { blue: signupBlueCredits, gold: signupGoldCredits });
 
   return profile;
 }
@@ -53,7 +75,10 @@ export async function getDashboard(userId: string) {
   ]);
 
   return {
-    credits: creditRow?.balance ?? 0,
+    credits: {
+      blue: creditRow?.blueBalance ?? 0,
+      gold: creditRow?.goldBalance ?? 0
+    },
     subscription: subscriptionRows[0] ?? null,
     jobs: jobRows
   };
@@ -64,20 +89,24 @@ export async function createPendingJob(input: {
   type: JobType;
   payload: Record<string, unknown>;
   creditsUsed: number;
+  creditKind: CreditKind;
 }) {
   const db = getDb();
+  const balanceColumn = input.creditKind === "gold" ? credits.goldBalance : credits.blueBalance;
   return db.transaction(async (tx) => {
     const [creditRow] = await tx
       .select()
       .from(credits)
-      .where(and(eq(credits.userId, input.userId), sql`${credits.balance} >= ${input.creditsUsed}`))
+      .where(and(eq(credits.userId, input.userId), sql`${balanceColumn} >= ${input.creditsUsed}`))
       .for("update");
 
     if (!creditRow) throw new Error("INSUFFICIENT_CREDITS");
 
     await tx
       .update(credits)
-      .set({ balance: sql`${credits.balance} - ${input.creditsUsed}`, updatedAt: new Date() })
+      .set(input.creditKind === "gold"
+        ? { goldBalance: sql`${credits.goldBalance} - ${input.creditsUsed}`, updatedAt: new Date() }
+        : { blueBalance: sql`${credits.blueBalance} - ${input.creditsUsed}`, updatedAt: new Date() })
       .where(eq(credits.userId, input.userId));
 
     const [job] = await tx
@@ -86,7 +115,8 @@ export async function createPendingJob(input: {
         userId: input.userId,
         type: input.type,
         input: input.payload,
-        creditsUsed: input.creditsUsed
+        creditsUsed: input.creditsUsed,
+        creditKind: input.creditKind
       })
       .returning();
 
@@ -94,6 +124,7 @@ export async function createPendingJob(input: {
       userId: input.userId,
       type: "credit_spend",
       credits: -input.creditsUsed,
+      creditKind: input.creditKind,
       metadata: { jobId: job.id, jobType: input.type }
     });
 
@@ -113,6 +144,7 @@ export async function refundJobCredits(jobId: string, reason: string) {
       userId: job.userId,
       type: "credit_refund",
       credits: job.creditsUsed,
+      creditKind: job.creditKind,
       stripeEventId: refundKey,
       metadata: { jobId, reason }
     }).onConflictDoNothing({ target: transactions.stripeEventId }).returning({ id: transactions.id });
@@ -120,7 +152,9 @@ export async function refundJobCredits(jobId: string, reason: string) {
     if (refund) {
       await tx
         .update(credits)
-        .set({ balance: sql`${credits.balance} + ${job.creditsUsed}`, updatedAt: new Date() })
+        .set(job.creditKind === "gold"
+          ? { goldBalance: sql`${credits.goldBalance} + ${job.creditsUsed}`, updatedAt: new Date() }
+          : { blueBalance: sql`${credits.blueBalance} + ${job.creditsUsed}`, updatedAt: new Date() })
         .where(eq(credits.userId, job.userId));
     }
 
@@ -162,30 +196,59 @@ export async function listJobsForUser(input: { userId: string; type?: JobType; l
   });
 }
 
-export async function addCredits(userId: string, amount: number, metadata: Record<string, unknown>, stripeEventId?: string) {
+export async function addCredits(userId: string, grant: CreditGrant, metadata: Record<string, unknown>, stripeEventId?: string) {
   const db = getDb();
+  const blue = Math.max(0, Math.trunc(grant.blue ?? 0));
+  const gold = Math.max(0, Math.trunc(grant.gold ?? 0));
+  if (blue === 0 && gold === 0) return false;
+
   const profile = await db.query.users.findFirst({ where: eq(users.id, userId) });
   const applied = await db.transaction(async (tx) => {
-    const [transaction] = await tx.insert(transactions).values({
-      userId,
-      type: metadata.kind === "subscription" ? "subscription_payment" : "credit_purchase",
-      credits: amount,
-      amountCents: typeof metadata.amountCents === "number" ? metadata.amountCents : null,
-      stripeEventId,
-      metadata
-    }).onConflictDoNothing().returning({ id: transactions.id });
+    let insertedAny = false;
+    const type = metadata.kind === "subscription" ? "subscription_payment" : "credit_purchase";
 
-    if (!transaction) return false;
+    if (blue > 0) {
+      const [transaction] = await tx.insert(transactions).values({
+        userId,
+        type,
+        credits: blue,
+        creditKind: "blue",
+        amountCents: typeof metadata.amountCents === "number" ? metadata.amountCents : null,
+        stripeEventId: stripeEventId ? `${stripeEventId}:blue` : undefined,
+        metadata
+      }).onConflictDoNothing().returning({ id: transactions.id });
+      insertedAny = insertedAny || Boolean(transaction);
+    }
+
+    if (gold > 0) {
+      const [transaction] = await tx.insert(transactions).values({
+        userId,
+        type,
+        credits: gold,
+        creditKind: "gold",
+        amountCents: typeof metadata.amountCents === "number" ? metadata.amountCents : null,
+        stripeEventId: stripeEventId ? `${stripeEventId}:gold` : undefined,
+        metadata
+      }).onConflictDoNothing().returning({ id: transactions.id });
+      insertedAny = insertedAny || Boolean(transaction);
+    }
+
+    if (!insertedAny) return false;
 
     await tx
       .insert(credits)
-      .values({ userId, balance: amount })
+      .values({ userId, blueBalance: blue, goldBalance: gold })
       .onConflictDoUpdate({
         target: credits.userId,
-        set: { balance: sql`${credits.balance} + ${amount}`, updatedAt: new Date() }
+        set: {
+          blueBalance: sql`${credits.blueBalance} + ${blue}`,
+          goldBalance: sql`${credits.goldBalance} + ${gold}`,
+          updatedAt: new Date()
+        }
       });
 
     return true;
   });
-  if (applied && profile?.email && amount > 0) await sendPurchaseConfirmationEmail(profile.email, amount);
+  if (applied && profile?.email) await sendPurchaseConfirmationEmail(profile.email, { blue, gold });
+  return applied;
 }

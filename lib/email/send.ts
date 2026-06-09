@@ -16,7 +16,7 @@ async function sendSafely(label: string, send: () => Promise<unknown>) {
   }
 }
 
-export async function sendWelcomeEmail(email: string, credits: number) {
+export async function sendWelcomeEmail(email: string, credits: { blue: number; gold: number }) {
   if (!canSendEmail()) return;
   await sendSafely("welcome", () =>
     getResend().emails.send({
@@ -28,7 +28,7 @@ export async function sendWelcomeEmail(email: string, credits: number) {
   );
 }
 
-export async function sendPurchaseConfirmationEmail(email: string, credits: number) {
+export async function sendPurchaseConfirmationEmail(email: string, credits: { blue: number; gold: number }) {
   if (!canSendEmail()) return;
   await sendSafely("purchase confirmation", () =>
     getResend().emails.send({

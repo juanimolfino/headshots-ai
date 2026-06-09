@@ -87,7 +87,8 @@ export async function trainFluxLora(input: HeadshotTrainingInput): Promise<strin
 
 export const fluxLoraTrainerProvider: AiProvider<HeadshotTrainingInput> = {
   type: "headshot-training",
-  costCredits: 15,
+  costCredits: 1,
+  creditKind: "gold",
   async generate(input) {
     const loraUrl = await trainFluxLora(input);
 

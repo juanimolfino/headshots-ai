@@ -109,6 +109,7 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
 export const fluxLoraGeneratorProvider: AiProvider<HeadshotGenerateInput> = {
   type: "headshot-generate",
   costCredits: 4,
+  creditKind: "blue",
   calculateCredits: (input) => input.num_images ?? 4,
   async generate(input) {
     const imageUrls = await generateFluxLoraImageUrls(input);

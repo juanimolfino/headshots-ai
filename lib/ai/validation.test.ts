@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createJobSchema } from "@/lib/ai/validation";
+import { gptImageEditProvider } from "@/lib/ai/providers/gpt-image-edit";
 
 describe("createJobSchema", () => {
   it("accepts image jobs with a prompt", () => {
@@ -139,20 +140,57 @@ describe("createJobSchema", () => {
     }
   });
 
-  it("rejects headshot edit jobs with fewer than four reference photos", () => {
+  it("accepts headshot edit jobs with one reference photo", () => {
+    const result = createJobSchema.safeParse({
+      type: "headshot-edit",
+      input: {
+        image_urls: ["https://v3b.fal.media/files/example/photo-1.jpg"],
+        prompt: "Create a polished professional headshot."
+      }
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects headshot edit jobs with more than four reference photos", () => {
     const result = createJobSchema.safeParse({
       type: "headshot-edit",
       input: {
         image_urls: [
           "https://v3b.fal.media/files/example/photo-1.jpg",
           "https://v3b.fal.media/files/example/photo-2.jpg",
-          "https://v3b.fal.media/files/example/photo-3.jpg"
+          "https://v3b.fal.media/files/example/photo-3.jpg",
+          "https://v3b.fal.media/files/example/photo-4.jpg",
+          "https://v3b.fal.media/files/example/photo-5.jpg"
         ],
         prompt: "Create a polished professional headshot."
       }
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("charges headshot edits by output count and quality", () => {
+    expect(gptImageEditProvider.calculateCredits?.({
+      image_urls: ["https://v3b.fal.media/files/example/photo-1.jpg"],
+      prompt: "Create a polished professional headshot.",
+      quality: "low",
+      num_images: 4
+    })).toBe(4);
+
+    expect(gptImageEditProvider.calculateCredits?.({
+      image_urls: ["https://v3b.fal.media/files/example/photo-1.jpg"],
+      prompt: "Create a polished professional headshot.",
+      quality: "medium",
+      num_images: 4
+    })).toBe(8);
+
+    expect(gptImageEditProvider.calculateCredits?.({
+      image_urls: ["https://v3b.fal.media/files/example/photo-1.jpg"],
+      prompt: "Create a polished professional headshot.",
+      quality: "high",
+      num_images: 4
+    })).toBe(12);
   });
 
   it("rejects unsupported job types", () => {
