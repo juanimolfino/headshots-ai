@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureUserProfile } from "@/lib/db/queries";
 import { getAppUrl } from "@/lib/app-url";
-import { getCreditPack } from "@/lib/stripe/pricing";
+import { getCreditPack, getSubscriptionPlan } from "@/lib/stripe/pricing";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,25 +15,29 @@ export async function POST(request: Request) {
 
   const profile = await ensureUserProfile(user);
   const form = await request.formData();
-  const mode = String(form.get("mode") ?? "credits");
+  const mode = String(form.get("mode") ?? "pack");
   const appUrl = getAppUrl(new URL(request.url).origin);
 
   if (mode === "subscription") {
-    const price = process.env.STRIPE_PRICE_ID_PRO_MONTHLY;
-    if (!price) throw new Error("STRIPE_PRICE_ID_PRO_MONTHLY is required");
+    const plan = getSubscriptionPlan(String(form.get("planId") ?? "pro"));
+    if (!plan) return NextResponse.json({ error: "Invalid subscription plan" }, { status: 400 });
+    const price = process.env[plan.stripePriceEnv];
+    if (!price) throw new Error(`${plan.stripePriceEnv} is required`);
     const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
       customer_email: profile.email,
       line_items: [{ price, quantity: 1 }],
       success_url: `${appUrl}/dashboard?checkout=success`,
       cancel_url: `${appUrl}/pricing`,
-      metadata: { userId: profile.id, kind: "subscription", plan: "pro" },
-      subscription_data: { metadata: { userId: profile.id, plan: "pro" } }
+      metadata: { userId: profile.id, kind: "subscription", plan: plan.id },
+      subscription_data: { metadata: { userId: profile.id, plan: plan.id } }
     });
     return NextResponse.redirect(session.url!, 303);
   }
 
-  const pack = getCreditPack(String(form.get("packId") ?? "credits_10"));
+  if (mode !== "pack") return NextResponse.json({ error: "Invalid checkout mode" }, { status: 400 });
+
+  const pack = getCreditPack(String(form.get("packId") ?? "blue_starter"));
   if (!pack) return NextResponse.json({ error: "Invalid credit pack" }, { status: 400 });
   const price = process.env[pack.stripePriceEnv];
   if (!price) throw new Error(`${pack.stripePriceEnv} is required`);
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
     line_items: [{ price, quantity: 1 }],
     success_url: `${appUrl}/dashboard?checkout=success`,
     cancel_url: `${appUrl}/pricing`,
-    metadata: { userId: profile.id, kind: "credits", credits: String(pack.credits) }
+    metadata: { userId: profile.id, kind: "pack", packId: pack.id }
   });
 
   return NextResponse.redirect(session.url!, 303);

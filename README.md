@@ -60,9 +60,14 @@ LoRA training is webhook-driven because fal.ai training takes longer than Vercel
 Credit pack and plan metadata live in [lib/stripe/pricing.ts](./lib/stripe/pricing.ts). Create matching Stripe Prices and put their IDs in `.env.local`:
 
 ```bash
-STRIPE_PRICE_ID_CREDITS_10=
-STRIPE_PRICE_ID_CREDITS_50=
-STRIPE_PRICE_ID_PRO_MONTHLY=
+STRIPE_PRICE_ID_SUB_LITE=
+STRIPE_PRICE_ID_SUB_PRO=
+STRIPE_PRICE_ID_SUB_STUDIO=
+STRIPE_PRICE_ID_BLUE_STARTER=
+STRIPE_PRICE_ID_BLUE_POPULAR=
+STRIPE_PRICE_ID_BLUE_BEST_VALUE=
+STRIPE_PRICE_ID_GOLD_SINGLE=
+STRIPE_PRICE_ID_GOLD_TRIPLE=
 ```
 
 Webhook endpoint:
@@ -80,7 +85,7 @@ Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe even
 - Generated files live in Supabase Storage. Headshot result URLs are normalized and served back to authenticated users as short-lived signed URLs through `/api/jobs/[id]/signed-urls`.
 - `/api/health` is protected in production with `HEALTHCHECK_SECRET`; call it with `Authorization: Bearer <secret>`.
 - Public auth/session debug endpoints are not part of the template.
-- Credit debits, purchases, subscription grants, and refunds are recorded in `transactions`.
+- Blue/gold credit debits, purchases, subscription grants, and refunds are recorded in `transactions`.
 - Rotate every secret before creating a new product from this repo.
 
 ## Deploy to Vercel

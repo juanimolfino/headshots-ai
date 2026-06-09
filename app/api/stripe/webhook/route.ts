@@ -5,6 +5,24 @@ import { getDb } from "@/lib/db";
 import { addCredits } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
 import { getStripe } from "@/lib/stripe/client";
+import { getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
+
+async function getCheckoutSessionPrice(sessionId: string) {
+  const lineItems = await getStripe().checkout.sessions.listLineItems(sessionId, {
+    limit: 1,
+    expand: ["data.price"]
+  });
+  return lineItems.data[0]?.price ?? null;
+}
+
+async function getSubscriptionWithPrice(subscriptionId: string) {
+  return getStripe().subscriptions.retrieve(subscriptionId, {
+    expand: ["items.data.price"]
+  }) as Promise<Stripe.Subscription & {
+    current_period_start?: number;
+    current_period_end?: number;
+  }>;
+}
 
 export async function POST(request: Request) {
   const payload = await request.text();
@@ -25,12 +43,17 @@ export async function POST(request: Request) {
     if (userId && session.customer) {
       await getDb().update(users).set({ stripeCustomerId: String(session.customer) }).where(eq(users.id, userId));
     }
-    if (userId && session.metadata?.kind === "credits") {
-      await addCredits(userId, Number(session.metadata.credits ?? 0), {
-        kind: "credits",
-        checkoutSessionId: session.id,
-        amountCents: session.amount_total ?? 0
-      }, event.id);
+    if (userId && session.mode === "payment") {
+      const price = await getCheckoutSessionPrice(session.id);
+      const grant = parseStripeCreditGrant(price?.metadata ?? {});
+      if (grant?.kind === "pack") {
+        await addCredits(userId, { blue: grant.blue, gold: grant.gold }, {
+          kind: "pack",
+          checkoutSessionId: session.id,
+          priceId: price?.id,
+          amountCents: session.amount_total ?? 0
+        }, event.id);
+      }
     }
   }
 
@@ -40,27 +63,30 @@ export async function POST(request: Request) {
     };
     const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
     if (subscriptionId) {
-      const subscription = (await getStripe().subscriptions.retrieve(subscriptionId)) as Stripe.Subscription & {
-        current_period_start?: number;
-        current_period_end?: number;
-      };
+      const subscription = await getSubscriptionWithPrice(subscriptionId);
       const userId = subscription.metadata.userId;
       if (userId) {
-        const credits = Number(process.env.PRO_MONTHLY_CREDITS ?? 100);
+        const price = subscription.items.data[0]?.price ?? null;
+        const grant = parseStripeCreditGrant(price?.metadata ?? {});
+        if (!grant || grant.kind !== "subscription") {
+          return NextResponse.json({ received: true });
+        }
+        const plan = getPlanByStripePriceId(price?.id);
         const periodStart = subscription.current_period_start
           ? new Date(subscription.current_period_start * 1000)
           : null;
         const periodEnd = subscription.current_period_end
           ? new Date(subscription.current_period_end * 1000)
           : null;
-        await addCredits(userId, credits, {
+        await addCredits(userId, { blue: grant.blue, gold: grant.gold }, {
           kind: "subscription",
           subscriptionId,
+          priceId: price?.id,
           amountCents: invoice.amount_paid
         }, event.id);
         await getDb().insert(subscriptions).values({
           userId,
-          plan: subscription.metadata.plan ?? "pro",
+          plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
           status: subscription.status,
           stripeSubscriptionId: subscription.id,
           currentPeriodStart: periodStart,
