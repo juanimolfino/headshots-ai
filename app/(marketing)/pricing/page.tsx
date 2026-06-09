@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CheckCircle2, CreditCard, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CREDIT_PACKS, PLANS } from "@/lib/stripe/pricing";
+import { BLUE_PACKS, GOLD_PACKS, SUBSCRIPTION_PLANS } from "@/lib/stripe/pricing";
 
 export const metadata = { title: "Pricing" };
 
@@ -13,15 +13,15 @@ export default function PricingPage() {
         <div>
           <h1 className="font-serif text-4xl font-medium tracking-[-0.02em] text-ink">Pricing</h1>
           <p className="mt-3 max-w-2xl text-ink-soft">
-            Sell monthly plans and non-expiring credit packs at the same time.
+            Monthly plans include model training and image credits. Packs never expire.
           </p>
         </div>
         <Button asChild variant="pillGhost" size="pillSm">
           <Link href="/dashboard">Back to dashboard</Link>
         </Button>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {PLANS.map((plan) => {
+      <div className="grid gap-4 md:grid-cols-3">
+        {SUBSCRIPTION_PLANS.map((plan) => {
           const isPro = plan.id === "pro";
           return (
             <section
@@ -60,36 +60,51 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              {isPro ? (
-                <form action="/api/stripe/checkout" method="post" className="mt-6">
-                  <input type="hidden" name="mode" value="subscription" />
-                  <Button type="submit" variant="pillGold" size="pill" className="w-full">
-                    <CreditCard className="h-4 w-4" />
-                    Upgrade to Pro
-                  </Button>
-                </form>
-              ) : (
-                <Button disabled variant="pillGhost" size="pill" className="mt-6 w-full">
-                  Current starter plan
+              <form action="/api/stripe/checkout" method="post" className="mt-6">
+                <input type="hidden" name="mode" value="subscription" />
+                <input type="hidden" name="planId" value={plan.id} />
+                <Button type="submit" variant={isPro ? "pillGold" : "pill"} size="pill" className="w-full">
+                  <CreditCard className="h-4 w-4" />
+                  Subscribe to {plan.name}
                 </Button>
-              )}
+              </form>
             </section>
           );
         })}
       </div>
-      <h2 className="mt-12 font-serif text-2xl font-medium">Credit packs</h2>
+      <h2 className="mt-12 font-serif text-2xl font-medium">Blue credit packs</h2>
       <div className="mt-4 grid gap-4 md:grid-cols-3">
-        {CREDIT_PACKS.map((pack) => (
+        {BLUE_PACKS.map((pack) => (
           <section key={pack.id} className="rounded-plan border border-line bg-surface p-6">
-            <h3 className="font-serif text-xl font-medium">{pack.credits} credits</h3>
+            <h3 className="font-serif text-xl font-medium">{pack.blue} blue credits</h3>
             <p className="mt-2 font-serif text-4xl font-medium tracking-[-0.02em]">${pack.price}</p>
-            <p className="mt-3 text-sm text-ink-soft">Credits do not expire.</p>
+            <p className="mt-3 text-sm text-ink-soft">For generation and quick edits. Credits do not expire.</p>
             <form action="/api/stripe/checkout" method="post" className="mt-6">
-              <input type="hidden" name="mode" value="credits" />
+              <input type="hidden" name="mode" value="pack" />
               <input type="hidden" name="packId" value={pack.id} />
               <Button type="submit" variant="pill" size="pill" className="w-full">
                 <Wallet className="h-4 w-4" />
-                Buy {pack.credits} credits
+                Buy {pack.blue} blue
+              </Button>
+            </form>
+          </section>
+        ))}
+      </div>
+      <h2 className="mt-12 font-serif text-2xl font-medium">Gold credit packs</h2>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {GOLD_PACKS.map((pack) => (
+          <section key={pack.id} className="rounded-plan border border-line bg-surface p-6">
+            <h3 className="font-serif text-xl font-medium">
+              {pack.gold} gold {pack.gold === 1 ? "credit" : "credits"}
+            </h3>
+            <p className="mt-2 font-serif text-4xl font-medium tracking-[-0.02em]">${pack.price}</p>
+            <p className="mt-3 text-sm text-ink-soft">For training personal LoRA models. Credits do not expire.</p>
+            <form action="/api/stripe/checkout" method="post" className="mt-6">
+              <input type="hidden" name="mode" value="pack" />
+              <input type="hidden" name="packId" value={pack.id} />
+              <Button type="submit" variant="pillGold" size="pill" className="w-full">
+                <Wallet className="h-4 w-4" />
+                Buy {pack.gold} gold
               </Button>
             </form>
           </section>

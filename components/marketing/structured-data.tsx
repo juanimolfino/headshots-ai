@@ -24,19 +24,19 @@ export function StructuredData() {
       {
         "@type": "Offer",
         name: PLANS.starter.name,
-        price: "5.90",
+        price: "7.99",
         priceCurrency: "USD",
         description:
-          "20 blue credits, generic AI generation, 3 styles, high-resolution download.",
+          "Monthly plan with 1 golden credit to train a personal model and 30 blue credits for headshots and edits.",
         availability: "https://schema.org/InStock",
       },
       {
         "@type": "Offer",
         name: PLANS.pro.name,
-        price: "11.90",
+        price: "14.99",
         priceCurrency: "USD",
         description:
-          "1 golden credit to train a personal model plus 20 blue credits to generate headshots of your face.",
+          "Monthly plan with 2 golden credits to train personal models and 70 blue credits for headshots and edits.",
         availability: "https://schema.org/InStock",
       },
     ],

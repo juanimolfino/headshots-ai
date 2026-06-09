@@ -214,7 +214,7 @@ export default function LandingPage() {
           <div className="wrap">
             <Reveal className="sec-head center">
               <Eyebrow>Pricing</Eyebrow>
-              <h2 id="pricing-h2">Simple, one-time pricing. No subscriptions.</h2>
+              <h2 id="pricing-h2">Monthly plans, plus credit packs when you need them.</h2>
             </Reveal>
 
             <div className="price-grid">
@@ -229,7 +229,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Button asChild variant="pillGhost" size="pill" className="w-full">
-                  <Link href="/login">
+                  <Link href="/pricing">
                     {PLANS.starter.cta} <ButtonArrow />
                   </Link>
                 </Button>
@@ -249,7 +249,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Button asChild variant="pillGold" size="pill" className="w-full">
-                  <Link href="/login">
+                  <Link href="/pricing">
                     {PLANS.pro.cta} <ButtonArrow />
                   </Link>
                 </Button>

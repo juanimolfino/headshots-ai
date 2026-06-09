@@ -36,8 +36,9 @@ import { cn } from "@/lib/utils";
 
 const MIN_PHOTOS = 10;
 const MAX_PHOTOS = 15;
-const QUICK_MIN_PHOTOS = 4;
-const TRAINING_CREDITS = 15;
+const QUICK_MIN_PHOTOS = 1;
+const QUICK_MAX_PHOTOS = 4;
+const TRAINING_GOLD_CREDITS = 1;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 8000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -89,6 +90,12 @@ const ATTIRE_COLORS = [
   { label: "Red", value: "red", hex: "#dc2626" },
   { label: "Green", value: "emerald green", hex: "#059669" },
   { label: "Beige", value: "beige", hex: "#d4b896" }
+] as const;
+
+const QUICK_QUALITY_OPTIONS = [
+  { label: "Borrador", value: "low", blueCost: 1 },
+  { label: "Estándar", value: "medium", blueCost: 2 },
+  { label: "Premium HD", value: "high", blueCost: 3 }
 ] as const;
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -256,7 +263,7 @@ export function HeadshotsApp({
   initialCredits
 }: {
   userEmail: string;
-  initialCredits: number;
+  initialCredits: { blue: number; gold: number };
 }) {
   // Models
   const [trainedModels, setTrainedModels] = useState<TrainingJob[]>([]);
@@ -549,12 +556,12 @@ export function HeadshotsApp({
         previewUrl: URL.createObjectURL(file)
       });
     }
-    const slots = MAX_PHOTOS - quickPhotos.length;
+    const slots = QUICK_MAX_PHOTOS - quickPhotos.length;
     const toAdd = accepted.slice(0, Math.max(slots, 0));
     for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
     const skipped = accepted.length - toAdd.length;
     setQuickPhotos(prev => [...prev, ...toAdd]);
-    if (skipped > 0) setQuickMessage(`You can upload up to ${MAX_PHOTOS} photos.`);
+    if (skipped > 0) setQuickMessage(`You can upload up to ${QUICK_MAX_PHOTOS} reference photos.`);
     else if (errors[0]) setQuickMessage(errors[0]);
   }
 
@@ -830,7 +837,7 @@ export function HeadshotsApp({
       <DashboardWorkspace
         mode={mode}
         userEmail={userEmail}
-        credits={{ blue: initialCredits, gold: Math.floor(initialCredits / TRAINING_CREDITS) }}
+        credits={initialCredits}
         models={trainedModels}
         loadingModels={loadingModels}
         selectedModel={selectedModel}
@@ -1106,7 +1113,7 @@ function NewModelPanel({
                 <p className="text-sm text-red-600">{formMessage}</p>
               ) : (
                 <p className="text-sm text-ink-muted">
-                  Costs {TRAINING_CREDITS} credits · Takes 15–30 minutes.
+                  Costs {TRAINING_GOLD_CREDITS} gold credit · Takes 15–30 minutes.
                 </p>
               )}
             </div>
@@ -1173,6 +1180,8 @@ function QuickEditPanel({
   onCancel: () => void;
 }) {
   const isGenerating = !!generationJobId && !signedUrls && generationStatus !== "failed";
+  const qualityOption = QUICK_QUALITY_OPTIONS.find(option => option.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
+  const blueCost = qualityOption.blueCost * numImages;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -1289,9 +1298,9 @@ function QuickEditPanel({
             <div className="mb-5">
               <div className="mb-2 flex items-center justify-between">
                 <label className="text-sm font-medium text-ink-soft">
-                  Reference photos ({QUICK_MIN_PHOTOS}-{MAX_PHOTOS})
+                  Reference photos ({QUICK_MIN_PHOTOS}-{QUICK_MAX_PHOTOS})
                 </label>
-                <span className="text-sm text-ink-muted">{photos.length} / {MAX_PHOTOS}</span>
+                <span className="text-sm text-ink-muted">{photos.length} / {QUICK_MAX_PHOTOS}</span>
               </div>
               <button
                 type="button"
@@ -1352,17 +1361,17 @@ function QuickEditPanel({
               <div>
                 <p className="mb-2.5 text-sm font-medium text-ink-soft">Quality</p>
                 <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
-                  {(["low", "medium", "high"] as const).map(q => (
+                  {QUICK_QUALITY_OPTIONS.map(option => (
                     <button
-                      key={q}
+                      key={option.value}
                       type="button"
-                      onClick={() => onQualityChange(q)}
+                      onClick={() => onQualityChange(option.value)}
                       className={cn(
-                        "rounded-md px-4 py-1.5 text-sm font-medium capitalize transition-all",
-                        quality === q ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
+                        quality === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
                       )}
                     >
-                      {q}
+                      {option.label}
                     </button>
                   ))}
                 </div>
@@ -1385,7 +1394,7 @@ function QuickEditPanel({
                   ))}
                 </div>
                 <p className="mt-2 text-xs text-ink-muted">
-                  {numImages} {numImages === 1 ? "credit" : "credits"} · 1 credit per photo
+                  {blueCost} blue {blueCost === 1 ? "credit" : "credits"} · {qualityOption.label}
                 </p>
               </div>
             </div>

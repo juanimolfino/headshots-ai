@@ -99,25 +99,25 @@ export const HERO_SHOTS = [
 
 export const PLANS = {
   starter: {
-    name: "Starter",
-    price: "$5.90",
-    desc: "Try AI headshots fast, with no model training.",
+    name: "Lite",
+    price: "$7.99",
+    desc: "Start with one trained model and enough credits for a focused refresh.",
     features: [
-      { text: "20 blue credits", strong: " to generate images", lead: true },
-      { text: "Generic AI generation — no personal model" },
+      { text: "1 golden credit", strong: " to train your personal AI model", lead: true },
+      { text: "30 blue credits", strong: " for headshots and edits", lead: true },
       { text: "3 styles: professional, cinematic, natural" },
-      { text: "High-resolution download" },
+      { text: "Renews monthly" },
     ],
-    cta: "Get started",
+    cta: "View Lite",
   },
   pro: {
     name: "Pro",
-    price: "$11.90",
-    desc: "Headshots that actually look like you.",
+    price: "$14.99",
+    desc: "More model refreshes and image credits for active profiles.",
     features: [
-      { text: "1 golden credit", strong: " to train your personal AI model", lead: true },
-      { text: "20 blue credits", strong: " to generate headshots of your face", lead: true },
-      { text: "Everything in Starter" },
+      { text: "2 golden credits", strong: " to train personal AI models", lead: true },
+      { text: "70 blue credits", strong: " for headshots and edits", lead: true },
+      { text: "Everything in Lite" },
       { text: "Model trained on your photos — results look like you" },
     ],
     cta: "Go Pro",
@@ -125,8 +125,8 @@ export const PLANS = {
 };
 
 export const ADDONS = [
-  { text: "Need more images? ", strong: "+20 blue credits", price: "$4.90" },
-  { text: "Need another model? ", strong: "+1 golden credit", price: "$6.90" },
+  { text: "Need more images? ", strong: "+30 blue credits", price: "$4.99" },
+  { text: "Need another model? ", strong: "+1 golden credit", price: "$4.99" },
 ];
 
 export const FAQ = [
