@@ -19,6 +19,7 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
   "credit_refund",
   "signup_bonus"
 ]);
+export const creditKindEnum = pgEnum("credit_kind", ["blue", "gold"]);
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -33,7 +34,8 @@ export const users = pgTable("users", {
 export const credits = pgTable("credits", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
-  balance: integer("balance").default(0).notNull(),
+  blueBalance: integer("blue_balance").default(0).notNull(),
+  goldBalance: integer("gold_balance").default(0).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
 
@@ -61,6 +63,7 @@ export const jobs = pgTable("jobs", {
   result: jsonb("result").$type<unknown>(),
   error: text("error"),
   creditsUsed: integer("credits_used").notNull(),
+  creditKind: creditKindEnum("credit_kind").default("blue").notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
@@ -71,6 +74,7 @@ export const transactions = pgTable("transactions", {
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   type: transactionTypeEnum("type").notNull(),
   credits: integer("credits").notNull(),
+  creditKind: creditKindEnum("credit_kind").default("blue").notNull(),
   amountCents: integer("amount_cents"),
   stripeEventId: text("stripe_event_id").unique(),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
@@ -88,3 +92,4 @@ export type User = typeof users.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type JobType = typeof jobTypeEnum.enumValues[number];
 export type JobStatus = typeof jobStatusEnum.enumValues[number];
+export type CreditKind = typeof creditKindEnum.enumValues[number];
