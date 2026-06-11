@@ -60,7 +60,16 @@ export type DashboardMode = "model" | "new-model" | "quick-edit" | "loading" | "
 export type DashboardWorkspaceProps = {
   mode: DashboardMode;
   userEmail: string;
-  credits: { blue: number; gold: number };
+  credits: {
+    blue: number;
+    gold: number;
+    subscriptionBlue?: number;
+    subscriptionGold?: number;
+    packBlue?: number;
+    packGold?: number;
+    subscriptionCurrentPeriodEnd?: Date | string | null;
+    subscriptionStatus?: string;
+  };
   models: TrainingJobLike[];
   loadingModels: boolean;
   selectedModel: TrainingJobLike | null;
@@ -230,6 +239,7 @@ function DashboardSidebar({
         <div className="rounded-[14px] border border-white/[.07] bg-white/[.04] px-[13px] py-3">
           <CreditRow tone="blue" label="Blue credits" value={credits.blue} />
           <CreditRow tone="gold" label="Golden credits" value={credits.gold} />
+          <CreditBucketDetails credits={credits} />
           <Button asChild className="mt-[9px] h-auto w-full rounded-[10px] bg-white px-3 py-2.5 text-[13px] font-bold text-navy-sidebar hover:bg-[#eceae4]">
             <Link href="/pricing"><Wallet className="size-[15px]" />Buy credits</Link>
           </Button>
@@ -652,6 +662,26 @@ function CreditRow({ tone, label, value }: { tone: "blue" | "gold"; label: strin
   );
 }
 
+function CreditBucketDetails({ credits }: { credits: DashboardWorkspaceProps["credits"] }) {
+  const subscriptionTotal = (credits.subscriptionBlue ?? 0) + (credits.subscriptionGold ?? 0);
+  const packTotal = (credits.packBlue ?? 0) + (credits.packGold ?? 0);
+  if (subscriptionTotal === 0 && packTotal === 0) return null;
+
+  const expires = credits.subscriptionCurrentPeriodEnd ? formatShortDate(credits.subscriptionCurrentPeriodEnd) : null;
+  return (
+    <div className="mt-1 border-t border-white/[.06] pt-2 text-[11.5px] leading-relaxed text-[#8b93ad]">
+      {subscriptionTotal > 0 ? (
+        <div>
+          {credits.subscriptionBlue ?? 0} blue / {credits.subscriptionGold ?? 0} gold expire{expires ? ` ${expires}` : " with plan"}
+        </div>
+      ) : null}
+      {packTotal > 0 ? (
+        <div>{credits.packBlue ?? 0} blue / {credits.packGold ?? 0} gold permanent</div>
+      ) : null}
+    </div>
+  );
+}
+
 function CreditDot({ tone }: { tone: "blue" | "gold" }) {
   return <span className={cn("size-[9px] shrink-0 rounded-full", tone === "blue" ? "bg-blue" : "bg-gold")} />;
 }
@@ -719,6 +749,13 @@ function formatDate(value: string) {
     day: "2-digit",
     month: "short",
     year: "numeric"
+  });
+}
+
+function formatShortDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short"
   });
 }
 
