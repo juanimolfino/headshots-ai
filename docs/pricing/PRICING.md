@@ -72,7 +72,8 @@ sin mejorar el resultado y rompe el margen.
 
 ## 4. Sistema de DOS créditos: Gold y Blue
 
-La DB hoy tiene un solo `credits.balance`. **Migrar a dos balances separados.**
+La DB separa el color del crédito (Gold/Blue) de su origen contable
+(suscripción/pack).
 
 ### 🟡 GOLD — solo para TRAINING
 - 1 gold = entrenar 1 modelo (LoRA). La LoRA queda guardada para siempre.
@@ -82,6 +83,56 @@ La DB hoy tiene un solo `credits.balance`. **Migrar a dos balances separados.**
 ### 🔵 BLUE — para GENERACIÓN y EDICIÓN
 - Valor ancla: **1 blue ≈ $0.15 neto** (después de Stripe).
 - Consumo según operación (ver tabla §5).
+
+### Bolsas de crédito
+
+La tabla `credits` mantiene 4 bolsas:
+
+| Bolsa | Color | Origen | Vence |
+|-------|-------|--------|-------|
+| `subscription_blue_balance` | Blue | Suscripción mensual | Sí, al final del período |
+| `subscription_gold_balance` | Gold | Suscripción mensual | Sí, al final del período |
+| `pack_blue_balance` | Blue | Packs one-time / signup | No |
+| `pack_gold_balance` | Gold | Packs one-time / signup | No |
+
+Campos de control:
+- `subscription_current_period_end`: fin del período Stripe vigente.
+- `subscription_status`: `active`, `past_due`, `canceled` o `none`.
+
+Saldo mostrado al usuario:
+
+```ts
+blue = usable(subscription_blue_balance) + pack_blue_balance
+gold = usable(subscription_gold_balance) + pack_gold_balance
+```
+
+`usable(subscription_*)` solo cuenta si:
+- `subscription_status === "active"`
+- `subscription_current_period_end` es `null` o mayor/igual a `now()`
+
+### Regla de renovación vs packs
+
+- Suscripción: en cada `invoice.paid`, la bolsa mensual **se reemplaza**, no se suma.
+  Ejemplo Pro: `subscription_blue_balance = 70`,
+  `subscription_gold_balance = 2`.
+- Pack: en cada compra one-time, la bolsa permanente **se suma**.
+  Ejemplo Blue Starter: `pack_blue_balance += 30`.
+- Los saldos antiguos migrados desde `blue_balance` / `gold_balance` pasan a
+  `pack_blue_balance` / `pack_gold_balance` para no vencer créditos existentes.
+
+### Prioridad de consumo
+
+Al crear un job, el gasto descuenta primero de la bolsa de suscripción y después
+de pack. Esto preserva los créditos permanentes.
+
+Ejemplo: usuario con 10 blue de suscripción y 30 blue de pack genera 12 imágenes:
+
+```ts
+subscription_blue_balance -= 10
+pack_blue_balance -= 2
+```
+
+Los refunds devuelven a la misma bolsa desde la que se gastó originalmente.
 
 ---
 
@@ -197,6 +248,21 @@ Guardar en `metadata` de cada price para que el webhook acredite sin lógica har
 - `grants_blue`: cantidad de blue a acreditar (ej. `"30"`).
 - `kind`: `"subscription"` | `"pack"`.
 
+### Webhooks Stripe requeridos
+
+| Evento | Comportamiento |
+|--------|----------------|
+| `checkout.session.completed` | Solo acredita `mode=payment` de packs. Suma a `pack_*`. No acredita suscripciones. |
+| `invoice.paid` | Lee `grants_*` de la metadata del Price en los line items de la invoice. Reemplaza `subscription_*`, actualiza `subscription_current_period_end`, marca `subscription_status=active`. Cubre primer pago y renovaciones. |
+| `customer.subscription.updated` | Actualiza estado y período. Si `cancel_at_period_end=true`, mantiene `active` hasta `current_period_end`; no borra créditos. Cambios de plan se aplican en el próximo `invoice.paid`. |
+| `customer.subscription.deleted` | Marca `subscription_status=canceled` y pone `subscription_blue_balance=0`, `subscription_gold_balance=0`. No toca `pack_*`. |
+| `invoice.payment_failed` | Marca `subscription_status=past_due`. No borra créditos; Stripe puede mantener acceso durante el grace period. |
+
+Idempotencia:
+- `transactions.stripe_event_id` evita duplicar grants si Stripe reintenta un webhook.
+- `invoice.paid` puede reprocesarse sin sumar de más porque reemplaza la bolsa de suscripción.
+- Packs usan `checkout.session.completed` con `stripe_event_id` por color de crédito.
+
 
 
 - **Nunca cobrar menos de $4.99 por transacción.** En tickets de $1, Stripe se come ~33%.
@@ -216,8 +282,9 @@ Guardar en `metadata` de cada price para que el webhook acredite sin lógica har
 
 ## 9. TODO de implementación
 
-- [ ] Migrar DB: separar `credits.balance` en `blue_balance` y `gold_balance`.
-- [ ] `lib/stripe/pricing.ts`: reemplazar packs viejos por los de §6. Eliminar packs <$5.
+- [x] Migrar DB: separar colores y bolsas en `subscription_*` y `pack_*`.
+- [x] `lib/stripe/pricing.ts`: reemplazar packs viejos por los de §6. Eliminar packs <$5.
+- [x] Webhooks: packs suman; suscripción reemplaza; cancelación limpia solo bolsa de suscripción.
 - [ ] Backend: capear referencias a **máx 4** en `gpt-image-2/edit`.
 - [ ] Backend: fijar tamaño de output a `portrait_4_3` (768×1024).
 - [ ] Cobro por calidad en edit: low=1, medium=2, high=3 blue (ver §5).
