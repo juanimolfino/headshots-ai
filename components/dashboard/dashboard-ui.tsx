@@ -95,6 +95,7 @@ export type DashboardWorkspaceProps = {
   onAttireChange: (value: AttireValue) => void;
   onGenerate: () => void;
   onOpenImage: (url: string) => void;
+  onOpenGallery: (urls: string[]) => void;
 };
 
 const STYLE_OPTIONS = [
@@ -139,8 +140,79 @@ export function DashboardWorkspace(props: DashboardWorkspaceProps) {
       <DashboardSidebar {...props} />
       <main className="flex min-w-0 flex-1 flex-col bg-bg">
         <DashboardTopBar {...props} />
+        <MobileActionStrip {...props} />
         <DashboardContent {...props} />
       </main>
+    </div>
+  );
+}
+
+function MobileActionStrip({
+  userEmail,
+  models,
+  loadingModels,
+  selectedModelId,
+  onSelectModel,
+  onNewModel,
+  onQuickEdit
+}: DashboardWorkspaceProps) {
+  return (
+    <div className="hidden border-b border-line bg-navy-sidebar px-3 py-2 text-[#cfd3e0] max-[860px]:block">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {loadingModels ? (
+          <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 py-2 text-xs">
+            <Loader2 className="dsh-ring size-3.5" />
+            Loading
+          </span>
+        ) : (
+          models.map(model => {
+            const active = selectedModelId === model.id;
+            return (
+              <button
+                key={model.id}
+                type="button"
+                onClick={() => onSelectModel(model.id)}
+                className={cn(
+                  "dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-semibold",
+                  active ? "bg-white text-navy-sidebar" : "bg-white/[.06] text-[#cfd3e0]"
+                )}
+              >
+                <span className={cn("size-2 rounded-full", active ? "bg-ready" : "bg-[#697292]")} />
+                {getModelName(model)}
+              </button>
+            );
+          })
+        )}
+        <button
+          type="button"
+          onClick={onNewModel}
+          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0]"
+        >
+          <Plus className="size-4" />
+          New
+        </button>
+        <button
+          type="button"
+          onClick={onQuickEdit}
+          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0]"
+        >
+          <Images className="size-4" />
+          Quick
+        </button>
+        <Button asChild className="h-10 shrink-0 rounded-lg bg-white px-3 text-[13px] font-bold text-navy-sidebar hover:bg-[#eceae4]">
+          <Link href="/pricing"><Wallet className="size-4" />Credits</Link>
+        </Button>
+        <form action="/logout" method="post" className="shrink-0">
+          <button
+            type="submit"
+            className="dsh-focus inline-flex h-10 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0]"
+            aria-label={`Sign out ${userEmail}`}
+          >
+            <LogOut className="size-4" />
+            Logout
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -389,7 +461,7 @@ function GenerationCard(props: DashboardWorkspaceProps) {
   );
 }
 
-function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspaceProps) {
+function RecentList({ activeGenerationJob, jobs, onOpenImage, onOpenGallery }: DashboardWorkspaceProps) {
   const doneJobs = jobs.filter(job => job.status === "done").slice(0, 3);
   return (
     <section className="flex flex-col gap-[11px]" aria-label="Recent generations">
@@ -400,7 +472,14 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspa
         </button>
       </div>
       {activeGenerationJob ? <RunningGenerationRow job={activeGenerationJob} /> : null}
-      {doneJobs.map(job => <DoneGenerationRow key={job.id} job={job} onOpenImage={onOpenImage} />)}
+      {doneJobs.map(job => (
+        <DoneGenerationRow
+          key={job.id}
+          job={job}
+          onOpenImage={onOpenImage}
+          onOpenGallery={onOpenGallery}
+        />
+      ))}
     </section>
   );
 }
@@ -424,7 +503,15 @@ function RunningGenerationRow({ job }: { job: ActiveGenerationJob }) {
   );
 }
 
-function DoneGenerationRow({ job, onOpenImage }: { job: GenerateJobLike; onOpenImage: (url: string) => void }) {
+function DoneGenerationRow({
+  job,
+  onOpenImage,
+  onOpenGallery
+}: {
+  job: GenerateJobLike;
+  onOpenImage: (url: string) => void;
+  onOpenGallery: (urls: string[]) => void;
+}) {
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -466,7 +553,14 @@ function DoneGenerationRow({ job, onOpenImage }: { job: GenerateJobLike; onOpenI
           <button type="button" aria-label="Download" onClick={() => void downloadAll(urls)} className="dsh-focus rounded-lg p-1.5 text-ink-soft hover:bg-bg-2 hover:text-ink">
             <Download className="size-4" />
           </button>
-          <button type="button" onClick={() => urls[0] && onOpenImage(urls[0])} className="dsh-focus rounded-lg border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink hover:border-ink">
+          <button
+            type="button"
+            onClick={() => {
+              if (urls.length > 1) onOpenGallery(urls);
+              else if (urls[0]) onOpenImage(urls[0]);
+            }}
+            className="dsh-focus rounded-lg border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink hover:border-ink"
+          >
             View
           </button>
         </div>
