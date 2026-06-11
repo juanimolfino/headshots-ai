@@ -317,8 +317,6 @@ export function HeadshotsApp({
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
   const [signedUrlsKind, setSignedUrlsKind] = useState<GenerationJobKind | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
-  const [galleryUrls, setGalleryUrls] = useState<string[] | null>(null);
-  const [galleryImageUrl, setGalleryImageUrl] = useState<string | null>(null);
   const [generationElapsed, setGenerationElapsed] = useState(0);
   const [generationCreatedAt, setGenerationCreatedAt] = useState<string | null>(null);
   const generationStartRef = useRef<number | null>(null);
@@ -495,8 +493,6 @@ export function HeadshotsApp({
     setSignedUrls(null);
     setSignedUrlsKind(null);
     setSelectedImageUrl(null);
-    setGalleryUrls(null);
-    setGalleryImageUrl(null);
     setGenerationElapsed(0);
     setGenerationCreatedAt(null);
     generationStartRef.current = null;
@@ -917,21 +913,7 @@ export function HeadshotsApp({
         onAttireChange={v => { setAttireType(v); setAttireColor(null); }}
         onGenerate={() => void startGeneration()}
         onOpenImage={setSelectedImageUrl}
-        onOpenGallery={setGalleryUrls}
       />
-      {galleryUrls ? (
-        <ResultGalleryModal
-          urls={galleryUrls}
-          selectedUrl={galleryImageUrl}
-          title="Generated headshots"
-          onSelect={setGalleryImageUrl}
-          onClose={() => {
-            setGalleryUrls(null);
-            setGalleryImageUrl(null);
-          }}
-          onCloseSelected={() => setGalleryImageUrl(null)}
-        />
-      ) : null}
       {selectedImageUrl && mode === "model" ? (
         <div
           role="dialog"
@@ -953,114 +935,6 @@ export function HeadshotsApp({
         </div>
       ) : null}
     </>
-  );
-}
-
-function ResultGalleryModal({
-  urls,
-  selectedUrl,
-  title,
-  onSelect,
-  onClose,
-  onCloseSelected
-}: {
-  urls: string[];
-  selectedUrl: string | null;
-  title: string;
-  onSelect: (url: string) => void;
-  onClose: () => void;
-  onCloseSelected: () => void;
-}) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">{title}</p>
-            <p className="mt-1 text-sm text-ink-soft">{urls.length} {urls.length === 1 ? "photo" : "photos"}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void downloadAll(urls)}
-              className="border-line text-ink-soft hover:bg-bg"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download all
-            </Button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-line text-ink-muted transition-colors hover:bg-bg hover:text-ink"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {urls.map((url, i) => (
-            <div key={url} className="overflow-hidden rounded-xl border border-line bg-surface">
-              <button
-                type="button"
-                onClick={() => onSelect(url)}
-                className="relative block aspect-square w-full bg-bg-2"
-              >
-                <img
-                  src={url}
-                  alt={`Generated headshot ${i + 1}`}
-                  className="h-full w-full object-cover transition-opacity hover:opacity-90"
-                />
-              </button>
-              <div className="flex items-center justify-between p-2.5">
-                <span className="text-xs font-medium text-ink-soft">#{i + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                  className="text-ink-muted transition-colors hover:text-ink-soft"
-                  aria-label="Download"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {selectedUrl ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
-          onClick={event => {
-            event.stopPropagation();
-            onCloseSelected();
-          }}
-        >
-          <div className="relative max-h-[92vh] max-w-5xl" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={onCloseSelected}
-              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 backdrop-blur-sm transition-colors hover:bg-white/20"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4 text-white" />
-            </button>
-            <img src={selectedUrl} alt="Generated headshot" className="max-h-[92vh] rounded-xl object-contain" />
-          </div>
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -2144,7 +2018,7 @@ function HistoryRow({
           <button
             type="button"
             onClick={() => {
-              if (window.confirm("Delete this result? The images are removed permanently.")) {
+              if (window.confirm("Are you sure you want to delete this result? The images will be removed permanently.")) {
                 onDelete(job.id);
               }
             }}

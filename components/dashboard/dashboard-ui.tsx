@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
   ChevronRight,
   Download,
   ImageIcon,
@@ -95,7 +96,6 @@ export type DashboardWorkspaceProps = {
   onAttireChange: (value: AttireValue) => void;
   onGenerate: () => void;
   onOpenImage: (url: string) => void;
-  onOpenGallery: (urls: string[]) => void;
 };
 
 const STYLE_OPTIONS = [
@@ -148,6 +148,7 @@ export function DashboardWorkspace(props: DashboardWorkspaceProps) {
 }
 
 function MobileActionStrip({
+  mode,
   userEmail,
   models,
   loadingModels,
@@ -166,7 +167,7 @@ function MobileActionStrip({
           </span>
         ) : (
           models.map(model => {
-            const active = selectedModelId === model.id;
+            const active = mode === "model" && selectedModelId === model.id;
             return (
               <button
                 key={model.id}
@@ -186,7 +187,10 @@ function MobileActionStrip({
         <button
           type="button"
           onClick={onNewModel}
-          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0]"
+          className={cn(
+            "dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-semibold",
+            mode === "new-model" ? "bg-white text-navy-sidebar" : "bg-white/[.06] text-[#cfd3e0]"
+          )}
         >
           <Plus className="size-4" />
           New
@@ -194,7 +198,10 @@ function MobileActionStrip({
         <button
           type="button"
           onClick={onQuickEdit}
-          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0]"
+          className={cn(
+            "dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-semibold",
+            mode === "quick-edit" ? "bg-white text-navy-sidebar" : "bg-white/[.06] text-[#cfd3e0]"
+          )}
         >
           <Images className="size-4" />
           Quick
@@ -461,7 +468,7 @@ function GenerationCard(props: DashboardWorkspaceProps) {
   );
 }
 
-function RecentList({ activeGenerationJob, jobs, onOpenImage, onOpenGallery }: DashboardWorkspaceProps) {
+function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspaceProps) {
   const doneJobs = jobs.filter(job => job.status === "done").slice(0, 3);
   return (
     <section className="flex flex-col gap-[11px]" aria-label="Recent generations">
@@ -473,11 +480,10 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage, onOpenGallery }: D
       </div>
       {activeGenerationJob ? <RunningGenerationRow job={activeGenerationJob} /> : null}
       {doneJobs.map(job => (
-        <DoneGenerationRow
+        <GenerationHistoryRow
           key={job.id}
           job={job}
           onOpenImage={onOpenImage}
-          onOpenGallery={onOpenGallery}
         />
       ))}
     </section>
@@ -503,15 +509,14 @@ function RunningGenerationRow({ job }: { job: ActiveGenerationJob }) {
   );
 }
 
-function DoneGenerationRow({
+function GenerationHistoryRow({
   job,
-  onOpenImage,
-  onOpenGallery
+  onOpenImage
 }: {
   job: GenerateJobLike;
   onOpenImage: (url: string) => void;
-  onOpenGallery: (urls: string[]) => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
 
   useEffect(() => {
@@ -534,37 +539,96 @@ function DoneGenerationRow({
   const style = typeof input?.style === "string" ? input.style : "professional";
   const count = typeof input?.num_images === "number" ? input.num_images : signedUrls?.length ?? 1;
   const background = typeof input?.background === "string" ? input.background : null;
-  const urls = signedUrls ?? [];
+  const thumbnails = signedUrls?.slice(0, 4) ?? [];
+  const date = formatDate(job.completedAt ?? job.createdAt);
 
   return (
-    <div className="flex items-center gap-4 rounded-[14px] border border-line bg-surface px-4 py-[13px]">
-      <div className="relative size-14 shrink-0 overflow-hidden rounded-[9px]">
-        <ThumbGrid urls={urls} loading={signedUrls === null} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[14.5px] font-bold text-ink">{styleLabel(style)} · {count} {count === 1 ? "photo" : "photos"}</div>
-        <div className="text-[12.5px] text-ink-muted">{formatBackground(background)} · {formatDate(job.completedAt ?? job.createdAt)}</div>
-      </div>
-      <div className="flex flex-col items-end gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-ready-line bg-ready-bg px-[11px] py-1 text-xs font-semibold text-[#3a6b4f]">
-          <span className="size-[7px] rounded-full bg-ready" />Ready
-        </span>
-        <div className="flex items-center gap-1.5">
-          <button type="button" aria-label="Download" onClick={() => void downloadAll(urls)} className="dsh-focus rounded-lg p-1.5 text-ink-soft hover:bg-bg-2 hover:text-ink">
-            <Download className="size-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (urls.length > 1) onOpenGallery(urls);
-              else if (urls[0]) onOpenImage(urls[0]);
-            }}
-            className="dsh-focus rounded-lg border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink hover:border-ink"
-          >
-            View
-          </button>
+    <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+      <button
+        type="button"
+        onClick={() => setIsExpanded(value => !value)}
+        className="dsh-focus flex w-full items-center gap-4 px-4 py-[13px] text-left transition hover:bg-bg"
+      >
+        <div className="flex size-14 shrink-0 gap-0.5 overflow-hidden rounded-[9px] bg-bg-2">
+          {signedUrls === null ? (
+            <PlaceholderThumb tone={0} />
+          ) : thumbnails.length <= 1 ? (
+            thumbnails[0] ? <img src={thumbnails[0]} alt="" className="size-full object-cover" /> : <PlaceholderThumb tone={0} />
+          ) : (
+            <div className="grid size-full grid-cols-2 gap-[3px]">
+              {Array.from({ length: 4 }).map((_, index) =>
+                thumbnails[index] ? <img key={thumbnails[index]} src={thumbnails[index]} alt="" className="size-full object-cover" /> : <PlaceholderThumb key={index} tone={index} />
+              )}
+            </div>
+          )}
         </div>
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14.5px] font-bold text-ink">{styleLabel(style)} · {count} {count === 1 ? "photo" : "photos"}</div>
+          <div className="text-[12.5px] text-ink-muted">{formatBackground(background)} · {date}</div>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-ink-muted transition-transform",
+            isExpanded && "rotate-180"
+          )}
+        />
+      </button>
+
+      {isExpanded ? (
+        <div className="border-t border-line p-4">
+          {signedUrls === null ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-ink-muted">
+              <Loader2 className="size-4 animate-spin" />
+              Loading
+            </div>
+          ) : signedUrls.length > 0 ? (
+            <>
+              <div className="mb-3 flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void downloadAll(signedUrls)}
+                  className="border-line text-ink-soft hover:bg-bg"
+                >
+                  <Download className="size-3.5" />
+                  Download all
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {signedUrls.map((url, i) => (
+                  <div key={url} className="overflow-hidden rounded-lg border border-line">
+                    <button
+                      type="button"
+                      onClick={() => onOpenImage(url)}
+                      className="block aspect-square w-full bg-bg-2"
+                    >
+                      <img
+                        src={url}
+                        alt={`Headshot ${i + 1}`}
+                        className="size-full object-cover transition-opacity hover:opacity-90"
+                      />
+                    </button>
+                    <div className="flex items-center justify-between p-2">
+                      <span className="text-xs text-ink-muted">#{i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
+                        className="text-ink-muted transition-colors hover:text-ink-soft"
+                        aria-label="Download"
+                      >
+                        <Download className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="py-1 text-sm text-ink-muted">Could not load photos.</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -780,20 +844,6 @@ function CreditDot({ tone }: { tone: "blue" | "gold" }) {
   return <span className={cn("size-[9px] shrink-0 rounded-full", tone === "blue" ? "bg-blue" : "bg-gold")} />;
 }
 
-function ThumbGrid({ urls, loading }: { urls: string[]; loading: boolean }) {
-  if (loading) return <PlaceholderThumb tone={0} />;
-  if (urls.length <= 1) {
-    return urls[0] ? <img src={urls[0]} alt="Generated headshot" className="size-full object-cover" /> : <PlaceholderThumb tone={0} />;
-  }
-  return (
-    <div className="grid size-full grid-cols-2 gap-[3px]">
-      {Array.from({ length: 4 }).map((_, index) =>
-        urls[index] ? <img key={urls[index]} src={urls[index]} alt={`Generated headshot ${index + 1}`} className="size-full rounded-md object-cover" /> : <PlaceholderThumb key={index} tone={index} />
-      )}
-    </div>
-  );
-}
-
 function PlaceholderThumb({ tone }: { tone: number }) {
   const colors = ["#dfe3ea", "#e7ddcd", "#dde6df", "#e8dde6"];
   return (
@@ -868,15 +918,19 @@ function formatElapsed(seconds: number) {
 
 async function downloadAll(urls: string[]) {
   for (let i = 0; i < urls.length; i++) {
-    const response = await fetch(urls[i]);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = `headshot-${i + 1}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    await downloadUrl(urls[i], `headshot-${i + 1}.jpg`);
   }
+}
+
+async function downloadUrl(url: string, filename: string) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }
