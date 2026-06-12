@@ -18,7 +18,7 @@ Production AI SaaS for professional headshots. Users upload photos, train a pers
 |---|---|---|---|
 | Train personal LoRA | `headshot-training` | fal.ai `fal-ai/flux-lora-portrait-trainer` | `lib/ai/providers/flux-lora-trainer.ts` |
 | Generate headshots from LoRA | `headshot-generate` | fal.ai `fal-ai/flux-lora` | `lib/ai/providers/flux-lora-generator.ts` |
-| Quick image edit | `headshot-edit` | fal.ai proxy `openai/gpt-image-2/edit` | `lib/ai/providers/gpt-image-edit.ts` |
+| Quick image edit | `headshot-edit` | fal.ai proxy `openai/gpt-image-2/edit` or fal.ai Nano Banana Pro `fal-ai/nano-banana-pro/edit` with direct Gemini fallback | `lib/ai/providers/gpt-image-edit.ts`, `lib/ai/providers/gemini-image-edit.ts` |
 | Text to speech | `tts` | OpenAI `gpt-4o-mini-tts` | `lib/ai/providers/openai-tts.ts` |
 
 `fal-ai/flux/schnell` exists as the generic `image` provider in `lib/ai/providers/fal.ts` and is registered in the provider map, but it is not an active product feature in the current UI flow.
@@ -49,7 +49,7 @@ Production AI SaaS for professional headshots. Users upload photos, train a pers
 7. LoRA persistence: worker downloads the `.safetensors` file, uploads it to R2 as `loras/{userId}/{jobId}/model.safetensors`, and stores `r2:loras/{userId}/{jobId}/model.safetensors` in `jobs.resultUrl` and `jobs.result.lora_url`.
 8. Generation: UI creates `headshot-generate` with `{ lora_url, trigger_word, style, num_images, background?, attire?, attire_color? }`.
 9. Worker signs LoRA URL, calls `fal.subscribe("fal-ai/flux-lora", ...)`, downloads generated URLs, uploads final JPGs to Supabase Storage at `headshots/{userId}/{jobId}/{index}.jpg`, and stores the URL array in `jobs.result`.
-10. Quick edit: UI uploads 4-15 reference images and creates `headshot-edit` with `{ image_urls, prompt, quality, num_images }`. Worker calls `openai/gpt-image-2/edit` through fal.ai and stores outputs like generated headshots.
+10. Quick edit: UI uploads 1-4 reference images and creates `headshot-edit` with `{ image_urls, prompt, engine, quality, image_size, num_images }`. Worker calls fal.ai `fal-ai/nano-banana-pro/edit` when `engine` is `gemini-3-pro-image`, then falls back to direct Gemini `gemini-3-pro-image` if fal.ai fails; otherwise it calls `openai/gpt-image-2/edit` through fal.ai. Outputs are stored like generated headshots.
 
 ## Generation Details
 

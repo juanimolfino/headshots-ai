@@ -13,10 +13,12 @@ import {
   Images,
   Loader2,
   LogOut,
+  Monitor,
   Pencil,
   Plus,
   RefreshCw,
   Sparkles,
+  Smartphone,
   Trash2,
   Upload,
   User,
@@ -93,9 +95,47 @@ const ATTIRE_COLORS = [
 ] as const;
 
 const QUICK_QUALITY_OPTIONS = [
-  { label: "Borrador", value: "low", blueCost: 1 },
-  { label: "Estándar", value: "medium", blueCost: 2 },
+  { label: "Draft", value: "low", blueCost: 1 },
+  { label: "Standard", value: "medium", blueCost: 2 },
   { label: "Premium HD", value: "high", blueCost: 3 }
+] as const;
+
+const QUICK_PRESET_OPTIONS = [
+  {
+    label: "Professional",
+    value: "professional" as const,
+    description: "Studio lighting, polished profile photo, clean business look.",
+    prompt:
+      "Create a professional headshot using these reference photos. Preserve the person's identity, facial features, and natural expression. Use clean studio lighting, realistic skin texture, a polished outfit, and a neutral background."
+  },
+  {
+    label: "Cinematic",
+    value: "cinematic" as const,
+    description: "Editorial lighting, richer contrast, modern portrait mood.",
+    prompt:
+      "Create a cinematic editorial headshot using these reference photos. Preserve the person's identity, facial features, and natural expression. Use dramatic but realistic lighting, refined contrast, shallow depth of field, and a polished modern portrait style."
+  },
+  {
+    label: "Free",
+    value: "free" as const,
+    description: "Write a custom prompt and tune the output settings.",
+    prompt: ""
+  }
+] as const;
+
+const QUICK_IMAGE_SIZE_OPTIONS = [
+  {
+    label: "Phone vertical",
+    value: "portrait_16_9" as const,
+    description: "9:16",
+    icon: Smartphone
+  },
+  {
+    label: "Desktop horizontal",
+    value: "landscape_16_9" as const,
+    description: "16:9",
+    icon: Monitor
+  }
 ] as const;
 
 const QUICK_ENGINE_OPTIONS = [
@@ -117,6 +157,8 @@ type StyleValue = "professional" | "cinematic" | "natural";
 type JobStatus = "pending" | "processing" | "done" | "failed";
 type GenerationJobKind = "generate" | "edit";
 type QuickEditEngine = (typeof QUICK_ENGINE_OPTIONS)[number]["value"];
+type QuickEditPreset = (typeof QUICK_PRESET_OPTIONS)[number]["value"];
+type QuickImageSize = (typeof QUICK_IMAGE_SIZE_OPTIONS)[number]["value"];
 
 type TrainingJob = {
   id: string;
@@ -319,10 +361,10 @@ export function HeadshotsApp({
 
   // Quick edit form
   const [quickPhotos, setQuickPhotos] = useState<SelectedPhoto[]>([]);
-  const [quickPrompt, setQuickPrompt] = useState(
-    "Create a professional headshot using these reference photos. Preserve the person's identity, facial features, and natural expression. Use clean studio lighting, realistic skin texture, a polished outfit, and a neutral background."
-  );
+  const [quickPreset, setQuickPreset] = useState<QuickEditPreset>("professional");
+  const [quickPrompt, setQuickPrompt] = useState<string>(QUICK_PRESET_OPTIONS[0].prompt);
   const [quickQuality, setQuickQuality] = useState<"low" | "medium" | "high">("low");
+  const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("portrait_16_9");
   const [quickEngine, setQuickEngine] = useState<QuickEditEngine>("gpt-image-2");
   const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
   const [quickUploading, setQuickUploading] = useState(false);
@@ -536,6 +578,18 @@ export function HeadshotsApp({
     setSelectedModelId(null);
     setShowNewModelForm(false);
     setShowQuickEditForm(true);
+  }
+
+  function handleQuickPresetChange(nextPreset: QuickEditPreset) {
+    setQuickPreset(nextPreset);
+    const preset = QUICK_PRESET_OPTIONS.find(option => option.value === nextPreset);
+    if (!preset) return;
+    if (nextPreset === "free") {
+      const fixedPrompts = new Set<string>(QUICK_PRESET_OPTIONS.map(option => option.prompt).filter(Boolean));
+      setQuickPrompt(prev => (fixedPrompts.has(prev) ? "" : prev));
+    } else {
+      setQuickPrompt(preset.prompt);
+    }
   }
 
   function resetGeneration() {
@@ -810,6 +864,7 @@ export function HeadshotsApp({
             prompt: quickPrompt.trim(),
             engine: quickEngine,
             quality: quickQuality,
+            image_size: quickImageSize,
             num_images: quickNumImages
           }
         })
@@ -857,8 +912,8 @@ export function HeadshotsApp({
           status: generationStatus,
           progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
           style,
-          title: generationJobKind === "edit" ? "GPT edit" : undefined,
-          count: numImages,
+          title: generationJobKind === "edit" ? "Quick edit" : undefined,
+          count: generationJobKind === "edit" ? quickNumImages : numImages,
           background,
           elapsed: generationElapsed,
           createdAt: generationCreatedAt ?? new Date().toISOString()
@@ -869,7 +924,7 @@ export function HeadshotsApp({
   const activeEditJob = editJobs.find(isActiveJob) ?? null;
   const activeTaskJob =
     activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob) :
-    activeEditJob ? toActiveGenerationJob(activeEditJob, "GPT edit") :
+    activeEditJob ? toActiveGenerationJob(activeEditJob, "Quick edit") :
     localActiveGenerationJob;
   const activeGenerationJob =
     activeSelectedModelJob ? toActiveGenerationJob(activeSelectedModelJob) :
@@ -932,9 +987,11 @@ export function HeadshotsApp({
         quickEditContent={
           <QuickEditPanel
             photos={quickPhotos}
+            preset={quickPreset}
             prompt={quickPrompt}
             engine={quickEngine}
             quality={quickQuality}
+            imageSize={quickImageSize}
             numImages={quickNumImages}
             uploading={quickUploading}
             message={quickMessage}
@@ -947,9 +1004,11 @@ export function HeadshotsApp({
             signedUrls={generationJobKind === "edit" && signedUrlsKind === "edit" ? signedUrls : null}
             selectedImageUrl={selectedImageUrl}
             fileInputRef={quickFileInputRef}
+            onPresetChange={handleQuickPresetChange}
             onPromptChange={setQuickPrompt}
             onEngineChange={setQuickEngine}
             onQualityChange={setQuickQuality}
+            onImageSizeChange={setQuickImageSize}
             onNumImagesChange={setQuickNumImages}
             onAddFiles={addQuickFiles}
             onRemovePhoto={removeQuickPhoto}
@@ -1187,9 +1246,11 @@ function NewModelPanel({
 
 function QuickEditPanel({
   photos,
+  preset,
   prompt,
   engine,
   quality,
+  imageSize,
   numImages,
   uploading,
   message,
@@ -1202,9 +1263,11 @@ function QuickEditPanel({
   signedUrls,
   selectedImageUrl,
   fileInputRef,
+  onPresetChange,
   onPromptChange,
   onEngineChange,
   onQualityChange,
+  onImageSizeChange,
   onNumImagesChange,
   onAddFiles,
   onRemovePhoto,
@@ -1215,9 +1278,11 @@ function QuickEditPanel({
   onCancel
 }: {
   photos: SelectedPhoto[];
+  preset: QuickEditPreset;
   prompt: string;
   engine: QuickEditEngine;
   quality: "low" | "medium" | "high";
+  imageSize: QuickImageSize;
   numImages: (typeof IMAGE_COUNTS)[number];
   uploading: boolean;
   message: string | null;
@@ -1230,9 +1295,11 @@ function QuickEditPanel({
   signedUrls: string[] | null;
   selectedImageUrl: string | null;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPresetChange: (v: QuickEditPreset) => void;
   onPromptChange: (v: string) => void;
   onEngineChange: (v: QuickEditEngine) => void;
   onQualityChange: (v: "low" | "medium" | "high") => void;
+  onImageSizeChange: (v: QuickImageSize) => void;
   onNumImagesChange: (v: (typeof IMAGE_COUNTS)[number]) => void;
   onAddFiles: (files: FileList | File[]) => void;
   onRemovePhoto: (id: string) => void;
@@ -1245,6 +1312,8 @@ function QuickEditPanel({
   const isGenerating = !!generationJobId && !signedUrls && generationStatus !== "failed";
   const qualityOption = QUICK_QUALITY_OPTIONS.find(option => option.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
   const blueCost = qualityOption.blueCost * numImages;
+  const selectedEngineLabel = QUICK_ENGINE_OPTIONS.find(option => option.value === engine)?.label ?? "Quick edit";
+  const resultAspectClass = imageSize === "landscape_16_9" ? "aspect-video" : "aspect-[9/16]";
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -1283,7 +1352,7 @@ function QuickEditPanel({
                 <Loader2 className="h-5 w-5 animate-spin text-ink-soft" />
               </div>
               <div>
-                <p className="font-medium text-ink">Generating with GPT Image 2...</p>
+                <p className="font-medium text-ink">Generating with {selectedEngineLabel}...</p>
                 <p className="mt-0.5 text-sm text-ink-muted">
                   {formatElapsed(generationElapsed)} · Usually finishes in about a minute
                 </p>
@@ -1323,13 +1392,13 @@ function QuickEditPanel({
                 Download all
               </Button>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={cn("grid gap-3", imageSize === "landscape_16_9" ? "lg:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4")}>
               {signedUrls.map((url, i) => (
                 <div key={url} className="overflow-hidden rounded-xl border border-line bg-surface">
                   <button
                     type="button"
                     onClick={() => onSelectImage(url)}
-                    className="relative block aspect-square w-full bg-bg-2"
+                    className={cn("relative block w-full bg-bg-2", resultAspectClass)}
                   >
                     <img
                       src={url}
@@ -1358,26 +1427,55 @@ function QuickEditPanel({
               Quick edit
             </p>
 
-            <div className="mb-5">
-              <p className="mb-2.5 text-sm font-medium text-ink-soft">Engine</p>
-              <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
-                {QUICK_ENGINE_OPTIONS.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      if (!option.disabled) onEngineChange(option.value);
-                    }}
-                    disabled={option.disabled}
-                    title={option.disabled ? "Coming soon" : undefined}
-                    className={cn(
-                      "rounded-md px-4 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-45",
-                      engine === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+            <div className="mb-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-ink-soft">Preset</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {QUICK_PRESET_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => onPresetChange(option.value)}
+                      className={cn(
+                        "relative min-h-32 rounded-lg border p-3.5 text-left transition-all",
+                        preset === option.value
+                          ? "border-navy bg-bg-2 text-ink shadow-sm"
+                          : "border-line bg-bg text-ink-soft hover:border-line-strong hover:bg-surface"
+                      )}
+                    >
+                      <span className="block pr-7 text-base font-semibold">{option.label}</span>
+                      <span className="mt-2 block text-sm leading-relaxed text-ink-muted">{option.description}</span>
+                      {preset === option.value ? (
+                        <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-navy text-navy-foreground">
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-ink-soft">Engine</p>
+                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
+                  {QUICK_ENGINE_OPTIONS.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        if (!option.disabled) onEngineChange(option.value);
+                      }}
+                      disabled={option.disabled}
+                      title={option.disabled ? "Coming soon" : undefined}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-45",
+                        engine === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1432,21 +1530,24 @@ function QuickEditPanel({
               )}
             </div>
 
-            <div className="mb-5">
-              <label className="mb-2 block text-sm font-medium text-ink-soft">Prompt</label>
-              <textarea
-                value={prompt}
-                onChange={e => onPromptChange(e.target.value)}
-                rows={5}
-                maxLength={2000}
-                className="w-full resize-none rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
-              />
-            </div>
+            {preset === "free" ? (
+              <div className="mb-5">
+                <label className="mb-2 block text-sm font-medium text-ink-soft">Prompt</label>
+                <textarea
+                  value={prompt}
+                  onChange={e => onPromptChange(e.target.value)}
+                  rows={5}
+                  maxLength={2000}
+                  placeholder="Describe the exact edit, setting, styling, crop, clothing, background, and mood."
+                  className="w-full resize-none rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
+                />
+              </div>
+            ) : null}
 
-            <div className="mb-6 grid gap-5 sm:grid-cols-2">
+            <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_1fr_1fr]">
               <div>
                 <p className="mb-2.5 text-sm font-medium text-ink-soft">Quality</p>
-                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
+                <div className="inline-flex max-w-full rounded-lg border border-line bg-bg p-0.5">
                   {QUICK_QUALITY_OPTIONS.map(option => (
                     <button
                       key={option.value}
@@ -1460,6 +1561,29 @@ function QuickEditPanel({
                       {option.label}
                     </button>
                   ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-ink-soft">Size</p>
+                <div className="inline-flex max-w-full rounded-lg border border-line bg-bg p-0.5">
+                  {QUICK_IMAGE_SIZE_OPTIONS.map(option => {
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onImageSizeChange(option.value)}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                          imageSize === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                        )}
+                        title={option.description}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>

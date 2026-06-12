@@ -8,7 +8,7 @@ Read [CONTEXT.md](./CONTEXT.md) before starting a new chat or implementation ses
 
 - `headshot-training`: fal.ai `fal-ai/flux-lora-portrait-trainer`
 - `headshot-generate`: fal.ai `fal-ai/flux-lora`
-- `headshot-edit`: fal.ai proxy `openai/gpt-image-2/edit`
+- `headshot-edit`: fal.ai proxy `openai/gpt-image-2/edit` or fal.ai Nano Banana Pro `fal-ai/nano-banana-pro/edit` with direct Gemini fallback
 - `tts`: OpenAI `gpt-4o-mini-tts`
 
 `fal-ai/flux/schnell` remains in the repo as a generic `image` provider, but it is not an active product feature in the current UI.

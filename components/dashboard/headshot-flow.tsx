@@ -797,7 +797,6 @@ function HeadshotHistorySection({
                   <div className="flex shrink-0 gap-1">
                     {thumbnailUrls.map((url, i) => (
                       <div key={i} className="h-12 w-12 shrink-0 overflow-hidden rounded bg-muted">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
                       </div>
                     ))}
@@ -833,7 +832,6 @@ function HeadshotHistorySection({
                           <div key={url} className="overflow-hidden rounded-lg border bg-background">
                             <button type="button" onClick={() => setSelectedImage(url)}
                               className="relative block aspect-square w-full bg-muted">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={url} alt={`Headshot ${i + 1}`} className="h-full w-full object-cover transition-opacity hover:opacity-90" />
                             </button>
                             <div className="flex items-center justify-between gap-2 p-2">
@@ -868,7 +866,6 @@ function HeadshotHistorySection({
               aria-label="Cerrar imagen">
               <X className="h-4 w-4" />
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={selectedImage} alt="Headshot seleccionado" className="max-h-[90vh] rounded-lg object-contain" />
           </div>
         </div>

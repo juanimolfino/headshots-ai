@@ -106,6 +106,7 @@ export const createJobSchema = z.discriminatedUnion("type", [
       prompt: z.string().min(10).max(2000),
       engine: z.enum(["gpt-image-2", "gemini-3-pro-image"]).default("gpt-image-2"),
       quality: z.enum(["low", "medium", "high"]).default("low"),
+      image_size: z.enum(["portrait_16_9", "landscape_16_9"]).default("portrait_16_9"),
       num_images: z.number().int().min(1).max(4).default(1)
     })
   })

@@ -137,6 +137,7 @@ describe("createJobSchema", () => {
       if (result.data.type !== "headshot-edit") throw new Error("Expected headshot-edit job");
       expect(result.data.input.engine).toBe("gpt-image-2");
       expect(result.data.input.quality).toBe("low");
+      expect(result.data.input.image_size).toBe("portrait_16_9");
       expect(result.data.input.num_images).toBe(1);
     }
   });
@@ -149,6 +150,7 @@ describe("createJobSchema", () => {
         prompt: "Create a polished professional headshot.",
         engine: "gemini-3-pro-image",
         quality: "low",
+        image_size: "landscape_16_9",
         num_images: 1
       }
     });
@@ -158,6 +160,7 @@ describe("createJobSchema", () => {
       expect(result.data.type).toBe("headshot-edit");
       if (result.data.type !== "headshot-edit") throw new Error("Expected headshot-edit job");
       expect(result.data.input.engine).toBe("gemini-3-pro-image");
+      expect(result.data.input.image_size).toBe("landscape_16_9");
     }
   });
 

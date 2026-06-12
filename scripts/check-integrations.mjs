@@ -28,6 +28,7 @@ const required = [
   "STRIPE_PRICE_ID_GOLD_SINGLE",
   "STRIPE_PRICE_ID_GOLD_TRIPLE",
   "FAL_KEY",
+  "GEMINI_API_KEY",
   "OPENAI_API_KEY",
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
@@ -145,6 +146,10 @@ await check("Resend API key can list domains", async () => {
 
 if (process.env.FAL_KEY) {
   ok("FAL_KEY present");
+}
+
+if (process.env.GEMINI_API_KEY) {
+  ok("GEMINI_API_KEY present for Nano Banana Pro fallback");
 }
 
 ok("Non-destructive checks finished");
