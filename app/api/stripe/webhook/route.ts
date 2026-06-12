@@ -4,8 +4,9 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { addPackCredits, replaceSubscriptionCredits, updateCreditSubscriptionState } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
+import { sendTelegramPaymentNotification } from "@/lib/notifications/telegram";
 import { getStripe } from "@/lib/stripe/client";
-import { getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
+import { getCreditPackByStripePriceId, getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
 
 async function getCheckoutSessionPrice(sessionId: string) {
   const lineItems = await getStripe().checkout.sessions.listLineItems(sessionId, {
@@ -147,6 +148,16 @@ async function getSubscriptionUserId(subscription: Stripe.Subscription) {
   return row?.userId ?? null;
 }
 
+async function getUserPaymentLabel(userId: string) {
+  return getDb().query.users.findFirst({
+    columns: {
+      email: true,
+      fullName: true
+    },
+    where: eq(users.id, userId)
+  });
+}
+
 async function upsertSubscriptionRow(input: {
   userId: string;
   subscription: SubscriptionWithPeriods;
@@ -197,12 +208,25 @@ export async function POST(request: Request) {
       const price = await getCheckoutSessionPrice(session.id);
       const grant = parseStripeCreditGrant(price?.metadata ?? {});
       if (grant?.kind === "pack") {
-        await addPackCredits(userId, { blue: grant.blue, gold: grant.gold }, {
+        const applied = await addPackCredits(userId, { blue: grant.blue, gold: grant.gold }, {
           kind: "pack",
           checkoutSessionId: session.id,
           priceId: price?.id,
           amountCents: session.amount_total ?? 0
         }, event.id);
+        if (applied) {
+          const customer = await getUserPaymentLabel(userId);
+          const pack = getCreditPackByStripePriceId(price?.id);
+          await sendTelegramPaymentNotification({
+            customerName: customer?.fullName,
+            customerEmail: customer?.email,
+            itemName: pack?.name ?? price?.nickname ?? price?.id ?? "Credit pack",
+            paymentType: "Pack",
+            amountCents: session.amount_total ?? 0,
+            currency: session.currency ?? price?.currency,
+            credits: { blue: grant.blue, gold: grant.gold }
+          });
+        }
       }
     }
   }
@@ -221,7 +245,7 @@ export async function POST(request: Request) {
         }
         const plan = getPlanByStripePriceId(price?.id);
         const periodEnd = subscriptionPeriodEnd(subscription, invoice);
-        await replaceSubscriptionCredits(userId, {
+        const applied = await replaceSubscriptionCredits(userId, {
           blue: grant.blue,
           gold: grant.gold,
           currentPeriodEnd: periodEnd,
@@ -232,6 +256,18 @@ export async function POST(request: Request) {
           priceId: price?.id,
           amountCents: invoice.amount_paid
         }, event.id);
+        if (applied) {
+          const customer = await getUserPaymentLabel(userId);
+          await sendTelegramPaymentNotification({
+            customerName: customer?.fullName,
+            customerEmail: customer?.email,
+            itemName: plan?.name ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "Subscription",
+            paymentType: "Subscription",
+            amountCents: invoice.amount_paid,
+            currency: invoice.currency ?? price?.currency,
+            credits: { blue: grant.blue, gold: grant.gold }
+          });
+        }
         await upsertSubscriptionRow({
           userId,
           subscription,

@@ -5,6 +5,7 @@ import {
   GOLD_PACKS,
   SUBSCRIPTION_PLANS,
   getCreditPack,
+  getCreditPackByStripePriceId,
   getSubscriptionPlan,
   parseStripeCreditGrant
 } from "@/lib/stripe/pricing";
@@ -29,6 +30,12 @@ describe("pricing config", () => {
     expect(getCreditPack("blue_popular")?.blue).toBe(70);
     expect(getCreditPack("gold_triple")?.gold).toBe(3);
     expect(getCreditPack("missing")).toBeUndefined();
+  });
+
+  it("finds credit packs by configured Stripe price id", () => {
+    process.env.STRIPE_PRICE_ID_BLUE_STARTER = "price_blue_starter";
+    expect(getCreditPackByStripePriceId("price_blue_starter")?.id).toBe("blue_starter");
+    expect(getCreditPackByStripePriceId("price_missing")).toBeUndefined();
   });
 
   it("parses Stripe price metadata grants", () => {

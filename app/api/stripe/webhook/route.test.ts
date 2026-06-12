@@ -10,6 +10,7 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain('event.type === "checkout.session.completed"');
     expect(source).toContain('session.mode === "payment"');
     expect(source).toContain("addPackCredits");
+    expect(source).toContain("getCreditPackByStripePriceId");
   });
 
   it("replaces subscription credits from invoice.paid instead of pack-additive grants", () => {
@@ -43,5 +44,12 @@ describe("Stripe webhook credit buckets", () => {
     expect(queries).toContain("onConflictDoNothing()");
     expect(queries).toContain("stripeEventId: stripeEventId ? `${stripeEventId}:subscription-blue`");
     expect(queries).toContain("stripeEventId: stripeEventId ? `${stripeEventId}:blue`");
+  });
+
+  it("sends Telegram payment alerts only after a credit grant is applied", () => {
+    expect(source).toContain("sendTelegramPaymentNotification");
+    expect(source).toContain("if (applied)");
+    expect(source).toContain('paymentType: "Pack"');
+    expect(source).toContain('paymentType: "Subscription"');
   });
 });

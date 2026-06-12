@@ -63,6 +63,11 @@ export function getPlanByStripePriceId(priceId: string | undefined) {
   return SUBSCRIPTION_PLANS.find((plan) => process.env[plan.stripePriceEnv] === priceId);
 }
 
+export function getCreditPackByStripePriceId(priceId: string | undefined) {
+  if (!priceId) return undefined;
+  return CREDIT_PACKS.find((pack) => process.env[pack.stripePriceEnv] === priceId);
+}
+
 export function parseStripeCreditGrant(metadata: Record<string, string | undefined>): StripeCreditGrant | null {
   const kind = metadata.kind;
   if (kind !== "subscription" && kind !== "pack") return null;
