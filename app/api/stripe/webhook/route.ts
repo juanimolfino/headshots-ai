@@ -15,21 +15,65 @@ async function getCheckoutSessionPrice(sessionId: string) {
   return lineItems.data[0]?.price ?? null;
 }
 
+type SubscriptionWithPeriods = Stripe.Subscription & {
+  current_period_start?: number;
+  current_period_end?: number;
+  items: Stripe.ApiList<Stripe.SubscriptionItem & {
+    current_period_start?: number;
+    current_period_end?: number;
+    price?: Stripe.Price;
+  }>;
+};
+
+type InvoiceWithSubscriptionDetails = Stripe.Invoice & {
+  subscription?: string | Stripe.Subscription | null;
+  parent?: {
+    subscription_details?: {
+      subscription?: string | Stripe.Subscription | null;
+      metadata?: Stripe.Metadata | null;
+    } | null;
+  } | null;
+  lines?: Stripe.ApiList<Stripe.InvoiceLineItem & {
+    price?: Stripe.Price | null;
+    pricing?: {
+      price_details?: {
+        price?: string | Stripe.Price | null;
+      } | null;
+    } | null;
+    parent?: {
+      subscription_item_details?: {
+        subscription?: string | null;
+      } | null;
+    } | null;
+  }>;
+};
+
+type InvoiceLineItemWithPrice = NonNullable<InvoiceWithSubscriptionDetails["lines"]>["data"][number];
+
 async function getSubscriptionWithPrice(subscriptionId: string) {
   return getStripe().subscriptions.retrieve(subscriptionId, {
     expand: ["items.data.price"]
-  }) as Promise<Stripe.Subscription & {
-    current_period_start?: number;
-    current_period_end?: number;
-  }>;
+  }) as Promise<SubscriptionWithPeriods>;
 }
 
-function subscriptionPeriodEnd(subscription: Stripe.Subscription & { current_period_end?: number }) {
-  return subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null;
+function unixTimestampDate(timestamp: number | null | undefined) {
+  return timestamp ? new Date(timestamp * 1000) : null;
 }
 
-function subscriptionPeriodStart(subscription: Stripe.Subscription & { current_period_start?: number }) {
-  return subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null;
+function subscriptionPeriodEnd(subscription: SubscriptionWithPeriods, invoice?: InvoiceWithSubscriptionDetails) {
+  return unixTimestampDate(
+    subscription.current_period_end ??
+    subscription.items.data[0]?.current_period_end ??
+    invoice?.lines?.data[0]?.period?.end
+  );
+}
+
+function subscriptionPeriodStart(subscription: SubscriptionWithPeriods, invoice?: InvoiceWithSubscriptionDetails) {
+  return unixTimestampDate(
+    subscription.current_period_start ??
+    subscription.items.data[0]?.current_period_start ??
+    invoice?.lines?.data[0]?.period?.start
+  );
 }
 
 function normalizeSubscriptionStatus(subscription: Stripe.Subscription) {
@@ -41,12 +85,58 @@ function normalizeSubscriptionStatus(subscription: Stripe.Subscription) {
   return "none";
 }
 
-function getInvoicePrice(invoice: Stripe.Invoice) {
-  const line = invoice.lines?.data.find((item) => {
-    const price = (item as Stripe.InvoiceLineItem & { price?: Stripe.Price | null }).price;
+function getSubscriptionIdFromValue(value: string | Stripe.Subscription | null | undefined) {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.id;
+}
+
+function getInvoiceSubscriptionId(invoice: InvoiceWithSubscriptionDetails) {
+  const lines = invoice.lines?.data as InvoiceLineItemWithPrice[] | undefined;
+  return (
+    getSubscriptionIdFromValue(invoice.subscription) ??
+    getSubscriptionIdFromValue(invoice.parent?.subscription_details?.subscription) ??
+    lines?.find((item) => item.parent?.subscription_item_details?.subscription)
+      ?.parent?.subscription_item_details?.subscription ??
+    null
+  );
+}
+
+function getPriceIdFromValue(value: string | Stripe.Price | null | undefined) {
+  if (!value) return null;
+  return typeof value === "string" ? value : value.id;
+}
+
+function getInvoicePrice(invoice: InvoiceWithSubscriptionDetails) {
+  const lines = invoice.lines?.data as InvoiceLineItemWithPrice[] | undefined;
+  const line = lines?.find((item) => {
+    const price = item.price ?? item.pricing?.price_details?.price;
     return Boolean(price);
   });
-  return (line as Stripe.InvoiceLineItem & { price?: Stripe.Price | null } | undefined)?.price ?? null;
+  const price = line?.price ?? line?.pricing?.price_details?.price ?? null;
+  return typeof price === "string" ? null : price;
+}
+
+function getInvoicePriceId(invoice: InvoiceWithSubscriptionDetails) {
+  const lines = invoice.lines?.data as InvoiceLineItemWithPrice[] | undefined;
+  const line = lines?.find((item) => {
+    const price = item.price ?? item.pricing?.price_details?.price;
+    return Boolean(price);
+  });
+  return getPriceIdFromValue(line?.price ?? line?.pricing?.price_details?.price ?? null);
+}
+
+async function resolveInvoicePrice(invoice: InvoiceWithSubscriptionDetails, subscription: SubscriptionWithPeriods) {
+  const invoicePrice = getInvoicePrice(invoice);
+  if (invoicePrice?.metadata?.kind) return invoicePrice;
+
+  const invoicePriceId = getInvoicePriceId(invoice);
+  const subscriptionPrice = subscription.items.data.find((item) => item.price?.id === invoicePriceId)?.price ??
+    subscription.items.data[0]?.price ??
+    null;
+  if (subscriptionPrice?.metadata?.kind) return subscriptionPrice;
+
+  if (invoicePriceId) return getStripe().prices.retrieve(invoicePriceId);
+  return null;
 }
 
 async function getSubscriptionUserId(subscription: Stripe.Subscription) {
@@ -59,24 +149,25 @@ async function getSubscriptionUserId(subscription: Stripe.Subscription) {
 
 async function upsertSubscriptionRow(input: {
   userId: string;
-  subscription: Stripe.Subscription & { current_period_start?: number; current_period_end?: number };
+  subscription: SubscriptionWithPeriods;
   plan: string;
+  invoice?: InvoiceWithSubscriptionDetails;
 }) {
   await getDb().insert(subscriptions).values({
     userId: input.userId,
     plan: input.plan,
     status: input.subscription.status,
     stripeSubscriptionId: input.subscription.id,
-    currentPeriodStart: subscriptionPeriodStart(input.subscription),
-    currentPeriodEnd: subscriptionPeriodEnd(input.subscription),
+    currentPeriodStart: subscriptionPeriodStart(input.subscription, input.invoice),
+    currentPeriodEnd: subscriptionPeriodEnd(input.subscription, input.invoice),
     cancelAtPeriodEnd: input.subscription.cancel_at_period_end
   }).onConflictDoUpdate({
     target: subscriptions.stripeSubscriptionId,
     set: {
       plan: input.plan,
       status: input.subscription.status,
-      currentPeriodStart: subscriptionPeriodStart(input.subscription),
-      currentPeriodEnd: subscriptionPeriodEnd(input.subscription),
+      currentPeriodStart: subscriptionPeriodStart(input.subscription, input.invoice),
+      currentPeriodEnd: subscriptionPeriodEnd(input.subscription, input.invoice),
       cancelAtPeriodEnd: input.subscription.cancel_at_period_end,
       updatedAt: new Date()
     }
@@ -117,21 +208,19 @@ export async function POST(request: Request) {
   }
 
   if (event.type === "invoice.paid") {
-    const invoice = event.data.object as Stripe.Invoice & {
-      subscription?: string | Stripe.Subscription | null;
-    };
-    const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+    const invoice = event.data.object as InvoiceWithSubscriptionDetails;
+    const subscriptionId = getInvoiceSubscriptionId(invoice);
     if (subscriptionId) {
       const subscription = await getSubscriptionWithPrice(subscriptionId);
       const userId = subscription.metadata.userId;
       if (userId) {
-        const price = getInvoicePrice(invoice) ?? subscription.items.data[0]?.price ?? null;
+        const price = await resolveInvoicePrice(invoice, subscription);
         const grant = parseStripeCreditGrant(price?.metadata ?? {});
         if (!grant || grant.kind !== "subscription") {
           return NextResponse.json({ received: true });
         }
         const plan = getPlanByStripePriceId(price?.id);
-        const periodEnd = subscriptionPeriodEnd(subscription);
+        const periodEnd = subscriptionPeriodEnd(subscription, invoice);
         await replaceSubscriptionCredits(userId, {
           blue: grant.blue,
           gold: grant.gold,
@@ -146,17 +235,15 @@ export async function POST(request: Request) {
         await upsertSubscriptionRow({
           userId,
           subscription,
-          plan: subscription.metadata.plan ?? plan?.id ?? "unknown"
+          plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
+          invoice
         });
       }
     }
   }
 
   if (event.type === "customer.subscription.updated") {
-    const subscription = event.data.object as Stripe.Subscription & {
-      current_period_start?: number;
-      current_period_end?: number;
-    };
+    const subscription = event.data.object as SubscriptionWithPeriods;
     const userId = await getSubscriptionUserId(subscription);
     if (userId) {
       const price = subscription.items.data[0]?.price ?? null;
@@ -175,10 +262,7 @@ export async function POST(request: Request) {
   }
 
   if (event.type === "customer.subscription.deleted") {
-    const subscription = event.data.object as Stripe.Subscription & {
-      current_period_start?: number;
-      current_period_end?: number;
-    };
+    const subscription = event.data.object as SubscriptionWithPeriods;
     const userId = await getSubscriptionUserId(subscription);
     if (userId) {
       await updateCreditSubscriptionState(userId, {
@@ -194,10 +278,8 @@ export async function POST(request: Request) {
   }
 
   if (event.type === "invoice.payment_failed") {
-    const invoice = event.data.object as Stripe.Invoice & {
-      subscription?: string | Stripe.Subscription | null;
-    };
-    const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+    const invoice = event.data.object as InvoiceWithSubscriptionDetails;
+    const subscriptionId = getInvoiceSubscriptionId(invoice);
     if (subscriptionId) {
       const subscription = await getSubscriptionWithPrice(subscriptionId);
       const userId = await getSubscriptionUserId(subscription);
@@ -209,7 +291,8 @@ export async function POST(request: Request) {
         await upsertSubscriptionRow({
           userId,
           subscription,
-          plan: subscription.metadata.plan ?? "unknown"
+          plan: subscription.metadata.plan ?? "unknown",
+          invoice
         });
       }
     }

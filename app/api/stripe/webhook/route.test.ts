@@ -14,10 +14,17 @@ describe("Stripe webhook credit buckets", () => {
 
   it("replaces subscription credits from invoice.paid instead of pack-additive grants", () => {
     expect(source).toContain('event.type === "invoice.paid"');
-    expect(source).toContain("getInvoicePrice(invoice)");
+    expect(source).toContain("getInvoiceSubscriptionId(invoice)");
+    expect(source).toContain("resolveInvoicePrice(invoice, subscription)");
     expect(source).toContain("replaceSubscriptionCredits");
     expect(queries).toContain("subscriptionBlueBalance: blue");
     expect(queries).toContain("subscriptionGoldBalance: gold");
+  });
+
+  it("supports current Stripe invoice subscription and price fields", () => {
+    expect(source).toContain("invoice.parent?.subscription_details?.subscription");
+    expect(source).toContain("item.pricing?.price_details?.price");
+    expect(source).toContain("invoice?.lines?.data[0]?.period?.end");
   });
 
   it("handles subscription lifecycle events without clearing packs", () => {
