@@ -1,6 +1,7 @@
 import type { HeadshotEditInput } from "@/lib/ai/types";
 
 export const NANO_BANANA_PRO_MODEL = "gemini-3-pro-image";
+const GEMINI_IMAGE_API_VERSION = "v1beta";
 
 type GeminiPart = {
   text?: string;
@@ -46,7 +47,7 @@ async function generateOneNanoBananaProImage(input: HeadshotEditInput) {
   ];
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/${NANO_BANANA_PRO_MODEL}:generateContent`,
+    `https://generativelanguage.googleapis.com/${GEMINI_IMAGE_API_VERSION}/models/${NANO_BANANA_PRO_MODEL}:generateContent`,
     {
       method: "POST",
       headers: {
