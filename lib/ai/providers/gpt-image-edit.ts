@@ -30,10 +30,10 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
     input: {
       prompt: input.prompt,
       image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
-      image_size: input.image_size ?? "portrait_4_3",
+      image_size: input.image_size ?? "auto",
       quality: input.quality ?? "low",
       num_images: input.num_images ?? 1,
-      output_format: "jpeg"
+      output_format: "png"
     } as never,
     logs: true,
     pollInterval: 5000,

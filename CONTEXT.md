@@ -49,7 +49,7 @@ Production AI SaaS for professional headshots. Users upload photos, train a pers
 7. LoRA persistence: worker downloads the `.safetensors` file, uploads it to R2 as `loras/{userId}/{jobId}/model.safetensors`, and stores `r2:loras/{userId}/{jobId}/model.safetensors` in `jobs.resultUrl` and `jobs.result.lora_url`.
 8. Generation: UI creates `headshot-generate` with `{ lora_url, trigger_word, style, num_images, background?, attire?, attire_color? }`.
 9. Worker signs LoRA URL, calls `fal.subscribe("fal-ai/flux-lora", ...)`, downloads generated URLs, uploads final JPGs to Supabase Storage at `headshots/{userId}/{jobId}/{index}.jpg`, and stores the URL array in `jobs.result`.
-10. Quick edit: UI uploads 1-4 reference images and creates `headshot-edit` with `{ image_urls, prompt, engine, quality, image_size, num_images }`. Worker calls fal.ai `fal-ai/nano-banana-pro/edit` when `engine` is `gemini-3-pro-image`, then falls back to direct Gemini `gemini-3-pro-image` if fal.ai fails; otherwise it calls `openai/gpt-image-2/edit` through fal.ai. Outputs are stored like generated headshots.
+10. Quick edit: UI uploads 1-4 original reference images without client compression and creates `headshot-edit` with `{ image_urls, prompt, engine, quality, image_size, num_images }`. Default `image_size` is `auto` to preserve the source aspect ratio; UI also offers `portrait_4_3` and `landscape_16_9`. Worker calls fal.ai `fal-ai/nano-banana-pro/edit` when `engine` is `gemini-3-pro-image`, then falls back to direct Gemini `gemini-3-pro-image` if fal.ai fails; otherwise it calls `openai/gpt-image-2/edit` through fal.ai. Quick edit outputs request PNG and are stored like generated headshots.
 
 ## Generation Details
 

@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   Download,
   Images,
+  Info,
   Loader2,
   LogOut,
   Monitor,
@@ -124,6 +125,12 @@ const QUICK_PRESET_OPTIONS = [
 ] as const;
 
 const QUICK_IMAGE_SIZE_OPTIONS = [
+  {
+    label: "Original size",
+    value: "auto" as const,
+    description: "Auto",
+    icon: Images
+  },
   {
     label: "Phone vertical",
     value: "portrait_4_3" as const,
@@ -371,7 +378,7 @@ export function HeadshotsApp({
   const [quickPreset, setQuickPreset] = useState<QuickEditPreset>("professional");
   const [quickPrompt, setQuickPrompt] = useState<string>(QUICK_PRESET_OPTIONS[0].prompt);
   const [quickQuality, setQuickQuality] = useState<"low" | "medium" | "high">("low");
-  const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("portrait_4_3");
+  const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("auto");
   const [quickEngine, setQuickEngine] = useState<QuickEditEngine>("gpt-image-2");
   const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
   const [quickUploading, setQuickUploading] = useState(false);
@@ -837,7 +844,7 @@ export function HeadshotsApp({
       const urls: string[] = [];
       for (let i = 0; i < quickPhotos.length; i++) {
         setQuickMessage(`Uploading photo ${i + 1} of ${quickPhotos.length}...`);
-        const file = await compressImage(quickPhotos[i].file);
+        const file = quickPhotos[i].file;
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1324,7 +1331,10 @@ function QuickEditPanel({
   const qualityOption = QUICK_QUALITY_OPTIONS.find(option => option.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
   const blueCost = qualityOption.blueCost * numImages;
   const selectedEngineLabel = QUICK_ENGINE_OPTIONS.find(option => option.value === engine)?.label ?? "Quick edit";
-  const resultAspectClass = imageSize === "landscape_16_9" ? "aspect-video" : "aspect-[3/4]";
+  const resultAspectClass =
+    imageSize === "auto" ? "h-80" :
+    imageSize === "landscape_16_9" ? "aspect-video" :
+    "aspect-[3/4]";
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -1403,7 +1413,7 @@ function QuickEditPanel({
                 Download all
               </Button>
             </div>
-            <div className={cn("grid gap-3", imageSize === "landscape_16_9" ? "lg:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4")}>
+            <div className={cn("grid gap-3", imageSize === "landscape_16_9" || imageSize === "auto" ? "lg:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4")}>
               {signedUrls.map((url, i) => (
                 <div key={url} className="overflow-hidden rounded-xl border border-line bg-surface">
                   <button
@@ -1414,7 +1424,7 @@ function QuickEditPanel({
                     <img
                       src={url}
                       alt={`Edited headshot ${i + 1}`}
-                      className="h-full w-full object-cover transition-opacity hover:opacity-90"
+                      className={cn("h-full w-full transition-opacity hover:opacity-90", imageSize === "auto" ? "object-contain" : "object-cover")}
                     />
                   </button>
                   <div className="flex items-center justify-between p-2.5">
@@ -1575,8 +1585,16 @@ function QuickEditPanel({
                 </div>
               </div>
               <div>
-                <p className="mb-2.5 text-sm font-medium text-ink-soft">Size</p>
-                <div className="inline-flex max-w-full rounded-lg border border-line bg-bg p-0.5">
+                <div className="mb-2.5 flex items-center gap-1.5">
+                  <p className="text-sm font-medium text-ink-soft">Size</p>
+                  <span
+                    title="Original size preserves the source aspect ratio, which usually keeps real-world edits closer to the original photo."
+                    className="inline-flex text-ink-muted"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+                <div className="inline-flex max-w-full flex-wrap rounded-lg border border-line bg-bg p-0.5">
                   {QUICK_IMAGE_SIZE_OPTIONS.map(option => {
                     const Icon = option.icon;
                     return (

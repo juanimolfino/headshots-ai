@@ -34,7 +34,7 @@ describe("generateNanoBananaProEditUrls", () => {
       prompt: "Create a polished professional headshot.",
       engine: NANO_BANANA_PRO_MODEL,
       quality: "high",
-      image_size: "landscape_16_9",
+      image_size: "auto",
       num_images: 2
     });
 
@@ -46,8 +46,8 @@ describe("generateNanoBananaProEditUrls", () => {
           prompt: "Create a polished professional headshot.",
           image_urls: ["https://example.com/reference.jpg"],
           num_images: 2,
-          aspect_ratio: "16:9",
-          output_format: "jpeg",
+          aspect_ratio: "auto",
+          output_format: "png",
           resolution: "4K"
         }
       })

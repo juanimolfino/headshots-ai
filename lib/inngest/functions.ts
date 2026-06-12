@@ -218,9 +218,10 @@ async function storeHeadshotImage(input: {
 }) {
   const downloaded = await downloadBytes(input.imageUrl, `generated headshot ${input.index + 1}`);
   const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? "ai-results";
+  const extension = downloaded.contentType.includes("png") ? "png" : "jpg";
   return storeSupabaseFile({
     bucket,
-    path: `headshots/${input.userId}/${input.jobId}/${input.index}.jpg`,
+    path: `headshots/${input.userId}/${input.jobId}/${input.index}.${extension}`,
     bytes: downloaded.bytes,
     contentType: downloaded.contentType
   });

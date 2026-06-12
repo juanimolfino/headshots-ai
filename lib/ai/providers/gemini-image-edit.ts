@@ -14,6 +14,7 @@ const QUALITY_RESOLUTION = {
 } as const;
 
 const IMAGE_SIZE_ASPECT_RATIO = {
+  auto: "auto",
   portrait_4_3: "3:4",
   landscape_16_9: "16:9"
 } as const;
@@ -64,7 +65,7 @@ function getGeminiApiKey() {
 }
 
 async function generateOneGeminiNanoBananaProImage(input: HeadshotEditInput) {
-  const aspectRatio = IMAGE_SIZE_ASPECT_RATIO[input.image_size ?? "portrait_4_3"];
+  const aspectRatio = IMAGE_SIZE_ASPECT_RATIO[input.image_size ?? "auto"];
   const parts = [
     { text: `${input.prompt}\n\nCreate the final image in a ${aspectRatio} aspect ratio.` },
     ...(await Promise.all(input.image_urls.slice(0, MAX_REFERENCE_IMAGES).map(imageUrlToInlineData)))
@@ -106,7 +107,7 @@ async function generateGeminiNanoBananaProEditUrls(input: HeadshotEditInput) {
 
 async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
   const count = Math.max(1, Math.min(4, input.num_images ?? 1));
-  const imageSize = input.image_size ?? "portrait_4_3";
+  const imageSize = input.image_size ?? "auto";
   fal.config({ credentials: process.env.FAL_KEY });
 
   const result = await fal.subscribe(FAL_NANO_BANANA_PRO_EDIT_ENDPOINT, {
@@ -115,7 +116,7 @@ async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
       image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
       num_images: count,
       aspect_ratio: IMAGE_SIZE_ASPECT_RATIO[imageSize],
-      output_format: "jpeg",
+      output_format: "png",
       resolution: QUALITY_RESOLUTION[input.quality ?? "low"]
     } as never,
     logs: true,
