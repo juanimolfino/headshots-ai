@@ -31,7 +31,7 @@ export type HeadshotEditInput = {
   prompt: string;
   engine?: "gpt-image-2" | "gemini-3-pro-image";
   quality?: "low" | "medium" | "high" | "auto";
-  image_size?: "portrait_16_9" | "landscape_16_9";
+  image_size?: "portrait_4_3" | "landscape_16_9";
   num_images?: number;
 };
 

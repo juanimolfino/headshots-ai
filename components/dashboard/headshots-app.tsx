@@ -126,8 +126,8 @@ const QUICK_PRESET_OPTIONS = [
 const QUICK_IMAGE_SIZE_OPTIONS = [
   {
     label: "Phone vertical",
-    value: "portrait_16_9" as const,
-    description: "9:16",
+    value: "portrait_4_3" as const,
+    description: "3:4",
     icon: Smartphone
   },
   {
@@ -231,6 +231,13 @@ function getJobBackground(job: GenerateJob): "white" | "gray" | "dark" | "outdoo
   return background === "white" || background === "gray" || background === "dark" || background === "outdoor"
     ? background
     : null;
+}
+
+function getQuickEditEngineLabel(jobOrEngine: GenerateJob | QuickEditEngine | undefined) {
+  const engine = typeof jobOrEngine === "string"
+    ? jobOrEngine
+    : (jobOrEngine?.input as { engine?: unknown } | null)?.engine;
+  return engine === "gemini-3-pro-image" ? "Nano Banana Pro" : "GPT Image 2";
 }
 
 function estimateJobProgress(job: GenerateJob) {
@@ -364,7 +371,7 @@ export function HeadshotsApp({
   const [quickPreset, setQuickPreset] = useState<QuickEditPreset>("professional");
   const [quickPrompt, setQuickPrompt] = useState<string>(QUICK_PRESET_OPTIONS[0].prompt);
   const [quickQuality, setQuickQuality] = useState<"low" | "medium" | "high">("low");
-  const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("portrait_16_9");
+  const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("portrait_4_3");
   const [quickEngine, setQuickEngine] = useState<QuickEditEngine>("gpt-image-2");
   const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
   const [quickUploading, setQuickUploading] = useState(false);
@@ -393,7 +400,7 @@ export function HeadshotsApp({
   // History (all generate jobs, filtered per model client-side)
   const [generateJobs, setGenerateJobs] = useState<GenerateJob[]>([]);
 
-  // Quick GPT edit history (all headshot-edit jobs)
+  // Quick edit history (all headshot-edit jobs)
   const [editJobs, setEditJobs] = useState<GenerateJob[]>([]);
 
   useEffect(() => {
@@ -912,7 +919,7 @@ export function HeadshotsApp({
           status: generationStatus,
           progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
           style,
-          title: generationJobKind === "edit" ? "Quick edit" : undefined,
+          title: generationJobKind === "edit" ? getQuickEditEngineLabel(quickEngine) : undefined,
           count: generationJobKind === "edit" ? quickNumImages : numImages,
           background,
           elapsed: generationElapsed,
@@ -924,7 +931,7 @@ export function HeadshotsApp({
   const activeEditJob = editJobs.find(isActiveJob) ?? null;
   const activeTaskJob =
     activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob) :
-    activeEditJob ? toActiveGenerationJob(activeEditJob, "Quick edit") :
+    activeEditJob ? toActiveGenerationJob(activeEditJob, getQuickEditEngineLabel(activeEditJob)) :
     localActiveGenerationJob;
   const activeGenerationJob =
     activeSelectedModelJob ? toActiveGenerationJob(activeSelectedModelJob) :
@@ -1017,6 +1024,10 @@ export function HeadshotsApp({
             onSelectImage={setSelectedImageUrl}
             onCloseImage={() => setSelectedImageUrl(null)}
             onCancel={() => {
+              if (generationJobKind === "edit" && (signedUrlsKind === "edit" || generationStatus === "failed")) {
+                resetGeneration();
+                return;
+              }
               setShowQuickEditForm(false);
               if (trainedModels[0]) setSelectedModelId(trainedModels[0].id);
             }}
@@ -1242,7 +1253,7 @@ function NewModelPanel({
   );
 }
 
-// ── Quick GPT edit form ───────────────────────────────────────────────────────
+// ── Quick edit form ───────────────────────────────────────────────────────────
 
 function QuickEditPanel({
   photos,
@@ -1313,7 +1324,7 @@ function QuickEditPanel({
   const qualityOption = QUICK_QUALITY_OPTIONS.find(option => option.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
   const blueCost = qualityOption.blueCost * numImages;
   const selectedEngineLabel = QUICK_ENGINE_OPTIONS.find(option => option.value === engine)?.label ?? "Quick edit";
-  const resultAspectClass = imageSize === "landscape_16_9" ? "aspect-video" : "aspect-[9/16]";
+  const resultAspectClass = imageSize === "landscape_16_9" ? "aspect-video" : "aspect-[3/4]";
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -1328,7 +1339,7 @@ function QuickEditPanel({
             Back
           </button>
           <span className="text-line-strong">/</span>
-          <p className="font-semibold text-ink">Quick GPT edit</p>
+          <p className="font-semibold text-ink">Quick edit</p>
         </div>
         {signedUrls?.length ? (
           <Button
@@ -1635,7 +1646,7 @@ function QuickEditPanel({
           </div>
         )}
 
-        {/* Saved Quick GPT edits */}
+        {/* Saved quick edits */}
         {editJobs.length > 0 && (
           <div className="mt-8">
             <ResultsHistory jobs={editJobs} kind="edit" onDelete={onDeleteEdit} />
@@ -2032,7 +2043,7 @@ function ModelWorkspace({
   );
 }
 
-// ── Results history (per-model generates, or Quick GPT edits with delete) ──────
+// ── Results history (per-model generates, or quick edits with delete) ──────────
 
 const HISTORY_PAGE_SIZE = 10;
 
@@ -2123,7 +2134,7 @@ function RunningHistoryRow({
 }) {
   const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
   const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
-  const label = kind === "edit" ? "GPT edit" : styleLabel;
+  const label = kind === "edit" ? getQuickEditEngineLabel(job) : styleLabel;
   const count = (job.input as { num_images?: number } | null)?.num_images ?? 1;
   const progress = estimateJobProgress(job);
 
@@ -2183,7 +2194,7 @@ function HistoryRow({
   const thumbnails = signedUrls?.slice(0, 4) ?? [];
   const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
   const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
-  const label = kind === "edit" ? "GPT edit" : styleLabel;
+  const label = kind === "edit" ? getQuickEditEngineLabel(job) : styleLabel;
   const count = (job.input as { num_images?: number } | null)?.num_images ?? thumbnails.length;
   const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("en-US", {
     day: "2-digit",

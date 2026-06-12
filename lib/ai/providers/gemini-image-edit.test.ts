@@ -89,7 +89,7 @@ describe("generateNanoBananaProEditUrls", () => {
       image_urls: ["https://example.com/reference.jpg"],
       prompt: "Create a polished professional headshot.",
       engine: NANO_BANANA_PRO_MODEL,
-      image_size: "portrait_16_9",
+      image_size: "portrait_4_3",
       num_images: 1
     });
 

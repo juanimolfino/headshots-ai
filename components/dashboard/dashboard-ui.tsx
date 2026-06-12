@@ -304,7 +304,7 @@ function DashboardSidebar({
           className="dsh-focus flex w-full items-center gap-[11px] rounded-[10px] px-2.5 py-[9px] text-[13.5px] font-medium text-[#aeb6d4] transition hover:bg-white/[.045] hover:text-[#eef0f6]"
         >
           <Images className="size-[17px]" />
-          Quick edit <span className="ml-auto rounded-[5px] bg-white/[.07] px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-[.08em] text-[#8a92b2]">GPT</span>
+          Quick edit <span className="ml-auto rounded-[5px] bg-white/[.07] px-1.5 py-[3px] text-[9px] font-bold uppercase tracking-[.08em] text-[#8a92b2]">AI</span>
         </button>
         <button
           type="button"
@@ -342,7 +342,7 @@ function DashboardSidebar({
 function DashboardTopBar({ selectedModel, activeTaskJob, mode, activeTrainingJob }: DashboardWorkspaceProps) {
   const title =
     mode === "new-model" ? "New model" :
-    mode === "quick-edit" ? "Quick GPT edit" :
+    mode === "quick-edit" ? "Quick edit" :
     selectedModel ? getModelName(selectedModel) :
     activeTrainingJob ? getModelName(activeTrainingJob) :
     "Dashboard";
