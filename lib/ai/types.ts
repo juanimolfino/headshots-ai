@@ -29,6 +29,7 @@ export type HeadshotGenerateInput = {
 export type HeadshotEditInput = {
   image_urls: string[];
   prompt: string;
+  engine?: "gpt-image-2" | "gemini-3-pro-image";
   quality?: "low" | "medium" | "high" | "auto";
   num_images?: number;
 };

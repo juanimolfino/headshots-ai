@@ -98,11 +98,25 @@ const QUICK_QUALITY_OPTIONS = [
   { label: "Premium HD", value: "high", blueCost: 3 }
 ] as const;
 
+const QUICK_ENGINE_OPTIONS = [
+  {
+    label: "GPT Image 2",
+    value: "gpt-image-2",
+    disabled: false
+  },
+  {
+    label: "Nano Banana Pro",
+    value: "gemini-3-pro-image",
+    disabled: true
+  }
+] as const;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type StyleValue = "professional" | "cinematic" | "natural";
 type JobStatus = "pending" | "processing" | "done" | "failed";
 type GenerationJobKind = "generate" | "edit";
+type QuickEditEngine = (typeof QUICK_ENGINE_OPTIONS)[number]["value"];
 
 type TrainingJob = {
   id: string;
@@ -125,6 +139,16 @@ type GenerateJob = {
 };
 
 type SelectedPhoto = { id: string; file: File; previewUrl: string };
+type DashboardCredits = {
+  blue: number;
+  gold: number;
+  subscriptionBlue?: number;
+  subscriptionGold?: number;
+  packBlue?: number;
+  packGold?: number;
+  subscriptionCurrentPeriodEnd?: Date | string | null;
+  subscriptionStatus?: string;
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -263,8 +287,10 @@ export function HeadshotsApp({
   initialCredits
 }: {
   userEmail: string;
-  initialCredits: { blue: number; gold: number };
+  initialCredits: DashboardCredits;
 }) {
+  const [credits, setCredits] = useState<DashboardCredits>(initialCredits);
+
   // Models
   const [trainedModels, setTrainedModels] = useState<TrainingJob[]>([]);
   const [activeTrainingJob, setActiveTrainingJob] = useState<TrainingJob | null>(null);
@@ -297,6 +323,7 @@ export function HeadshotsApp({
     "Create a professional headshot using these reference photos. Preserve the person's identity, facial features, and natural expression. Use clean studio lighting, realistic skin texture, a polished outfit, and a neutral background."
   );
   const [quickQuality, setQuickQuality] = useState<"low" | "medium" | "high">("low");
+  const [quickEngine, setQuickEngine] = useState<QuickEditEngine>("gpt-image-2");
   const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
   const [quickUploading, setQuickUploading] = useState(false);
   const [quickMessage, setQuickMessage] = useState<string | null>(null);
@@ -341,6 +368,13 @@ export function HeadshotsApp({
   }, []);
 
   // ── Data loading ─────────────────────────────────────────────────────────
+
+  const loadCredits = useCallback(async () => {
+    const res = await fetch("/api/credits", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = (await res.json()) as { credits?: DashboardCredits };
+    if (data.credits) setCredits(data.credits);
+  }, []);
 
   const loadModels = useCallback(async () => {
     try {
@@ -400,6 +434,26 @@ export function HeadshotsApp({
     const id = window.setTimeout(() => void loadEditHistory(), 0);
     return () => window.clearTimeout(id);
   }, [loadEditHistory]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+
+    let attempts = 0;
+    const poll = () => {
+      attempts += 1;
+      void loadCredits();
+      if (attempts >= 8) window.clearInterval(id);
+    };
+    const id = window.setInterval(poll, 2000);
+    poll();
+
+    params.delete("checkout");
+    const nextSearch = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`);
+
+    return () => window.clearInterval(id);
+  }, [loadCredits]);
 
   useEffect(() => {
     if (!activeTrainingJob) return;
@@ -703,6 +757,7 @@ export function HeadshotsApp({
     setSignedUrlsKind(null);
     setGenerationElapsed(0);
     await loadHistory();
+    void loadCredits();
   }
 
   async function startQuickEdit() {
@@ -753,6 +808,7 @@ export function HeadshotsApp({
           input: {
             image_urls: urls,
             prompt: quickPrompt.trim(),
+            engine: quickEngine,
             quality: quickQuality,
             num_images: quickNumImages
           }
@@ -774,6 +830,7 @@ export function HeadshotsApp({
       setGenerationElapsed(0);
       setQuickMessage(null);
       await loadEditHistory();
+      void loadCredits();
     } catch (err) {
       setQuickMessage(err instanceof Error ? err.message : "Could not generate photos.");
     } finally {
@@ -837,7 +894,7 @@ export function HeadshotsApp({
       <DashboardWorkspace
         mode={mode}
         userEmail={userEmail}
-        credits={initialCredits}
+        credits={credits}
         models={trainedModels}
         loadingModels={loadingModels}
         selectedModel={selectedModel}
@@ -876,6 +933,7 @@ export function HeadshotsApp({
           <QuickEditPanel
             photos={quickPhotos}
             prompt={quickPrompt}
+            engine={quickEngine}
             quality={quickQuality}
             numImages={quickNumImages}
             uploading={quickUploading}
@@ -890,6 +948,7 @@ export function HeadshotsApp({
             selectedImageUrl={selectedImageUrl}
             fileInputRef={quickFileInputRef}
             onPromptChange={setQuickPrompt}
+            onEngineChange={setQuickEngine}
             onQualityChange={setQuickQuality}
             onNumImagesChange={setQuickNumImages}
             onAddFiles={addQuickFiles}
@@ -1129,6 +1188,7 @@ function NewModelPanel({
 function QuickEditPanel({
   photos,
   prompt,
+  engine,
   quality,
   numImages,
   uploading,
@@ -1143,6 +1203,7 @@ function QuickEditPanel({
   selectedImageUrl,
   fileInputRef,
   onPromptChange,
+  onEngineChange,
   onQualityChange,
   onNumImagesChange,
   onAddFiles,
@@ -1155,6 +1216,7 @@ function QuickEditPanel({
 }: {
   photos: SelectedPhoto[];
   prompt: string;
+  engine: QuickEditEngine;
   quality: "low" | "medium" | "high";
   numImages: (typeof IMAGE_COUNTS)[number];
   uploading: boolean;
@@ -1169,6 +1231,7 @@ function QuickEditPanel({
   selectedImageUrl: string | null;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onPromptChange: (v: string) => void;
+  onEngineChange: (v: QuickEditEngine) => void;
   onQualityChange: (v: "low" | "medium" | "high") => void;
   onNumImagesChange: (v: (typeof IMAGE_COUNTS)[number]) => void;
   onAddFiles: (files: FileList | File[]) => void;
@@ -1292,8 +1355,31 @@ function QuickEditPanel({
         ) : (
           <div className="max-w-3xl rounded-xl border border-line bg-surface p-6">
             <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-ink-muted">
-              GPT Image 2 edit
+              Quick edit
             </p>
+
+            <div className="mb-5">
+              <p className="mb-2.5 text-sm font-medium text-ink-soft">Engine</p>
+              <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
+                {QUICK_ENGINE_OPTIONS.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      if (!option.disabled) onEngineChange(option.value);
+                    }}
+                    disabled={option.disabled}
+                    title={option.disabled ? "Coming soon" : undefined}
+                    className={cn(
+                      "rounded-md px-4 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-45",
+                      engine === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="mb-5">
               <div className="mb-2 flex items-center justify-between">
@@ -1408,7 +1494,7 @@ function QuickEditPanel({
                 size="pill"
               >
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {uploading ? (message ?? "Uploading...") : "Generate with GPT Image 2"}
+                {uploading ? (message ?? "Uploading...") : `Generate with ${engine === "gpt-image-2" ? "GPT Image 2" : "Nano Banana Pro"}`}
               </Button>
               {message &&
                 (message.toLowerCase().includes("credit") ? (

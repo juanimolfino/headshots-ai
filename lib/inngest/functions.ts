@@ -2,6 +2,7 @@ import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
 import { storeAiResult, storeLoraFileR2 } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
+import { generateNanoBananaProEditUrls } from "@/lib/ai/providers/gemini-image-edit";
 import { generateGptImageEditUrls } from "@/lib/ai/providers/gpt-image-edit";
 import {
   buildFluxLoraTrainerInput,
@@ -39,6 +40,7 @@ type HeadshotGenerateInput = {
 type HeadshotEditInput = {
   image_urls: string[];
   prompt: string;
+  engine?: "gpt-image-2" | "gemini-3-pro-image";
   quality?: "low" | "medium" | "high" | "auto";
   num_images?: number;
 };
@@ -286,7 +288,9 @@ async function processHeadshotGenerateJob(job: WorkerJob) {
 
 async function processHeadshotEditJob(job: WorkerJob) {
   const input = job.input as HeadshotEditInput;
-  const generatedUrls = await generateGptImageEditUrls(input);
+  const generatedUrls = input.engine === "gemini-3-pro-image"
+    ? await generateNanoBananaProEditUrls(input)
+    : await generateGptImageEditUrls(input);
   return Promise.all(
     generatedUrls.map((imageUrl, index) =>
       storeHeadshotImage({
