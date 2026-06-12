@@ -43,6 +43,9 @@ const QUICK_MIN_PHOTOS = 1;
 const QUICK_MAX_PHOTOS = 4;
 const TRAINING_GOLD_CREDITS = 1;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const QUICK_OPTIMIZE_THRESHOLD_BYTES = 4 * 1024 * 1024;
+const QUICK_MAX_UPLOAD_DIMENSION = 2048;
+const QUICK_UPLOAD_JPEG_QUALITY = 0.92;
 const POLL_INTERVAL_MS = 8000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_UPLOAD_DIMENSION = 1024;
@@ -326,6 +329,53 @@ function compressImage(file: File): Promise<File> {
         },
         "image/jpeg",
         UPLOAD_JPEG_QUALITY
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(`Could not load ${file.name}`));
+    };
+    img.src = objectUrl;
+  });
+}
+
+function optimizeQuickEditImage(file: File): Promise<File> {
+  if (file.size <= QUICK_OPTIMIZE_THRESHOLD_BYTES) return Promise.resolve(file);
+
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const { naturalWidth: w, naturalHeight: h } = img;
+      const scale = Math.min(1, QUICK_MAX_UPLOAD_DIMENSION / Math.max(w, h));
+      if (scale === 1 && file.type === "image/jpeg") {
+        resolve(file);
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        blob => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const optimized = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
+            type: "image/jpeg"
+          });
+          resolve(optimized.size < file.size ? optimized : file);
+        },
+        "image/jpeg",
+        QUICK_UPLOAD_JPEG_QUALITY
       );
     };
     img.onerror = () => {
@@ -844,7 +894,7 @@ export function HeadshotsApp({
       const urls: string[] = [];
       for (let i = 0; i < quickPhotos.length; i++) {
         setQuickMessage(`Uploading photo ${i + 1} of ${quickPhotos.length}...`);
-        const file = quickPhotos[i].file;
+        const file = await optimizeQuickEditImage(quickPhotos[i].file);
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1520,7 +1570,7 @@ function QuickEditPanel({
               >
                 <Upload className="mb-2 h-6 w-6 text-ink-muted" />
                 <span className="text-sm font-medium text-ink-soft">Drag or click to select</span>
-                <span className="mt-1 text-xs text-ink-muted">JPG or PNG · More photos improve consistency</span>
+                <span className="mt-1 text-xs text-ink-muted">JPG or PNG · Originals under 4 MB are preserved</span>
               </button>
               <input
                 ref={fileInputRef}
