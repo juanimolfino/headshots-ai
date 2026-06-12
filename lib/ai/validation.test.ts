@@ -141,7 +141,7 @@ describe("createJobSchema", () => {
     }
   });
 
-  it("rejects Nano Banana Pro headshot edits while the engine is disabled", () => {
+  it("accepts Nano Banana Pro headshot edits when selected", () => {
     const result = createJobSchema.safeParse({
       type: "headshot-edit",
       input: {
@@ -153,7 +153,12 @@ describe("createJobSchema", () => {
       }
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.type).toBe("headshot-edit");
+      if (result.data.type !== "headshot-edit") throw new Error("Expected headshot-edit job");
+      expect(result.data.input.engine).toBe("gemini-3-pro-image");
+    }
   });
 
   it("accepts headshot edit jobs with one reference photo", () => {

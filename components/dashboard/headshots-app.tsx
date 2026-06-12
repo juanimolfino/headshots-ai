@@ -107,7 +107,7 @@ const QUICK_ENGINE_OPTIONS = [
   {
     label: "Nano Banana Pro",
     value: "gemini-3-pro-image",
-    disabled: true
+    disabled: false
   }
 ] as const;
 
