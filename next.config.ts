@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 //   and Tailwind uses inline styles. A nonce-based CSP would remove this but requires
 //   deeper middleware integration (future improvement).
 // - The high-value directives are: object-src 'none', base-uri 'self', frame-ancestors 'none',
-//   form-action 'self' — these block the most common injection and clickjacking attacks.
+//   form-action limited to this app/Stripe — these block the most common injection and clickjacking attacks.
 const csp = [
   "default-src 'none'",
   "script-src 'self' 'unsafe-inline' https://js.stripe.com",
@@ -16,7 +16,7 @@ const csp = [
   "font-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  "form-action 'self' https://*.vercel.app https://checkout.stripe.com",
   "frame-ancestors 'none'"
 ].join("; ");
 
