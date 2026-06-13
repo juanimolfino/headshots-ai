@@ -1,6 +1,6 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { credits, jobs, subscriptions, transactions, users, type CreditBucket, type CreditKind, type JobType } from "@/lib/db/schema";
+import { credits, jobs, subscriptions, transactions, users, type CreditBucket, type CreditKind, type Job, type JobType } from "@/lib/db/schema";
 import { getUsableCreditTotals, planCreditDebit, type CreditBalanceSnapshot, type CreditDebit } from "@/lib/db/credit-balances";
 import { sendPurchaseConfirmationEmail, sendWelcomeEmail } from "@/lib/email/send";
 import type { User } from "@supabase/supabase-js";
@@ -14,6 +14,18 @@ export type SubscriptionCreditGrant = Required<CreditGrant> & {
   currentPeriodEnd: Date | null;
   status?: string;
 };
+
+export const STALE_JOB_THRESHOLDS_MS = {
+  image: 15 * 60 * 1000,
+  tts: 15 * 60 * 1000,
+  "headshot-generate": 15 * 60 * 1000,
+  "headshot-edit": 15 * 60 * 1000,
+  "headshot-training": 50 * 60 * 1000
+} satisfies Record<JobType, number>;
+
+const ACTIVE_JOB_STATUSES = ["pending", "processing"] as const;
+
+type ActiveJobForReaper = Pick<Job, "id" | "type" | "status" | "createdAt">;
 
 export type SubscriptionLifecycleEventInput = {
   userId: string;
@@ -44,6 +56,19 @@ export function shouldApplySubscriptionLifecycleEvent(
   const lastCreatedAt = existing.lastStripeEventCreatedAt?.getTime();
   if (lastCreatedAt !== undefined && incoming.stripeEventCreatedAt.getTime() < lastCreatedAt) return false;
   return true;
+}
+
+export function getStaleJobTimeoutReason(
+  job: ActiveJobForReaper,
+  now = new Date(),
+  thresholds: Record<JobType, number> = STALE_JOB_THRESHOLDS_MS
+) {
+  if (!ACTIVE_JOB_STATUSES.includes(job.status as (typeof ACTIVE_JOB_STATUSES)[number])) return null;
+  const thresholdMs = thresholds[job.type];
+  const ageMs = now.getTime() - job.createdAt.getTime();
+  if (ageMs < thresholdMs) return null;
+  const thresholdMinutes = Math.round(thresholdMs / 60000);
+  return `Job timed out after ${thresholdMinutes} minutes without completing`;
 }
 
 function metadataWithDebits(metadata: Record<string, unknown> | null): CreditDebit[] | null {
@@ -261,6 +286,39 @@ export async function refundJobCredits(jobId: string, reason: string) {
     await tx.update(jobs).set({ status: "failed", error: reason, updatedAt: new Date() }).where(eq(jobs.id, jobId));
     return refunded;
   });
+}
+
+export async function reapStaleJobs(input: {
+  now?: Date;
+  limit?: number;
+  thresholds?: Partial<Record<JobType, number>>;
+  loadActiveJobs?: () => Promise<ActiveJobForReaper[]>;
+  refundJob?: (jobId: string, reason: string) => Promise<unknown>;
+} = {}) {
+  const now = input.now ?? new Date();
+  const thresholds = { ...STALE_JOB_THRESHOLDS_MS, ...input.thresholds };
+  const activeJobs = input.loadActiveJobs
+    ? await input.loadActiveJobs()
+    : await getDb().query.jobs.findMany({
+        where: inArray(jobs.status, ACTIVE_JOB_STATUSES),
+        orderBy: asc(jobs.createdAt),
+        limit: input.limit ?? 100
+      });
+  const refund = input.refundJob ?? refundJobCredits;
+  const reaped: Array<{ jobId: string; reason: string }> = [];
+
+  for (const job of activeJobs) {
+    const reason = getStaleJobTimeoutReason(job, now, thresholds);
+    if (!reason) continue;
+    await refund(job.id, reason);
+    reaped.push({ jobId: job.id, reason });
+  }
+
+  return {
+    checked: activeJobs.length,
+    reaped: reaped.length,
+    jobs: reaped
+  };
 }
 
 export async function markJobProcessing(jobId: string) {

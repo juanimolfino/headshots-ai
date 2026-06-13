@@ -14,7 +14,7 @@ import {
 } from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
-import { markJobDone, markJobProcessing, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
+import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
 import { sendPlainEmail } from "@/lib/email/send";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -53,6 +53,9 @@ type WorkerJob = {
   metadata: Record<string, unknown>;
 };
 
+export const HEADSHOT_GENERATE_TIMEOUT_MS = 10 * 60 * 1000;
+export const HEADSHOT_EDIT_TIMEOUT_MS = 10 * 60 * 1000;
+
 function createTriggerWord(userId: string) {
   void userId;
   const randomLetters = Math.random()
@@ -84,6 +87,21 @@ function formatJobError(error: unknown) {
   const message = error instanceof Error ? error.message : "Unknown AI job failure";
   const details = JSON.stringify(serialized);
   return details.length > message.length ? `${message} | ${details}` : message;
+}
+
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function redactUrl(value: string) {
@@ -274,7 +292,11 @@ async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId:
 
 async function processHeadshotGenerateJob(job: WorkerJob) {
   const input = job.input as HeadshotGenerateInput;
-  const generatedUrls = await generateFluxLoraImageUrls(input);
+  const generatedUrls = await withTimeout(
+    generateFluxLoraImageUrls(input),
+    HEADSHOT_GENERATE_TIMEOUT_MS,
+    "headshot-generate Fal call"
+  );
   return Promise.all(
     generatedUrls.map((imageUrl, index) =>
       storeHeadshotImage({
@@ -289,9 +311,13 @@ async function processHeadshotGenerateJob(job: WorkerJob) {
 
 async function processHeadshotEditJob(job: WorkerJob) {
   const input = job.input as HeadshotEditInput;
-  const generatedUrls = input.engine === "gemini-3-pro-image"
-    ? await generateNanoBananaProEditUrls(input)
-    : await generateGptImageEditUrls(input);
+  const generatedUrls = await withTimeout(
+    input.engine === "gemini-3-pro-image"
+      ? generateNanoBananaProEditUrls(input)
+      : generateGptImageEditUrls(input),
+    HEADSHOT_EDIT_TIMEOUT_MS,
+    "headshot-edit Fal call"
+  );
   return Promise.all(
     generatedUrls.map((imageUrl, index) =>
       storeHeadshotImage({
@@ -434,5 +460,16 @@ export const runAiJob = inngest.createFunction(
     } finally {
       await step.run("release concurrency slot", async () => releaseJobSlot(job.userId));
     }
+  }
+);
+
+export const reapStaleAiJobs = inngest.createFunction(
+  {
+    id: "reap-stale-ai-jobs",
+    retries: 0
+  },
+  { cron: "*/10 * * * *" },
+  async ({ step }) => {
+    return step.run("reap stale ai jobs", async () => reapStaleJobs());
   }
 );
