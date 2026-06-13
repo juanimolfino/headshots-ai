@@ -16,7 +16,7 @@ vi.mock("@/lib/email/send", () => ({
   sendWelcomeEmail: mocks.sendWelcomeEmail
 }));
 
-import { replaceSubscriptionCredits } from "@/lib/db/queries";
+import { replaceSubscriptionCredits, shouldApplySubscriptionLifecycleEvent } from "@/lib/db/queries";
 
 function createSubscriptionCreditDb(transactionInserts: boolean[]) {
   const balances = {
@@ -117,5 +117,46 @@ describe("replaceSubscriptionCredits", () => {
       subscriptionBlueBalance: 18,
       subscriptionGoldBalance: 0
     });
+  });
+});
+
+describe("shouldApplySubscriptionLifecycleEvent", () => {
+  it("discards subscription events older than the last applied event", () => {
+    expect(shouldApplySubscriptionLifecycleEvent(
+      {
+        lastStripeEventId: "evt_newer",
+        lastStripeEventCreatedAt: new Date("2026-06-13T10:00:00.000Z")
+      },
+      {
+        stripeEventId: "evt_older",
+        stripeEventCreatedAt: new Date("2026-06-13T09:59:59.000Z")
+      }
+    )).toBe(false);
+  });
+
+  it("makes replaying the same subscription event idempotent", () => {
+    expect(shouldApplySubscriptionLifecycleEvent(
+      {
+        lastStripeEventId: "evt_subscription_update",
+        lastStripeEventCreatedAt: new Date("2026-06-13T10:00:00.000Z")
+      },
+      {
+        stripeEventId: "evt_subscription_update",
+        stripeEventCreatedAt: new Date("2026-06-13T10:00:00.000Z")
+      }
+    )).toBe(false);
+  });
+
+  it("allows a newer subscription event to apply", () => {
+    expect(shouldApplySubscriptionLifecycleEvent(
+      {
+        lastStripeEventId: "evt_old",
+        lastStripeEventCreatedAt: new Date("2026-06-13T10:00:00.000Z")
+      },
+      {
+        stripeEventId: "evt_new",
+        stripeEventCreatedAt: new Date("2026-06-13T10:01:00.000Z")
+      }
+    )).toBe(true);
   });
 });

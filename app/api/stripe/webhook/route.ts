@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { addPackCredits, replaceSubscriptionCredits, updateCreditSubscriptionState } from "@/lib/db/queries";
+import { addPackCredits, applySubscriptionLifecycleEvent, replaceSubscriptionCredits } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
 import { sendTelegramPaymentNotification } from "@/lib/notifications/telegram";
 import { getStripe } from "@/lib/stripe/client";
@@ -59,6 +59,10 @@ async function getSubscriptionWithPrice(subscriptionId: string) {
 
 function unixTimestampDate(timestamp: number | null | undefined) {
   return timestamp ? new Date(timestamp * 1000) : null;
+}
+
+function stripeEventCreatedDate(event: Stripe.Event) {
+  return new Date(event.created * 1000);
 }
 
 function subscriptionPeriodEnd(subscription: SubscriptionWithPeriods, invoice?: InvoiceWithSubscriptionDetails) {
@@ -285,14 +289,17 @@ export async function POST(request: Request) {
       const price = subscription.items.data[0]?.price ?? null;
       const plan = getPlanByStripePriceId(price?.id);
       const status = normalizeSubscriptionStatus(subscription);
-      await updateCreditSubscriptionState(userId, {
-        status,
-        currentPeriodEnd: subscriptionPeriodEnd(subscription)
-      });
-      await upsertSubscriptionRow({
+      await applySubscriptionLifecycleEvent({
         userId,
-        subscription,
-        plan: subscription.metadata.plan ?? plan?.id ?? "unknown"
+        subscriptionId: subscription.id,
+        plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
+        subscriptionStatus: subscription.status,
+        creditStatus: status,
+        currentPeriodStart: subscriptionPeriodStart(subscription),
+        currentPeriodEnd: subscriptionPeriodEnd(subscription),
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        stripeEventId: event.id,
+        stripeEventCreatedAt: stripeEventCreatedDate(event)
       });
     }
   }
@@ -301,16 +308,22 @@ export async function POST(request: Request) {
     const subscription = event.data.object as SubscriptionWithPeriods;
     const userId = await getSubscriptionUserId(subscription);
     if (userId) {
-      await updateCreditSubscriptionState(userId, {
-        status: "canceled",
+      const price = subscription.items.data[0]?.price ?? null;
+      const plan = getPlanByStripePriceId(price?.id);
+      await applySubscriptionLifecycleEvent({
+        userId,
+        subscriptionId: subscription.id,
+        plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
+        subscriptionStatus: "canceled",
+        creditStatus: "canceled",
+        currentPeriodStart: subscriptionPeriodStart(subscription),
         currentPeriodEnd: subscriptionPeriodEnd(subscription),
-        clearSubscriptionCredits: true
+        cancelAtPeriodEnd: true,
+        clearSubscriptionCredits: true,
+        stripeEventId: event.id,
+        stripeEventCreatedAt: stripeEventCreatedDate(event)
       });
     }
-    await getDb()
-      .update(subscriptions)
-      .set({ status: "canceled", cancelAtPeriodEnd: true, updatedAt: new Date() })
-      .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
   }
 
   if (event.type === "invoice.payment_failed") {
@@ -320,15 +333,17 @@ export async function POST(request: Request) {
       const subscription = await getSubscriptionWithPrice(subscriptionId);
       const userId = await getSubscriptionUserId(subscription);
       if (userId) {
-        await updateCreditSubscriptionState(userId, {
-          status: "past_due",
-          currentPeriodEnd: subscriptionPeriodEnd(subscription)
-        });
-        await upsertSubscriptionRow({
+        await applySubscriptionLifecycleEvent({
           userId,
-          subscription,
+          subscriptionId,
           plan: subscription.metadata.plan ?? "unknown",
-          invoice
+          subscriptionStatus: subscription.status,
+          creditStatus: "past_due",
+          currentPeriodStart: subscriptionPeriodStart(subscription, invoice),
+          currentPeriodEnd: subscriptionPeriodEnd(subscription, invoice),
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+          stripeEventId: event.id,
+          stripeEventCreatedAt: stripeEventCreatedDate(event)
         });
       }
     }

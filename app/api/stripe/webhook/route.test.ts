@@ -32,8 +32,13 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain('event.type === "customer.subscription.updated"');
     expect(source).toContain('event.type === "customer.subscription.deleted"');
     expect(source).toContain('event.type === "invoice.payment_failed"');
-    expect(source).toContain('status: "past_due"');
+    expect(source).toContain('creditStatus: "past_due"');
     expect(source).toContain("clearSubscriptionCredits: true");
+    expect(source).toContain("applySubscriptionLifecycleEvent");
+    expect(source).toContain("stripeEventCreatedDate(event)");
+    expect(queries).toContain("shouldApplySubscriptionLifecycleEvent(existing, input)");
+    expect(queries).toContain("lastStripeEventId: input.stripeEventId");
+    expect(queries).toContain("lastStripeEventCreatedAt: input.stripeEventCreatedAt");
     expect(queries).toContain("packBlueBalance: 0");
     expect(queries).toContain("packGoldBalance: 0");
     expect(queries).toContain("...(input.clearSubscriptionCredits");

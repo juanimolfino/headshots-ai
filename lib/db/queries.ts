@@ -15,6 +15,37 @@ export type SubscriptionCreditGrant = Required<CreditGrant> & {
   status?: string;
 };
 
+export type SubscriptionLifecycleEventInput = {
+  userId: string;
+  subscriptionId: string;
+  plan: string;
+  subscriptionStatus: string;
+  creditStatus: string;
+  currentPeriodStart?: Date | null;
+  currentPeriodEnd?: Date | null;
+  cancelAtPeriodEnd?: boolean;
+  clearSubscriptionCredits?: boolean;
+  stripeEventId: string;
+  stripeEventCreatedAt: Date;
+};
+
+export function shouldApplySubscriptionLifecycleEvent(
+  existing: {
+    lastStripeEventId?: string | null;
+    lastStripeEventCreatedAt?: Date | null;
+  } | null | undefined,
+  incoming: {
+    stripeEventId: string;
+    stripeEventCreatedAt: Date;
+  }
+) {
+  if (!existing) return true;
+  if (existing.lastStripeEventId === incoming.stripeEventId) return false;
+  const lastCreatedAt = existing.lastStripeEventCreatedAt?.getTime();
+  if (lastCreatedAt !== undefined && incoming.stripeEventCreatedAt.getTime() < lastCreatedAt) return false;
+  return true;
+}
+
 function metadataWithDebits(metadata: Record<string, unknown> | null): CreditDebit[] | null {
   const debits = metadata?.creditDebits;
   if (!Array.isArray(debits)) return null;
@@ -403,6 +434,72 @@ export async function replaceSubscriptionCredits(
 
   if (applied && profile?.email) await sendPurchaseConfirmationEmail(profile.email, { blue, gold });
   return applied;
+}
+
+export async function applySubscriptionLifecycleEvent(input: SubscriptionLifecycleEventInput) {
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, input.subscriptionId))
+      .for("update");
+
+    if (!shouldApplySubscriptionLifecycleEvent(existing, input)) return false;
+
+    await tx
+      .insert(credits)
+      .values({
+        userId: input.userId,
+        subscriptionBlueBalance: 0,
+        subscriptionGoldBalance: 0,
+        packBlueBalance: 0,
+        packGoldBalance: 0,
+        subscriptionStatus: input.creditStatus,
+        subscriptionCurrentPeriodEnd: input.currentPeriodEnd ?? null
+      })
+      .onConflictDoUpdate({
+        target: credits.userId,
+        set: {
+          subscriptionStatus: input.creditStatus,
+          subscriptionCurrentPeriodEnd: input.currentPeriodEnd ?? null,
+          ...(input.clearSubscriptionCredits ? {
+            subscriptionBlueBalance: 0,
+            subscriptionGoldBalance: 0
+          } : {}),
+          updatedAt: new Date()
+        }
+      });
+
+    await tx
+      .insert(subscriptions)
+      .values({
+        userId: input.userId,
+        plan: input.plan,
+        status: input.subscriptionStatus,
+        stripeSubscriptionId: input.subscriptionId,
+        currentPeriodStart: input.currentPeriodStart ?? null,
+        currentPeriodEnd: input.currentPeriodEnd ?? null,
+        cancelAtPeriodEnd: input.cancelAtPeriodEnd ?? false,
+        lastStripeEventId: input.stripeEventId,
+        lastStripeEventCreatedAt: input.stripeEventCreatedAt
+      })
+      .onConflictDoUpdate({
+        target: subscriptions.stripeSubscriptionId,
+        set: {
+          plan: input.plan,
+          status: input.subscriptionStatus,
+          currentPeriodStart: input.currentPeriodStart ?? null,
+          currentPeriodEnd: input.currentPeriodEnd ?? null,
+          cancelAtPeriodEnd: input.cancelAtPeriodEnd ?? false,
+          lastStripeEventId: input.stripeEventId,
+          lastStripeEventCreatedAt: input.stripeEventCreatedAt,
+          updatedAt: new Date()
+        }
+      });
+
+    return true;
+  });
 }
 
 export async function updateCreditSubscriptionState(userId: string, input: {

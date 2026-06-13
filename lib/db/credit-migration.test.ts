@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("two-credit balance migration", () => {
   const sql = readFileSync(join(process.cwd(), "drizzle/0007_two_credit_balances.sql"), "utf8");
   const bucketSql = readFileSync(join(process.cwd(), "drizzle/0008_subscription_pack_credit_buckets.sql"), "utf8");
+  const subscriptionEventSql = readFileSync(join(process.cwd(), "drizzle/0009_subscription_event_ordering.sql"), "utf8");
 
   it("moves the legacy balance into blue_balance and starts gold_balance at zero", () => {
     expect(sql).toContain('"blue_balance" = COALESCE("blue_balance", "balance", 0)');
@@ -29,5 +30,10 @@ describe("two-credit balance migration", () => {
   it("records the affected credit bucket on transactions", () => {
     expect(bucketSql).toContain('CREATE TYPE "credit_bucket" AS ENUM (\'subscription\', \'pack\')');
     expect(bucketSql).toContain('ADD COLUMN IF NOT EXISTS "credit_bucket" "credit_bucket" DEFAULT \'pack\' NOT NULL');
+  });
+
+  it("records the last processed Stripe subscription event", () => {
+    expect(subscriptionEventSql).toContain('ADD COLUMN IF NOT EXISTS "last_stripe_event_id" text');
+    expect(subscriptionEventSql).toContain('ADD COLUMN IF NOT EXISTS "last_stripe_event_created_at" timestamp with time zone');
   });
 });
