@@ -374,6 +374,8 @@ export async function replaceSubscriptionCredits(
       insertedAny = insertedAny || Boolean(transaction);
     }
 
+    if (!insertedAny) return false;
+
     await tx
       .insert(credits)
       .values({
