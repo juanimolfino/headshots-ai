@@ -79,11 +79,9 @@ As of 2026-06-14, the dashboard handles job failures and long-running states exp
 - User-facing job error copy is centralized in `lib/job-ux.ts`; it maps provider failures, timeouts, invalid images, insufficient credits, and generic errors away from raw Fal/OpenAI/Gemini/JSON details.
 - Long-job feedback uses status-derived stages, ETA-based progress, and last successful poll timestamps. Training copy is normalized around a realistic 4-9 minute expectation; generate/edit use shorter ETA windows and show an over-ETA message instead of pretending progress is still precise.
 - Completed training/generate/edit jobs now send the React `JobReadyEmail` template via `sendJobReadyEmail()`, with a direct link back to `/dashboard/headshots`.
-
-Deferred from this UX batch:
-
-- In-app toast notifications.
-- Failure/refund transactional emails.
+- In-app job notifications use the lightweight local toaster in `components/ui/job-toasts.tsx`. Toast events are centralized in `lib/job-toast-events.ts`, deduped by `jobId:eventKind`, and existing historical jobs are primed as already seen on first load so old jobs do not spam users.
+- Failed job rows can be hidden with the X/Ocultar action. This is a local UI dismissal stored in `localStorage` per user email; it does not delete the failed job from the database.
+- Failed/refunded jobs send the React `JobFailedEmail` template through `sendJobFailedEmail()`. The Inngest worker only sends it when `refundJobCredits()` returns true, so worker retries or duplicate failure handling do not email the same refund twice.
 
 ## Generation Details
 
@@ -224,8 +222,7 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 
 ## Useful Next Work
 
-1. Add in-app toast notifications for success/failure/refund events.
-2. Add failure/refund transactional emails.
-3. Add admin support UI for users, jobs, credits, and stuck-job recovery.
-4. Move Resend to a verified product domain.
-5. Swap Stripe to production keys before launch.
+1. Add admin support UI for users, jobs, credits, and stuck-job recovery.
+2. Consider a server-side "archived failed job" flag if hidden failures need to persist across browsers/devices.
+3. Move Resend to a verified product domain.
+4. Swap Stripe to production keys before launch.
