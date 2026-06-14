@@ -101,7 +101,7 @@ const ATTIRE_COLORS = [
 const QUICK_QUALITY_OPTIONS = [
   { label: "Draft", value: "low", blueCost: 1 },
   { label: "Standard", value: "medium", blueCost: 2 },
-  { label: "Premium HD", value: "high", blueCost: 3 }
+  { label: "Premium", value: "high", blueCost: 3 }
 ] as const;
 
 const QUICK_PRESET_OPTIONS = [
@@ -1493,66 +1493,67 @@ function QuickEditPanel({
             </div>
           </div>
         ) : (
-          <div className="max-w-3xl rounded-xl border border-line bg-surface p-6">
-            <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-ink-muted">
+          <div className="rounded-[18px] border border-line bg-surface px-7 py-[26px] shadow-[0_22px_48px_-38px_rgba(20,27,50,.38)]">
+            <p className="mb-[22px] text-[11px] font-bold uppercase tracking-[.15em] text-ink-muted">
               Quick edit
             </p>
 
-            <div className="mb-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
-              <div>
-                <p className="mb-2.5 text-sm font-medium text-ink-soft">Preset</p>
-                <div className="grid gap-2 sm:grid-cols-3">
+            <div className="mb-5">
+              <p className="mb-[11px] text-[13.5px] font-semibold text-ink">Engine</p>
+              <div className="grid max-w-[520px] grid-cols-2 rounded-[13px] border border-line bg-bg-2 p-1">
+                {QUICK_ENGINE_OPTIONS.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      if (!option.disabled) onEngineChange(option.value);
+                    }}
+                    disabled={option.disabled}
+                    title={option.disabled ? "Coming soon" : undefined}
+                    className={cn(
+                      "rounded-[10px] px-4 py-3 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-45",
+                      engine === option.value
+                        ? "bg-navy text-navy-foreground shadow-[0_14px_30px_-18px_rgba(20,27,50,.8)]"
+                        : "text-ink-muted hover:text-ink"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <p className="mb-[11px] text-[13.5px] font-semibold text-ink">Preset</p>
+              <div className="grid gap-[13px] sm:grid-cols-3">
                   {QUICK_PRESET_OPTIONS.map(option => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => onPresetChange(option.value)}
                       className={cn(
-                        "relative min-h-32 rounded-lg border p-3.5 text-left transition-all",
+                        "relative flex min-h-[136px] flex-col gap-2 rounded-[13px] border-[1.5px] px-[17px] py-4 text-left transition",
                         preset === option.value
-                          ? "border-navy bg-bg-2 text-ink shadow-sm"
-                          : "border-line bg-bg text-ink-soft hover:border-line-strong hover:bg-surface"
+                          ? "border-navy bg-navy-tint"
+                          : "border-line bg-bg hover:border-line-strong hover:bg-surface"
                       )}
                     >
-                      <span className="block pr-7 text-base font-semibold">{option.label}</span>
-                      <span className="mt-2 block text-sm leading-relaxed text-ink-muted">{option.description}</span>
-                      {preset === option.value ? (
-                        <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-navy text-navy-foreground">
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                      ) : null}
+                      <span className={cn(
+                        "absolute right-3.5 top-3.5 flex size-[28px] items-center justify-center rounded-full transition",
+                        preset === option.value ? "bg-navy text-navy-foreground" : "bg-surface text-transparent"
+                      )}>
+                        <Check className="size-[14px]" />
+                      </span>
+                      <span className="pr-9 text-[15px] font-bold text-ink">{option.label}</span>
+                      <span className="text-[12.5px] leading-[1.55] text-ink-soft">{option.description}</span>
                     </button>
                   ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-2.5 text-sm font-medium text-ink-soft">Engine</p>
-                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
-                  {QUICK_ENGINE_OPTIONS.map(option => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        if (!option.disabled) onEngineChange(option.value);
-                      }}
-                      disabled={option.disabled}
-                      title={option.disabled ? "Coming soon" : undefined}
-                      className={cn(
-                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-45",
-                        engine === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
               </div>
             </div>
 
             <div className="mb-5">
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium text-ink-soft">
+                <label className="text-[13.5px] font-semibold text-ink">
                   Reference photos ({QUICK_MIN_PHOTOS}-{QUICK_MAX_PHOTOS})
                 </label>
                 <span className="text-sm text-ink-muted">{photos.length} / {QUICK_MAX_PHOTOS}</span>
@@ -1566,7 +1567,7 @@ function QuickEditPanel({
                   onAddFiles(e.dataTransfer.files);
                 }}
                 disabled={uploading}
-                className="flex min-h-28 w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-bg px-6 py-6 text-center transition-colors hover:border-navy hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex min-h-28 w-full flex-col items-center justify-center rounded-[13px] border border-dashed border-line-strong bg-bg px-6 py-6 text-center transition-colors hover:border-navy hover:bg-navy-tint disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="mb-2 h-6 w-6 text-ink-muted" />
                 <span className="text-sm font-medium text-ink-soft">Drag or click to select</span>
@@ -1584,16 +1585,16 @@ function QuickEditPanel({
                 }}
               />
               {photos.length > 0 && (
-                <div className="mt-4 grid grid-cols-5 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-5">
                   {photos.map(photo => (
-                    <div key={photo.id} className="relative aspect-square overflow-hidden rounded-md border border-line bg-bg-2">
+                    <div key={photo.id} className="relative aspect-square overflow-hidden rounded-[10px] border border-line bg-bg-2">
                       <Image src={photo.previewUrl} alt="" fill unoptimized className="object-cover" />
                       <button
                         type="button"
                         onClick={() => onRemovePhoto(photo.id)}
-                        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white"
+                        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm hover:bg-white"
                       >
-                        <X className="h-3 w-3 text-ink-soft" />
+                        <X className="h-3.5 w-3.5 text-ink-soft" />
                       </button>
                     </div>
                   ))}
@@ -1603,30 +1604,32 @@ function QuickEditPanel({
 
             {preset === "free" ? (
               <div className="mb-5">
-                <label className="mb-2 block text-sm font-medium text-ink-soft">Prompt</label>
+                <label className="mb-[11px] block text-[13.5px] font-semibold text-ink">Prompt</label>
                 <textarea
                   value={prompt}
                   onChange={e => onPromptChange(e.target.value)}
                   rows={5}
                   maxLength={2000}
                   placeholder="Describe the exact edit, setting, styling, crop, clothing, background, and mood."
-                  className="w-full resize-none rounded-lg border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
+                  className="w-full resize-none rounded-[13px] border border-line bg-surface px-3.5 py-3 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
                 />
               </div>
             ) : null}
 
-            <div className="mb-6 grid gap-5 lg:grid-cols-[1fr_1fr_1fr]">
+            <div className="mb-6 grid gap-5 border-t border-line pt-[22px] lg:grid-cols-[1fr_1fr_1fr]">
               <div>
-                <p className="mb-2.5 text-sm font-medium text-ink-soft">Quality</p>
-                <div className="inline-flex max-w-full rounded-lg border border-line bg-bg p-0.5">
+                <p className="mb-[11px] text-[13.5px] font-semibold text-ink">Quality</p>
+                <div className="inline-flex max-w-full rounded-[11px] border border-line bg-bg-2 p-1">
                   {QUICK_QUALITY_OPTIONS.map(option => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => onQualityChange(option.value)}
                       className={cn(
-                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
-                        quality === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                        "rounded-[9px] px-4 py-2 text-sm font-semibold transition-all",
+                        quality === option.value
+                          ? "bg-navy text-navy-foreground shadow-[0_14px_30px_-18px_rgba(20,27,50,.8)]"
+                          : "text-ink-muted hover:text-ink"
                       )}
                     >
                       {option.label}
@@ -1635,8 +1638,8 @@ function QuickEditPanel({
                 </div>
               </div>
               <div>
-                <div className="mb-2.5 flex items-center gap-1.5">
-                  <p className="text-sm font-medium text-ink-soft">Size</p>
+                <div className="mb-[11px] flex items-center gap-1.5">
+                  <p className="text-[13.5px] font-semibold text-ink">Size</p>
                   <span
                     title="Original size preserves the source aspect ratio, which usually keeps real-world edits closer to the original photo."
                     className="inline-flex text-ink-muted"
@@ -1644,7 +1647,7 @@ function QuickEditPanel({
                     <Info className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="inline-flex max-w-full flex-wrap rounded-lg border border-line bg-bg p-0.5">
+                <div className="grid max-w-full grid-cols-1 rounded-[11px] border border-line bg-bg-2 p-1">
                   {QUICK_IMAGE_SIZE_OPTIONS.map(option => {
                     const Icon = option.icon;
                     return (
@@ -1653,8 +1656,10 @@ function QuickEditPanel({
                         type="button"
                         onClick={() => onImageSizeChange(option.value)}
                         className={cn(
-                          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-                          imageSize === option.value ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                          "flex w-full items-center justify-center gap-1.5 rounded-[9px] px-3 py-2 text-center text-sm font-semibold transition-all",
+                          imageSize === option.value
+                            ? "bg-navy text-navy-foreground shadow-[0_14px_30px_-18px_rgba(20,27,50,.8)]"
+                            : "text-ink-muted hover:text-ink"
                         )}
                         title={option.description}
                       >
@@ -1666,16 +1671,18 @@ function QuickEditPanel({
                 </div>
               </div>
               <div>
-                <p className="mb-2.5 text-sm font-medium text-ink-soft">Count</p>
-                <div className="inline-flex rounded-lg border border-line bg-bg p-0.5">
+                <p className="mb-[11px] text-[13.5px] font-semibold text-ink">Count</p>
+                <div className="inline-flex rounded-[11px] border border-line bg-bg-2 p-1">
                   {IMAGE_COUNTS.map(count => (
                     <button
                       key={count}
                       type="button"
                       onClick={() => onNumImagesChange(count)}
                       className={cn(
-                        "rounded-md px-4 py-1.5 text-sm font-medium transition-all",
-                        numImages === count ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink-soft"
+                        "rounded-[9px] px-4 py-2 text-sm font-semibold transition-all",
+                        numImages === count
+                          ? "bg-navy text-navy-foreground shadow-[0_14px_30px_-18px_rgba(20,27,50,.8)]"
+                          : "text-ink-muted hover:text-ink"
                       )}
                     >
                       {count}
@@ -1695,6 +1702,7 @@ function QuickEditPanel({
                 disabled={uploading || photos.length < QUICK_MIN_PHOTOS}
                 variant="pill"
                 size="pill"
+                className="shadow-[0_18px_34px_-20px_rgba(20,27,50,.82)]"
               >
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {uploading ? (message ?? "Uploading...") : `Generate with ${engine === "gpt-image-2" ? "GPT Image 2" : "Nano Banana Pro"}`}

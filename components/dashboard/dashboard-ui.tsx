@@ -12,6 +12,7 @@ import {
   Download,
   ImageIcon,
   Images,
+  Info,
   Loader2,
   LogOut,
   Plus,
@@ -316,8 +317,18 @@ function DashboardSidebar({
       </nav>
       <div className="flex flex-col gap-[11px]">
         <div className="rounded-[14px] border border-white/[.07] bg-white/[.04] px-[13px] py-3">
-          <CreditRow tone="blue" label="Blue credits" value={credits.blue} />
-          <CreditRow tone="gold" label="Golden credits" value={credits.gold} />
+          <CreditRow
+            tone="blue"
+            label="Blue credits"
+            value={credits.blue}
+            tooltip="Blue credits are used to generate or edit images."
+          />
+          <CreditRow
+            tone="gold"
+            label="Golden credits"
+            value={credits.gold}
+            tooltip="Golden credits are used to train a personal AI model with your photos."
+          />
           <CreditBucketDetails credits={credits} />
           <Button asChild className="mt-[9px] h-auto w-full rounded-[10px] bg-white px-3 py-2.5 text-[13px] font-bold text-navy-sidebar hover:bg-[#eceae4]">
             <Link href="/pricing"><Wallet className="size-[15px]" />Buy credits</Link>
@@ -810,11 +821,37 @@ function ModelButton({
   );
 }
 
-function CreditRow({ tone, label, value }: { tone: "blue" | "gold"; label: string; value: number }) {
+function CreditRow({
+  tone,
+  label,
+  value,
+  tooltip
+}: {
+  tone: "blue" | "gold";
+  label: string;
+  value: number;
+  tooltip?: string;
+}) {
   return (
     <div className="flex items-center gap-[9px] px-0.5 py-1">
       <CreditDot tone={tone} />
-      <span className="flex-1 text-[13px] text-[#aeb6d4]">{label}</span>
+      <span className="flex flex-1 items-center gap-1.5 text-[13px] text-[#aeb6d4]">
+        <span>{label}</span>
+        {tooltip ? (
+          <span className="group/credit-info relative inline-flex">
+            <button
+              type="button"
+              className="inline-flex size-[14px] items-center justify-center rounded-full text-[#8b93ad] transition hover:text-white"
+              aria-label={tooltip}
+            >
+              <Info className="size-[12px]" />
+            </button>
+            <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-44 -translate-x-1/2 rounded-[10px] border border-white/[.08] bg-[#202742] px-2.5 py-2 text-[11px] font-medium leading-[1.35] text-[#eef0f6] opacity-0 shadow-[0_16px_34px_-20px_rgba(0,0,0,.75)] transition duration-150 group-hover/credit-info:opacity-100 group-focus-within/credit-info:opacity-100">
+              {tooltip}
+            </span>
+          </span>
+        ) : null}
+      </span>
       <span className="text-sm font-bold text-white">{value}</span>
     </div>
   );

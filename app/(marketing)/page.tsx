@@ -135,7 +135,7 @@ export default function LandingPage() {
         {/* ================= HOW IT WORKS ================= */}
         <section id="how-it-works" className="lp-section" aria-labelledby="how-h2">
           <div className="wrap">
-            <Reveal className="sec-head">
+            <Reveal className="sec-head sec-head-wide">
               <Eyebrow>How it works</Eyebrow>
               <h2 id="how-h2">Three steps to a studio-quality headshot</h2>
             </Reveal>
