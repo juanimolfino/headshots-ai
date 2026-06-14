@@ -3,9 +3,7 @@ import { checkUploadRateLimit } from "@/lib/redis/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   initiateFalStorageUpload,
-  FAL_OBJECT_LIFECYCLE_HEADER,
-  FAL_SOURCE_OBJECT_EXPIRATION_SECONDS,
-  falObjectLifecyclePreference
+  FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
 } from "@/lib/fal/privacy";
 import { ensureUserProfile } from "@/lib/db/queries";
 import { hasCurrentLegalConsent, hasCurrentPhotoProcessingConsent } from "@/lib/legal/consent";
@@ -106,9 +104,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     uploadUrl: data.upload_url,
     fileUrl: data.file_url,
-    uploadHeaders: {
-      [FAL_OBJECT_LIFECYCLE_HEADER]: falObjectLifecyclePreference(FAL_SOURCE_OBJECT_EXPIRATION_SECONDS)
-    },
     expiresInSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
   });
 }

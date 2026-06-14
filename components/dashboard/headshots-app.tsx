@@ -962,7 +962,6 @@ export function HeadshotsApp({
         const initData = (await readJsonOrText(initRes)) as {
           uploadUrl?: string;
           fileUrl?: string;
-          uploadHeaders?: Record<string, string>;
           error?: string;
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
@@ -972,7 +971,7 @@ export function HeadshotsApp({
         }
         const upRes = await fetch(initData.uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type, ...(initData.uploadHeaders ?? {}) },
+          headers: { "Content-Type": file.type },
           body: file
         });
         if (!upRes.ok) throw new Error(`Could not upload ${photos[i].file.name}.`);
@@ -1144,7 +1143,6 @@ export function HeadshotsApp({
         const initData = (await readJsonOrText(initRes)) as {
           uploadUrl?: string;
           fileUrl?: string;
-          uploadHeaders?: Record<string, string>;
           error?: string;
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
@@ -1152,7 +1150,7 @@ export function HeadshotsApp({
         }
         const upRes = await fetch(initData.uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type, ...(initData.uploadHeaders ?? {}) },
+          headers: { "Content-Type": file.type },
           body: file
         });
         if (!upRes.ok) throw new Error(`Could not upload ${quickPhotos[i].file.name}.`);

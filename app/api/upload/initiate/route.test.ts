@@ -11,7 +11,6 @@ describe("upload initiate privacy gate", () => {
     expect(source).toContain("hasCurrentPhotoProcessingConsent(profile)");
     expect(source).toContain("initiateFalStorageUpload");
     expect(source).toContain("FAL_SOURCE_OBJECT_EXPIRATION_SECONDS");
-    expect(source).toContain("uploadHeaders");
-    expect(source).toContain("falObjectLifecyclePreference(FAL_SOURCE_OBJECT_EXPIRATION_SECONDS)");
+    expect(source).toContain("expirationSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS");
   });
 });
