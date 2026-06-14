@@ -40,14 +40,25 @@ export async function sendPurchaseConfirmationEmail(email: string, credits: { bl
   );
 }
 
-export async function sendJobReadyEmail(email: string, resultUrl: string) {
+export async function sendJobReadyEmail(email: string, input: {
+  subject: string;
+  heading: string;
+  body: string;
+  actionUrl: string;
+  actionLabel?: string;
+}) {
   if (!canSendEmail()) return;
   await sendSafely("job ready", () =>
     getResend().emails.send({
       from: process.env.RESEND_FROM_EMAIL!,
       to: email,
-      subject: "Your AI job is ready",
-      react: JobReadyEmail({ resultUrl })
+      subject: input.subject,
+      react: JobReadyEmail({
+        heading: input.heading,
+        body: input.body,
+        actionUrl: input.actionUrl,
+        actionLabel: input.actionLabel
+      })
     })
   );
 }

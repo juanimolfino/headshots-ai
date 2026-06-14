@@ -15,7 +15,7 @@ import {
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
 import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
-import { sendPlainEmail } from "@/lib/email/send";
+import { sendJobReadyEmail } from "@/lib/email/send";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { inngest } from "./client";
@@ -245,9 +245,23 @@ async function storeHeadshotImage(input: {
   });
 }
 
-async function sendUserEmail(userId: string, subject: string, text: string) {
+function getDashboardUrl() {
+  const rawUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || "http://localhost:3000";
+  const baseUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+  return `${baseUrl.replace(/\/$/, "")}/dashboard/headshots`;
+}
+
+async function sendUserEmail(userId: string, subject: string, text: string, actionLabel = "Open dashboard") {
   const user = await getDb().query.users.findFirst({ where: eq(users.id, userId) });
-  if (user?.email) await sendPlainEmail({ to: user.email, subject, text });
+  if (user?.email) {
+    await sendJobReadyEmail(user.email, {
+      subject,
+      heading: subject,
+      body: text,
+      actionUrl: getDashboardUrl(),
+      actionLabel
+    });
+  }
 }
 
 type TrainingPrepResult = {
@@ -405,7 +419,12 @@ export const runAiJob = inngest.createFunction(
         const result = { lora_url: loraUrl, trigger_word: triggerWord };
         await step.run("mark done", async () => markJobDone(job.id, loraUrl, result));
         await step.run("send ready email", async () =>
-          sendUserEmail(job.userId, "Tu modelo personal está listo", "Tu modelo personal está listo. Entrá a tu dashboard para generar tus headshots.")
+          sendUserEmail(
+            job.userId,
+            "Tu modelo personal está listo",
+            "Tu modelo personal está listo. Entrá a tu dashboard para generar tus headshots.",
+            "Ver modelo"
+          )
         );
         return { result };
       }
@@ -417,7 +436,8 @@ export const runAiJob = inngest.createFunction(
           sendUserEmail(
             job.userId,
             "Tus headshots están listos",
-            "Tus headshots están listos. Entrá a tu dashboard para verlos y descargarlos."
+            "Tus headshots están listos. Entrá a tu dashboard para verlos y descargarlos.",
+            "Ver resultados"
           )
         );
         return { result: resultUrls };
@@ -430,7 +450,8 @@ export const runAiJob = inngest.createFunction(
           sendUserEmail(
             job.userId,
             "Tus fotos están listas",
-            "Tus fotos editadas están listas. Entrá a tu dashboard para verlas y descargarlas."
+            "Tus fotos editadas están listas. Entrá a tu dashboard para verlas y descargarlas.",
+            "Ver resultados"
           )
         );
         return { result: resultUrls };

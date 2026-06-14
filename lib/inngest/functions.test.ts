@@ -21,4 +21,12 @@ describe("Inngest AI job safeguards", () => {
     expect(route).toContain("reapStaleAiJobs");
     expect(route).toContain("functions: [runAiJob, reapStaleAiJobs]");
   });
+
+  it("sends completed job notifications through the JobReadyEmail template helper", () => {
+    expect(source).toContain('import { sendJobReadyEmail } from "@/lib/email/send"');
+    expect(source).toContain("sendJobReadyEmail(user.email");
+    expect(source).toContain("/dashboard/headshots");
+    expect(source).toContain("Ver modelo");
+    expect(source).toContain("Ver resultados");
+  });
 });

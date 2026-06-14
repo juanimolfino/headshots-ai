@@ -1,12 +1,23 @@
 import * as React from "react";
 
-export function JobReadyEmail({ resultUrl }: { resultUrl: string }) {
+export function JobReadyEmail({
+  heading,
+  body,
+  actionUrl,
+  actionLabel = "Open dashboard"
+}: {
+  heading: string;
+  body: string;
+  actionUrl: string;
+  actionLabel?: string;
+}) {
   return (
     <html>
       <body>
-        <h1>Your AI job is ready</h1>
+        <h1>{heading}</h1>
+        <p>{body}</p>
         <p>
-          Open your result here: <a href={resultUrl}>{resultUrl}</a>
+          <a href={actionUrl}>{actionLabel}</a>
         </p>
       </body>
     </html>
