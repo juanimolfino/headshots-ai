@@ -19,7 +19,8 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
-  Wallet
+  Wallet,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,6 +118,7 @@ export type DashboardWorkspaceProps = {
   onQuickEdit: () => void;
   onRetryTraining: (job: TrainingJobLike) => void;
   onRetryGeneration: (job: GenerateJobLike) => void;
+  onDismissFailedJob: (jobId: string) => void;
   onStyleChange: (value: StyleValue) => void;
   onCountChange: (value: CountValue) => void;
   onBackgroundChange: (value: BackgroundValue) => void;
@@ -274,7 +276,13 @@ function DashboardContent(props: DashboardWorkspaceProps) {
   if (props.mode === "loading") return <LoadingState />;
   if (props.mode === "training-only") return <TrainingOnlyState job={props.activeTrainingJob} elapsed={props.trainingElapsed} lastUpdatedAt={props.trainingLastUpdatedAt} />;
   if (props.mode === "training-failed" && props.selectedTrainingFailedJob) {
-    return <TrainingFailedState job={props.selectedTrainingFailedJob} onRetry={() => props.onRetryTraining(props.selectedTrainingFailedJob!)} />;
+    return (
+      <TrainingFailedState
+        job={props.selectedTrainingFailedJob}
+        onRetry={() => props.onRetryTraining(props.selectedTrainingFailedJob!)}
+        onDismiss={() => props.onDismissFailedJob(props.selectedTrainingFailedJob!.id)}
+      />
+    );
   }
   if (props.mode === "empty") return <EmptyModelsState onNewModel={props.onNewModel} />;
 
@@ -535,7 +543,7 @@ function GenerationCard(props: DashboardWorkspaceProps) {
   );
 }
 
-function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration }: DashboardWorkspaceProps) {
+function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration, onDismissFailedJob }: DashboardWorkspaceProps) {
   const { failedJobs, doneJobs } = splitJobsByStatus(jobs);
   const visibleDoneJobs = doneJobs.slice(0, 3);
   return (
@@ -552,6 +560,7 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration 
           key={job.id}
           job={job}
           onRetry={() => onRetryGeneration(job)}
+          onDismiss={() => onDismissFailedJob(job.id)}
         />
       ))}
       {visibleDoneJobs.map(job => (
@@ -567,10 +576,12 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration 
 
 function FailedGenerationRow({
   job,
-  onRetry
+  onRetry,
+  onDismiss
 }: {
   job: GenerateJobLike;
   onRetry: () => void;
+  onDismiss: () => void;
 }) {
   const message = getUserFacingJobError(job.error);
   const input = job.input;
@@ -588,6 +599,15 @@ function FailedGenerationRow({
           <p className="mt-1 text-sm font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
         </div>
         <div className="flex shrink-0 flex-col gap-2">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
+            aria-label="Ocultar fallo"
+            title="Ocultar"
+          >
+            <X className="size-4" />
+          </button>
           <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
             <RefreshCw className="size-3.5" />
             Reintentar
@@ -905,14 +925,25 @@ function TrainingOnlyState({
 
 function TrainingFailedState({
   job,
-  onRetry
+  onRetry,
+  onDismiss
 }: {
   job: TrainingJobLike;
   onRetry: () => void;
+  onDismiss: () => void;
 }) {
   const message = getUserFacingJobError(job.error);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
+    <div className="relative flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="absolute right-8 top-8 rounded-lg p-2 text-ink-muted transition hover:bg-bg-2 hover:text-ink"
+        aria-label="Ocultar fallo"
+        title="Ocultar"
+      >
+        <X className="size-5" />
+      </button>
       <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-red-50 text-red-600">
         <AlertCircle className="size-7" />
       </div>
@@ -923,6 +954,10 @@ function TrainingFailedState({
         <Button type="button" variant="sage" onClick={onRetry} className="h-auto rounded-xl px-[26px] py-3.5">
           <RefreshCw className="size-4" />
           Reintentar
+        </Button>
+        <Button type="button" variant="outline" onClick={onDismiss} className="h-auto rounded-xl px-[22px] py-3.5">
+          <X className="size-4" />
+          Ocultar
         </Button>
         {message.cta === "contact" ? (
           <Button asChild variant="outline" className="h-auto rounded-xl px-[22px] py-3.5">

@@ -28,12 +28,18 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { JobToasts, type JobToastItem } from "@/components/ui/job-toasts";
 import {
   DashboardWorkspace,
   type ActiveGenerationJob,
   type CountValue,
   type DashboardMode
 } from "@/components/dashboard/dashboard-ui";
+import {
+  collectNewJobToastEvents,
+  markJobToastEventsSeen,
+  type ToastJob
+} from "@/lib/job-toast-events";
 import {
   getInsufficientCreditsMessage,
   getJobProgressInfo,
@@ -272,6 +278,28 @@ function getQuickEditBlueCost(quality: "low" | "medium" | "high", count: (typeof
   return option.blueCost * count;
 }
 
+function toTrainingToastJob(job: TrainingJob): ToastJob {
+  return {
+    id: job.id,
+    type: "headshot-training",
+    status: job.status,
+    error: job.error,
+    creditsUsed: job.creditsUsed,
+    creditKind: job.creditKind
+  };
+}
+
+function toHeadshotToastJob(job: GenerateJob, type: "headshot-generate" | "headshot-edit"): ToastJob {
+  return {
+    id: job.id,
+    type,
+    status: job.status,
+    error: job.error,
+    creditsUsed: job.creditsUsed,
+    creditKind: job.creditKind
+  };
+}
+
 function toActiveGenerationJob(
   job: GenerateJob,
   title?: string,
@@ -419,6 +447,18 @@ function optimizeQuickEditImage(file: File): Promise<File> {
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
+function readDismissedFailedJobIds(storageKey: string) {
+  if (typeof window === "undefined") return new Set<string>();
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    const parsed = raw ? JSON.parse(raw) as unknown : null;
+    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
 export function HeadshotsApp({
   userEmail,
   initialCredits
@@ -427,6 +467,17 @@ export function HeadshotsApp({
   initialCredits: DashboardCredits;
 }) {
   const [credits, setCredits] = useState<DashboardCredits>(initialCredits);
+  const dismissedFailedStorageKey = `headshots:dismissed-failed-jobs:${userEmail}`;
+  const [toasts, setToasts] = useState<JobToastItem[]>([]);
+  const [dismissedFailedJobIds, setDismissedFailedJobIds] = useState<Set<string>>(
+    () => readDismissedFailedJobIds(dismissedFailedStorageKey)
+  );
+  const seenToastKeysRef = useRef<Set<string>>(new Set());
+  const primedToastGroupsRef = useRef<Record<"training" | "generate" | "edit", boolean>>({
+    training: false,
+    generate: false,
+    edit: false
+  });
 
   // Models
   const [trainedModels, setTrainedModels] = useState<TrainingJob[]>([]);
@@ -513,6 +564,32 @@ export function HeadshotsApp({
 
   // ── Data loading ─────────────────────────────────────────────────────────
 
+  const dismissToast = useCallback((toastId: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== toastId));
+  }, []);
+
+  const emitJobToastEvents = useCallback((
+    jobs: ToastJob[],
+    group: "training" | "generate" | "edit",
+    options: { force?: boolean } = {}
+  ) => {
+    if (!primedToastGroupsRef.current[group] && !options.force) {
+      markJobToastEventsSeen(jobs, seenToastKeysRef.current);
+      primedToastGroupsRef.current[group] = true;
+      return;
+    }
+    primedToastGroupsRef.current[group] = true;
+    const events = collectNewJobToastEvents(jobs, seenToastKeysRef.current);
+    if (events.length === 0) return;
+    setToasts(prev => {
+      const next = [
+        ...prev.filter(toast => !events.some(event => event.key === toast.key)),
+        ...events.map(event => ({ ...event, id: event.key }))
+      ];
+      return next.slice(-6);
+    });
+  }, []);
+
   const loadCredits = useCallback(async () => {
     const res = await fetch("/api/credits", { cache: "no-store" });
     if (!res.ok) return;
@@ -544,6 +621,7 @@ export function HeadshotsApp({
       const active = all.find(j => j.status === "pending" || j.status === "processing") ?? null;
       setModelsLastUpdatedAt(new Date().toISOString());
       refreshCreditsForNewFailures(all);
+      emitJobToastEvents(all.map(toTrainingToastJob), "training");
       setActiveTrainingJob(prev => {
         if (active && !trainingStartRef.current) {
           trainingStartRef.current = new Date(active.createdAt).getTime();
@@ -554,7 +632,7 @@ export function HeadshotsApp({
     } finally {
       setLoadingModels(false);
     }
-  }, [refreshCreditsForNewFailures]);
+  }, [emitJobToastEvents, refreshCreditsForNewFailures]);
 
   const loadHistory = useCallback(async () => {
     const res = await fetch("/api/jobs?type=headshot-generate&limit=50");
@@ -564,7 +642,8 @@ export function HeadshotsApp({
     setGenerateJobs(jobs);
     setGenerateJobsLastUpdatedAt(new Date().toISOString());
     refreshCreditsForNewFailures(jobs);
-  }, [refreshCreditsForNewFailures]);
+    emitJobToastEvents(jobs.map(job => toHeadshotToastJob(job, "headshot-generate")), "generate");
+  }, [emitJobToastEvents, refreshCreditsForNewFailures]);
 
   const loadEditHistory = useCallback(async () => {
     const res = await fetch("/api/jobs?type=headshot-edit&limit=50");
@@ -574,7 +653,8 @@ export function HeadshotsApp({
     setEditJobs(jobs);
     setEditJobsLastUpdatedAt(new Date().toISOString());
     refreshCreditsForNewFailures(jobs);
-  }, [refreshCreditsForNewFailures]);
+    emitJobToastEvents(jobs.map(job => toHeadshotToastJob(job, "headshot-edit")), "edit");
+  }, [emitJobToastEvents, refreshCreditsForNewFailures]);
 
   const deleteEditJob = useCallback(async (jobId: string) => {
     const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -663,6 +743,16 @@ export function HeadshotsApp({
       setGenerationError(data.error);
       if (typeof data.creditsUsed === "number") setGenerationCreditsUsed(data.creditsUsed);
       if (data.creditKind === "blue" || data.creditKind === "gold") setGenerationCreditKind(data.creditKind);
+      if (data.status === "done" || data.status === "failed") {
+        emitJobToastEvents([{
+          id: generationJobId,
+          type: generationJobKind === "edit" ? "headshot-edit" : "headshot-generate",
+          status: data.status,
+          error: data.error,
+          creditsUsed: data.creditsUsed ?? generationCreditsUsed,
+          creditKind: data.creditKind ?? generationCreditKind
+        }], generationJobKind === "edit" ? "edit" : "generate", { force: true });
+      }
       if (data.status === "done") {
         const sRes = await fetch(`/api/jobs/${generationJobId}/signed-urls`, { method: "POST" });
         const sData = (await sRes.json()) as { signedUrls?: string[] };
@@ -680,7 +770,7 @@ export function HeadshotsApp({
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [generationJobId, generationJobKind, generationStatus, signedUrls, loadHistory, loadEditHistory, refreshCreditsForNewFailures]);
+  }, [generationJobId, generationJobKind, generationStatus, signedUrls, loadHistory, loadEditHistory, refreshCreditsForNewFailures, emitJobToastEvents, generationCreditsUsed, generationCreditKind]);
 
   useEffect(() => {
     if (!generationJobId || signedUrls || generationStatus === "failed") return;
@@ -1176,10 +1266,56 @@ export function HeadshotsApp({
     void loadCredits();
   }
 
+  function dismissFailedJob(jobId: string) {
+    setDismissedFailedJobIds(prev => {
+      const next = new Set(prev);
+      next.add(jobId);
+      try {
+        window.localStorage.setItem(dismissedFailedStorageKey, JSON.stringify(Array.from(next)));
+      } catch {
+        // Local persistence is best-effort only.
+      }
+      return next;
+    });
+
+    if (selectedModelId === jobId) {
+      setSelectedModelId(trainedModels[0]?.id ?? null);
+    }
+    if (generationJobId === jobId) {
+      resetGeneration();
+    }
+  }
+
+  function handleToastAction(toast: JobToastItem) {
+    dismissToast(toast.id);
+
+    if (toast.jobType === "headshot-training") {
+      setSelectedModelId(toast.jobId);
+      setShowNewModelForm(false);
+      setShowQuickEditForm(false);
+      return;
+    }
+
+    if (toast.jobType === "headshot-edit") {
+      setSelectedModelId(null);
+      setShowNewModelForm(false);
+      setShowQuickEditForm(true);
+      return;
+    }
+
+    const job = generateJobs.find(item => item.id === toast.jobId);
+    const loraUrl = (job?.input as { lora_url?: string } | null)?.lora_url;
+    const model = trainedModels.find(item => item.result?.lora_url && item.result.lora_url === loraUrl);
+    if (model) setSelectedModelId(model.id);
+    setShowNewModelForm(false);
+    setShowQuickEditForm(false);
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
+  const visibleFailedTrainingJobs = failedTrainingJobs.filter(job => !dismissedFailedJobIds.has(job.id));
   const selectedModel = trainedModels.find(m => m.id === selectedModelId) ?? null;
-  const selectedTrainingFailedJob = failedTrainingJobs.find(m => m.id === selectedModelId) ?? null;
+  const selectedTrainingFailedJob = visibleFailedTrainingJobs.find(m => m.id === selectedModelId) ?? null;
 
   const modelGenerateJobs = selectedModel
     ? generateJobs.filter(j => {
@@ -1188,6 +1324,8 @@ export function HeadshotsApp({
         return loraUrl && modelLora && loraUrl === modelLora;
       })
     : [];
+  const visibleModelGenerateJobs = modelGenerateJobs.filter(job => job.status !== "failed" || !dismissedFailedJobIds.has(job.id));
+  const visibleEditJobs = editJobs.filter(job => job.status !== "failed" || !dismissedFailedJobIds.has(job.id));
 
   const localActiveGenerationJob: ActiveGenerationJob | null =
     generationJobId && !signedUrls && generationStatus !== "failed"
@@ -1209,7 +1347,7 @@ export function HeadshotsApp({
         }
       : null;
   const activeAccountGenerateJob = generateJobs.find(isActiveJob) ?? null;
-  const activeSelectedModelJob = modelGenerateJobs.find(isActiveJob) ?? null;
+  const activeSelectedModelJob = visibleModelGenerateJobs.find(isActiveJob) ?? null;
   const activeEditJob = editJobs.find(isActiveJob) ?? null;
   const activeTaskJob =
     activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob, undefined, "generate", generateJobsLastUpdatedAt) :
@@ -1242,7 +1380,7 @@ export function HeadshotsApp({
         userEmail={userEmail}
         credits={credits}
         models={trainedModels}
-        failedTrainingJobs={failedTrainingJobs}
+        failedTrainingJobs={visibleFailedTrainingJobs}
         loadingModels={loadingModels}
         selectedModel={selectedModel}
         selectedTrainingFailedJob={selectedTrainingFailedJob}
@@ -1257,7 +1395,7 @@ export function HeadshotsApp({
         background={background}
         attire={attireType}
         generationMessage={generationMessage}
-        jobs={modelGenerateJobs}
+        jobs={visibleModelGenerateJobs}
         generationLastUpdatedAt={generateJobsLastUpdatedAt}
         newModelContent={
           <NewModelPanel
@@ -1292,8 +1430,9 @@ export function HeadshotsApp({
             numImages={quickNumImages}
             uploading={quickUploading}
             message={quickMessage}
-            editJobs={editJobs}
+            editJobs={visibleEditJobs}
             onDeleteEdit={deleteEditJob}
+            onDismissFailedJob={dismissFailedJob}
             generationJobId={generationJobKind === "edit" ? generationJobId : null}
             generationStatus={generationJobKind === "edit" ? generationStatus : null}
             generationError={generationJobKind === "edit" ? generationError : null}
@@ -1333,6 +1472,7 @@ export function HeadshotsApp({
         onQuickEdit={handleQuickEdit}
         onRetryTraining={job => void retryTrainingJob(job as TrainingJob)}
         onRetryGeneration={job => void startRetriedHeadshotJob(job as GenerateJob, "generate")}
+        onDismissFailedJob={dismissFailedJob}
         onStyleChange={setStyle}
         onCountChange={setNumImages}
         onBackgroundChange={setBackground}
@@ -1360,6 +1500,11 @@ export function HeadshotsApp({
           </div>
         </div>
       ) : null}
+      <JobToasts
+        toasts={toasts}
+        onDismiss={dismissToast}
+        onAction={handleToastAction}
+      />
     </>
   );
 }
@@ -1582,6 +1727,7 @@ function QuickEditPanel({
   message,
   editJobs,
   onDeleteEdit,
+  onDismissFailedJob,
   generationJobId,
   generationStatus,
   generationError,
@@ -1620,6 +1766,7 @@ function QuickEditPanel({
   message: string | null;
   editJobs: GenerateJob[];
   onDeleteEdit: (id: string) => void;
+  onDismissFailedJob: (id: string) => void;
   generationJobId: string | null;
   generationStatus: JobStatus | null;
   generationError: string | null;
@@ -1722,21 +1869,35 @@ function QuickEditPanel({
             <p className="mt-2 text-sm font-semibold text-red-800">
               {getRefundCopy(generationCreditsUsed || blueCost, generationCreditKind)}
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onGenerate}
-              className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Reintentar
-            </Button>
-            {currentFailure.cta === "contact" ? (
-              <Button asChild variant="outline" size="sm" className="ml-2 mt-4 border-red-200 text-red-700 hover:bg-red-50">
-                <Link href={`mailto:${SUPPORT_EMAIL}`}>Contactar soporte</Link>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onGenerate}
+                className="border-red-200 text-red-700 hover:bg-red-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reintentar
               </Button>
-            ) : null}
+              {currentFailure.cta === "contact" ? (
+                <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
+                  <Link href={`mailto:${SUPPORT_EMAIL}`}>Contactar soporte</Link>
+                </Button>
+              ) : null}
+              {generationJobId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onDismissFailedJob(generationJobId)}
+                  className="border-red-200 text-red-700 hover:bg-red-50"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Ocultar
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : signedUrls?.length ? (
           <div className="mb-8">
@@ -2023,7 +2184,14 @@ function QuickEditPanel({
         {/* Saved quick edits */}
 	        {editJobs.length > 0 && (
 	          <div className="mt-8">
-	            <ResultsHistory jobs={editJobs} kind="edit" onDelete={onDeleteEdit} onRetry={onRetryJob} lastUpdatedAt={generationLastUpdatedAt} />
+	            <ResultsHistory
+	              jobs={editJobs}
+	              kind="edit"
+	              onDelete={onDeleteEdit}
+	              onRetry={onRetryJob}
+	              onDismissFailed={onDismissFailedJob}
+	              lastUpdatedAt={generationLastUpdatedAt}
+	            />
 	          </div>
 	        )}
       </div>
@@ -2426,12 +2594,14 @@ function ResultsHistory({
   kind = "generate",
   onDelete,
   onRetry,
+  onDismissFailed,
   lastUpdatedAt
 }: {
   jobs: GenerateJob[];
   kind?: "generate" | "edit";
   onDelete?: (id: string) => void;
   onRetry?: (job: GenerateJob) => void;
+  onDismissFailed?: (id: string) => void;
   lastUpdatedAt?: string | null;
 }) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
@@ -2457,6 +2627,7 @@ function ResultsHistory({
             job={job}
             kind={kind}
             onRetry={onRetry ? () => onRetry(job) : undefined}
+            onDismiss={onDismissFailed ? () => onDismissFailed(job.id) : undefined}
           />
         ))}
         {visibleJobs.map(job => (
@@ -2558,11 +2729,13 @@ function RunningHistoryRow({
 function FailedHistoryRow({
   job,
   kind = "generate",
-  onRetry
+  onRetry,
+  onDismiss
 }: {
   job: GenerateJob;
   kind?: "generate" | "edit";
   onRetry?: () => void;
+  onDismiss?: () => void;
 }) {
   const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
   const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
@@ -2583,12 +2756,25 @@ function FailedHistoryRow({
           <p className="mt-1 text-xs text-red-700">{message.description}</p>
           <p className="mt-1 text-xs font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
         </div>
-        {onRetry ? (
+        {onRetry || onDismiss ? (
           <div className="flex shrink-0 flex-col gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Reintentar
-            </Button>
+            {onDismiss ? (
+              <button
+                type="button"
+                onClick={onDismiss}
+                className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
+                aria-label="Ocultar fallo"
+                title="Ocultar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+            {onRetry ? (
+              <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reintentar
+              </Button>
+            ) : null}
             {message.cta === "contact" ? (
               <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
                 <Link href={`mailto:${SUPPORT_EMAIL}`}>Soporte</Link>

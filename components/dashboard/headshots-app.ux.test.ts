@@ -38,4 +38,23 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("getInsufficientCreditsMessage({ kind: \"gold\"");
     expect(appSource).toContain("getInsufficientCreditsMessage({ kind: \"blue\"");
   });
+
+  it("emits idempotent job toasts from polling state changes", () => {
+    expect(appSource).toContain("collectNewJobToastEvents");
+    expect(appSource).toContain("markJobToastEventsSeen");
+    expect(appSource).toContain("primedToastGroupsRef");
+    expect(appSource).toContain("<JobToasts");
+    expect(appSource).toContain('data.status === "done" || data.status === "failed"');
+  });
+
+  it("lets users hide persistent failed jobs from the visible history", () => {
+    expect(appSource).toContain("dismissedFailedJobIds");
+    expect(appSource).toContain("dismissFailedJob");
+    expect(appSource).toContain("window.localStorage.setItem(dismissedFailedStorageKey");
+    expect(appSource).toContain("visibleFailedTrainingJobs");
+    expect(appSource).toContain("visibleModelGenerateJobs");
+    expect(appSource).toContain("visibleEditJobs");
+    expect(dashboardSource).toContain("onDismissFailedJob");
+    expect(dashboardSource).toContain("Ocultar");
+  });
 });
