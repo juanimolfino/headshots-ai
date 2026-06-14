@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  Trash2,
   Wallet,
   X
 } from "lucide-react";
@@ -125,6 +126,9 @@ export type DashboardWorkspaceProps = {
   onAttireChange: (value: AttireValue) => void;
   onGenerate: () => void;
   onOpenImage: (url: string) => void;
+  onDeleteAccount: () => void;
+  accountDeleting: boolean;
+  accountDeletionMessage: string | null;
 };
 
 const STYLE_OPTIONS = [
@@ -185,7 +189,9 @@ function MobileActionStrip({
   selectedModelId,
   onSelectModel,
   onNewModel,
-  onQuickEdit
+  onQuickEdit,
+  onDeleteAccount,
+  accountDeleting
 }: DashboardWorkspaceProps) {
   return (
     <div className="hidden border-b border-line bg-navy-sidebar px-3 py-2 text-[#cfd3e0] max-[860px]:block">
@@ -265,6 +271,15 @@ function MobileActionStrip({
             Logout
           </button>
         </form>
+        <button
+          type="button"
+          onClick={onDeleteAccount}
+          disabled={accountDeleting}
+          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-red-500/15 px-3 text-[13px] font-semibold text-red-100 disabled:opacity-60"
+        >
+          <Trash2 className="size-4" />
+          Delete
+        </button>
       </div>
     </div>
   );
@@ -305,7 +320,10 @@ function DashboardSidebar({
   trainingElapsed,
   onSelectModel,
   onNewModel,
-  onQuickEdit
+  onQuickEdit,
+  onDeleteAccount,
+  accountDeleting,
+  accountDeletionMessage
 }: DashboardWorkspaceProps) {
   return (
     <aside className="sticky top-0 flex h-screen w-[266px] shrink-0 flex-col bg-navy-sidebar px-3.5 pb-3.5 pt-5 text-[#cfd3e0] max-[860px]:hidden">
@@ -408,6 +426,18 @@ function DashboardSidebar({
             </button>
           </form>
         </div>
+        <button
+          type="button"
+          onClick={onDeleteAccount}
+          disabled={accountDeleting}
+          className="dsh-focus flex w-full items-center justify-center gap-2 rounded-[10px] border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-100 transition hover:bg-red-500/15 disabled:opacity-60"
+        >
+          <Trash2 className="size-3.5" />
+          {accountDeleting ? "Deleting..." : "Delete my data"}
+        </button>
+        {accountDeletionMessage ? (
+          <p className="px-1.5 text-[11.5px] leading-relaxed text-red-100">{accountDeletionMessage}</p>
+        ) : null}
       </div>
     </aside>
   );

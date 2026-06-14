@@ -472,6 +472,8 @@ export function HeadshotsApp({
   const [dismissedFailedJobIds, setDismissedFailedJobIds] = useState<Set<string>>(
     () => readDismissedFailedJobIds(dismissedFailedStorageKey)
   );
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [accountDeletionMessage, setAccountDeletionMessage] = useState<string | null>(null);
   const seenToastKeysRef = useRef<Set<string>>(new Set());
   const primedToastGroupsRef = useRef<Record<"training" | "generate" | "edit", boolean>>({
     training: false,
@@ -501,6 +503,7 @@ export function HeadshotsApp({
   const [modelName, setModelName] = useState("");
   const [photos, setPhotos] = useState<SelectedPhoto[]>([]);
   const [uploadedUrls, setUploadedUrls] = useState<string[] | null>(null);
+  const [photoConsentAccepted, setPhotoConsentAccepted] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [trainingCreating, setTrainingCreating] = useState(false);
   const [formMessage, setFormMessage] = useState<string | null>(null);
@@ -515,6 +518,7 @@ export function HeadshotsApp({
   const [quickImageSize, setQuickImageSize] = useState<QuickImageSize>("auto");
   const [quickEngine, setQuickEngine] = useState<QuickEditEngine>("gpt-image-2");
   const [quickNumImages, setQuickNumImages] = useState<(typeof IMAGE_COUNTS)[number]>(1);
+  const [quickLegalAccepted, setQuickLegalAccepted] = useState(false);
   const [quickUploading, setQuickUploading] = useState(false);
   const [quickMessage, setQuickMessage] = useState<string | null>(null);
   const quickFileInputRef = useRef<HTMLInputElement>(null);
@@ -915,6 +919,10 @@ export function HeadshotsApp({
   }
 
   async function uploadPhotos() {
+    if (!photoConsentAccepted) {
+      setFormMessage("Aceptá el procesamiento de tus fotos para entrenar el modelo.");
+      return;
+    }
     if (!hasEnoughCredits(credits.gold, TRAINING_GOLD_CREDITS)) {
       setFormMessage(getInsufficientCreditsMessage({
         kind: "gold",
@@ -930,6 +938,13 @@ export function HeadshotsApp({
     setUploading(true);
     setFormMessage(null);
     try {
+      const consentRes = await fetch("/api/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ legal: true, photoProcessing: true })
+      });
+      if (!consentRes.ok) throw new Error("No pudimos registrar el consentimiento. Probá de nuevo.");
+
       const urls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
         setFormMessage(`Uploading photo ${i + 1} of ${photos.length}...`);
@@ -937,11 +952,17 @@ export function HeadshotsApp({
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size })
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            size: file.size,
+            purpose: "training-source"
+          })
         });
         const initData = (await readJsonOrText(initRes)) as {
           uploadUrl?: string;
           fileUrl?: string;
+          uploadHeaders?: Record<string, string>;
           error?: string;
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
@@ -951,7 +972,7 @@ export function HeadshotsApp({
         }
         const upRes = await fetch(initData.uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type },
+          headers: { "Content-Type": file.type, ...(initData.uploadHeaders ?? {}) },
           body: file
         });
         if (!upRes.ok) throw new Error(`Could not upload ${photos[i].file.name}.`);
@@ -1075,6 +1096,10 @@ export function HeadshotsApp({
 
   async function startQuickEdit() {
     const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages);
+    if (!quickLegalAccepted) {
+      setQuickMessage("Aceptá los términos y la política de privacidad para subir fotos.");
+      return;
+    }
     if (!hasEnoughCredits(credits.blue, quickCost)) {
       setQuickMessage(getInsufficientCreditsMessage({
         kind: "blue",
@@ -1095,6 +1120,13 @@ export function HeadshotsApp({
     setQuickUploading(true);
     setQuickMessage(null);
     try {
+      const consentRes = await fetch("/api/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ legal: true })
+      });
+      if (!consentRes.ok) throw new Error("No pudimos registrar el consentimiento. Probá de nuevo.");
+
       const urls: string[] = [];
       for (let i = 0; i < quickPhotos.length; i++) {
         setQuickMessage(`Uploading photo ${i + 1} of ${quickPhotos.length}...`);
@@ -1102,11 +1134,17 @@ export function HeadshotsApp({
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size })
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            size: file.size,
+            purpose: "quick-edit-reference"
+          })
         });
         const initData = (await readJsonOrText(initRes)) as {
           uploadUrl?: string;
           fileUrl?: string;
+          uploadHeaders?: Record<string, string>;
           error?: string;
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
@@ -1114,7 +1152,7 @@ export function HeadshotsApp({
         }
         const upRes = await fetch(initData.uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type },
+          headers: { "Content-Type": file.type, ...(initData.uploadHeaders ?? {}) },
           body: file
         });
         if (!upRes.ok) throw new Error(`Could not upload ${quickPhotos[i].file.name}.`);
@@ -1311,6 +1349,34 @@ export function HeadshotsApp({
     setShowQuickEditForm(false);
   }
 
+  async function handleDeleteAccount() {
+    const confirmation = window.prompt(
+      "This permanently deletes your account, models, generated images, and personal data. Type DELETE to confirm."
+    );
+    if (confirmation !== "DELETE") return;
+
+    setAccountDeleting(true);
+    setAccountDeletionMessage(null);
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" })
+      });
+      const data = (await res.json()) as { ok?: boolean; steps?: Array<{ ok: boolean; step: string; message?: string }>; error?: string };
+      if (res.ok && data.ok) {
+        window.location.href = "/login?message=account-deleted";
+        return;
+      }
+      const failed = data.steps?.filter(step => !step.ok).map(step => step.step).join(", ");
+      setAccountDeletionMessage(failed ? `Partial deletion. Failed: ${failed}` : data.error ?? "Could not delete account.");
+    } catch (error) {
+      setAccountDeletionMessage(error instanceof Error ? error.message : "Could not delete account.");
+    } finally {
+      setAccountDeleting(false);
+    }
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const visibleFailedTrainingJobs = failedTrainingJobs.filter(job => !dismissedFailedJobIds.has(job.id));
@@ -1403,6 +1469,7 @@ export function HeadshotsApp({
             modelName={modelName}
             photos={photos}
             uploadedUrls={uploadedUrls}
+            photoConsentAccepted={photoConsentAccepted}
             uploading={uploading}
             trainingCreating={trainingCreating}
             formMessage={formMessage}
@@ -1410,6 +1477,7 @@ export function HeadshotsApp({
             onModelNameChange={setModelName}
             onAddFiles={addFiles}
             onRemovePhoto={removePhoto}
+            onPhotoConsentChange={setPhotoConsentAccepted}
             onUpload={() => void uploadPhotos()}
             onStartTraining={() => void startTraining()}
             onCancel={() => {
@@ -1428,6 +1496,7 @@ export function HeadshotsApp({
             quality={quickQuality}
             imageSize={quickImageSize}
             numImages={quickNumImages}
+            legalAccepted={quickLegalAccepted}
             uploading={quickUploading}
             message={quickMessage}
             editJobs={visibleEditJobs}
@@ -1450,6 +1519,7 @@ export function HeadshotsApp({
             onQualityChange={setQuickQuality}
             onImageSizeChange={setQuickImageSize}
             onNumImagesChange={setQuickNumImages}
+            onLegalAcceptedChange={setQuickLegalAccepted}
             onAddFiles={addQuickFiles}
             onRemovePhoto={removeQuickPhoto}
             onGenerate={() => void startQuickEdit()}
@@ -1479,6 +1549,9 @@ export function HeadshotsApp({
         onAttireChange={v => { setAttireType(v); setAttireColor(null); }}
         onGenerate={() => void startGeneration()}
         onOpenImage={setSelectedImageUrl}
+        onDeleteAccount={() => void handleDeleteAccount()}
+        accountDeleting={accountDeleting}
+        accountDeletionMessage={accountDeletionMessage}
       />
       {selectedImageUrl && mode === "model" ? (
         <div
@@ -1516,6 +1589,7 @@ function NewModelPanel({
   modelName,
   photos,
   uploadedUrls,
+  photoConsentAccepted,
   uploading,
   trainingCreating,
   formMessage,
@@ -1523,6 +1597,7 @@ function NewModelPanel({
   onModelNameChange,
   onAddFiles,
   onRemovePhoto,
+  onPhotoConsentChange,
   onUpload,
   onStartTraining,
   onCancel
@@ -1531,6 +1606,7 @@ function NewModelPanel({
   modelName: string;
   photos: SelectedPhoto[];
   uploadedUrls: string[] | null;
+  photoConsentAccepted: boolean;
   uploading: boolean;
   trainingCreating: boolean;
   formMessage: string | null;
@@ -1538,6 +1614,7 @@ function NewModelPanel({
   onModelNameChange: (v: string) => void;
   onAddFiles: (files: FileList | File[]) => void;
   onRemovePhoto: (id: string) => void;
+  onPhotoConsentChange: (accepted: boolean) => void;
   onUpload: () => void;
   onStartTraining: () => void;
   onCancel: () => void;
@@ -1590,7 +1667,7 @@ function NewModelPanel({
                 e.preventDefault();
                 onAddFiles(e.dataTransfer.files);
               }}
-              disabled={uploading || lacksTrainingCredits}
+              disabled={uploading || lacksTrainingCredits || !photoConsentAccepted}
               className="flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-surface px-6 py-6 text-center transition-colors hover:border-navy hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Upload className="mb-2 h-6 w-6 text-ink-muted" />
@@ -1608,6 +1685,23 @@ function NewModelPanel({
                 e.currentTarget.value = "";
               }}
             />
+
+            <label className="mt-4 flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-xs leading-relaxed text-ink-soft">
+              <input
+                type="checkbox"
+                checked={photoConsentAccepted}
+                onChange={event => onPhotoConsentChange(event.target.checked)}
+                disabled={uploading || !!uploadedUrls || trainingCreating}
+                className="mt-0.5 h-4 w-4 accent-navy disabled:opacity-60"
+              />
+              <span>
+                Acepto los{" "}
+                <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>,
+                {" "}la{" "}
+                <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
+                {" "}y el procesamiento de mis fotos y datos faciales para entrenar un modelo personal.
+              </span>
+            </label>
 
             {photos.length > 0 && (
               <div className="mt-4 grid grid-cols-5 gap-2">
@@ -1653,7 +1747,7 @@ function NewModelPanel({
                 <Button
                   type="button"
                   onClick={onUpload}
-                  disabled={uploading || lacksTrainingCredits}
+                  disabled={uploading || lacksTrainingCredits || !photoConsentAccepted}
                   variant="pill"
                   size="pill"
                 >
@@ -1683,7 +1777,7 @@ function NewModelPanel({
               <Button
                 type="button"
                 onClick={onStartTraining}
-                disabled={trainingCreating || !modelName.trim() || lacksTrainingCredits}
+                disabled={trainingCreating || !modelName.trim() || lacksTrainingCredits || !photoConsentAccepted}
                 variant="pill"
                 size="pill"
               >
@@ -1723,6 +1817,7 @@ function QuickEditPanel({
   quality,
   imageSize,
   numImages,
+  legalAccepted,
   uploading,
   message,
   editJobs,
@@ -1745,6 +1840,7 @@ function QuickEditPanel({
   onQualityChange,
   onImageSizeChange,
   onNumImagesChange,
+  onLegalAcceptedChange,
   onAddFiles,
   onRemovePhoto,
   onGenerate,
@@ -1762,6 +1858,7 @@ function QuickEditPanel({
   quality: "low" | "medium" | "high";
   imageSize: QuickImageSize;
   numImages: (typeof IMAGE_COUNTS)[number];
+  legalAccepted: boolean;
   uploading: boolean;
   message: string | null;
   editJobs: GenerateJob[];
@@ -1784,6 +1881,7 @@ function QuickEditPanel({
   onQualityChange: (v: "low" | "medium" | "high") => void;
   onImageSizeChange: (v: QuickImageSize) => void;
   onNumImagesChange: (v: (typeof IMAGE_COUNTS)[number]) => void;
+  onLegalAcceptedChange: (accepted: boolean) => void;
   onAddFiles: (files: FileList | File[]) => void;
   onRemovePhoto: (id: string) => void;
   onGenerate: () => void;
@@ -2017,7 +2115,7 @@ function QuickEditPanel({
                   e.preventDefault();
                   onAddFiles(e.dataTransfer.files);
                 }}
-                disabled={uploading || lacksCredits}
+                disabled={uploading || lacksCredits || !legalAccepted}
                 className="flex min-h-28 w-full flex-col items-center justify-center rounded-[13px] border border-dashed border-line-strong bg-bg px-6 py-6 text-center transition-colors hover:border-navy hover:bg-navy-tint disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="mb-2 h-6 w-6 text-ink-muted" />
@@ -2032,6 +2130,22 @@ function QuickEditPanel({
                   </Button>
                 </div>
               ) : null}
+              <label className="mt-3 flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-xs leading-relaxed text-ink-soft">
+                <input
+                  type="checkbox"
+                  checked={legalAccepted}
+                  onChange={event => onLegalAcceptedChange(event.target.checked)}
+                  disabled={uploading}
+                  className="mt-0.5 h-4 w-4 accent-navy disabled:opacity-60"
+                />
+                <span>
+                  Acepto los{" "}
+                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>
+                  {" "}y la{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
+                  {" "}antes de subir fotos de referencia.
+                </span>
+              </label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -2158,7 +2272,7 @@ function QuickEditPanel({
               <Button
 	                type="button"
 	                onClick={onGenerate}
-	                disabled={uploading || photos.length < QUICK_MIN_PHOTOS || lacksCredits}
+		                disabled={uploading || photos.length < QUICK_MIN_PHOTOS || lacksCredits || !legalAccepted}
                 variant="pill"
                 size="pill"
                 className="shadow-[0_18px_34px_-20px_rgba(20,27,50,.82)]"

@@ -32,9 +32,9 @@ describe("headshots dashboard UX safeguards", () => {
 
   it("prechecks gold and blue credits before uploads or job creation", () => {
     expect(appSource).toContain("lacksTrainingCredits");
-    expect(appSource).toContain("disabled={uploading || lacksTrainingCredits}");
+    expect(appSource).toContain("disabled={uploading || lacksTrainingCredits || !photoConsentAccepted}");
     expect(appSource).toContain("const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages)");
-    expect(appSource).toContain("disabled={uploading || photos.length < QUICK_MIN_PHOTOS || lacksCredits}");
+    expect(appSource).toContain("disabled={uploading || photos.length < QUICK_MIN_PHOTOS || lacksCredits || !legalAccepted}");
     expect(appSource).toContain("getInsufficientCreditsMessage({ kind: \"gold\"");
     expect(appSource).toContain("getInsufficientCreditsMessage({ kind: \"blue\"");
   });
@@ -56,5 +56,21 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("visibleEditJobs");
     expect(dashboardSource).toContain("onDismissFailedJob");
     expect(dashboardSource).toContain("Ocultar");
+  });
+
+  it("requires explicit consent before uploading photos for training or quick edit", () => {
+    expect(appSource).toContain("photoConsentAccepted");
+    expect(appSource).toContain("quickLegalAccepted");
+    expect(appSource).toContain('/api/consent');
+    expect(appSource).toContain('purpose: "training-source"');
+    expect(appSource).toContain('purpose: "quick-edit-reference"');
+    expect(appSource).toContain("procesamiento de mis fotos y datos faciales");
+  });
+
+  it("exposes irreversible account deletion from the dashboard", () => {
+    expect(appSource).toContain('/api/account/delete');
+    expect(appSource).toContain('confirm: "DELETE"');
+    expect(dashboardSource).toContain("Delete my data");
+    expect(dashboardSource).toContain("accountDeletionMessage");
   });
 });

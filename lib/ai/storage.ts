@@ -1,4 +1,10 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -26,6 +32,39 @@ export async function storeLoraFileR2(input: { userId: string; jobId: string; by
     ContentType: "application/octet-stream"
   }));
   return `r2:${key}`;
+}
+
+export async function deleteLoraFilesR2ForUser(userId: string) {
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!bucket) return { deleted: 0, skipped: true };
+  const client = getR2Client();
+  const prefix = `loras/${userId}/`;
+  let continuationToken: string | undefined;
+  let deleted = 0;
+
+  do {
+    const listed = await client.send(new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      ContinuationToken: continuationToken
+    }));
+    const objects = (listed.Contents ?? [])
+      .map(item => item.Key)
+      .filter((key): key is string => Boolean(key))
+      .map(Key => ({ Key }));
+
+    if (objects.length > 0) {
+      await client.send(new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: objects, Quiet: true }
+      }));
+      deleted += objects.length;
+    }
+
+    continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return { deleted, skipped: false };
 }
 
 export async function createLoraSignedUrlR2(r2Key: string): Promise<string> {
@@ -87,6 +126,43 @@ export async function storeAiResult(input: {
   if (error) throw error;
 
   return path;
+}
+
+export async function listSupabaseStoragePathsRecursive(bucket: string, prefix: string): Promise<string[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.storage.from(bucket).list(prefix, { limit: 1000 });
+  if (error || !data?.length) return [];
+
+  const paths: string[] = [];
+  for (const item of data) {
+    const path = prefix ? `${prefix}/${item.name}` : item.name;
+    if (item.metadata) {
+      paths.push(path);
+    } else {
+      paths.push(...await listSupabaseStoragePathsRecursive(bucket, path));
+    }
+  }
+  return paths;
+}
+
+export async function deleteSupabaseStoragePrefixes(bucket: string, prefixes: string[]) {
+  const uniquePaths = new Set<string>();
+  for (const prefix of prefixes) {
+    for (const path of await listSupabaseStoragePathsRecursive(bucket, prefix)) {
+      uniquePaths.add(path);
+    }
+  }
+
+  const paths = Array.from(uniquePaths);
+  let deleted = 0;
+  for (let i = 0; i < paths.length; i += 100) {
+    const chunk = paths.slice(i, i + 100);
+    const { error } = await getSupabaseAdmin().storage.from(bucket).remove(chunk);
+    if (error) throw error;
+    deleted += chunk.length;
+  }
+
+  return { deleted };
 }
 
 export async function createSignedResultUrl(path: string, options?: { download?: boolean }) {

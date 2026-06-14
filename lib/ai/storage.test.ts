@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { normalizeStoragePath } from "@/lib/ai/storage";
 
@@ -20,5 +22,14 @@ describe("normalizeStoragePath", () => {
 
   it("returns null for unrelated URLs", () => {
     expect(normalizeStoragePath("https://cdn.example.com/file.png", "ai-results")).toBeNull();
+  });
+
+  it("keeps the result flow compatible with private buckets and signed URLs", () => {
+    const workerSource = readFileSync(join(process.cwd(), "lib/inngest/functions.ts"), "utf8");
+    const signedUrlRoute = readFileSync(join(process.cwd(), "app/api/jobs/[id]/signed-urls/route.ts"), "utf8");
+
+    expect(workerSource).toContain("return input.path");
+    expect(workerSource).not.toContain("getPublicUrl(input.path).data.publicUrl");
+    expect(signedUrlRoute).toContain("createSignedUrls(paths, SIGNED_URL_TTL_SECONDS)");
   });
 });
