@@ -13,7 +13,10 @@ function serializeJob(job: Job) {
     input: job.input ?? null,
     result: job.result ?? null,
     error: job.error,
+    creditsUsed: job.creditsUsed,
+    creditKind: job.creditKind,
     createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null
   };
 }

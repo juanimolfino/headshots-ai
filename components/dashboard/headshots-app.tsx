@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -33,6 +34,14 @@ import {
   type CountValue,
   type DashboardMode
 } from "@/components/dashboard/dashboard-ui";
+import {
+  getInsufficientCreditsMessage,
+  getJobProgressInfo,
+  getRefundCopy,
+  getUserFacingJobError,
+  hasEnoughCredits,
+  splitJobsByStatus
+} from "@/lib/job-ux";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -47,6 +56,8 @@ const QUICK_OPTIMIZE_THRESHOLD_BYTES = 4 * 1024 * 1024;
 const QUICK_MAX_UPLOAD_DIMENSION = 2048;
 const QUICK_UPLOAD_JPEG_QUALITY = 0.92;
 const POLL_INTERVAL_MS = 8000;
+const SUPPORT_EMAIL = "juanimolfinooo@gmail.com";
+const FALLBACK_CREATED_AT = "1970-01-01T00:00:00.000Z";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_UPLOAD_DIMENSION = 1024;
 const UPLOAD_JPEG_QUALITY = 0.88;
@@ -176,7 +187,10 @@ type TrainingJob = {
   input: Record<string, unknown> | null;
   result: { lora_url?: string; trigger_word?: string } | null;
   error: string | null;
+  creditsUsed: number;
+  creditKind: "blue" | "gold";
   createdAt: string;
+  updatedAt: string;
   completedAt: string | null;
 };
 
@@ -186,7 +200,10 @@ type GenerateJob = {
   input: Record<string, unknown> | null;
   result: string[] | null;
   error: string | null;
+  creditsUsed: number;
+  creditKind: "blue" | "gold";
   createdAt: string;
+  updatedAt: string;
   completedAt: string | null;
 };
 
@@ -250,17 +267,31 @@ function getQuickEditEngineLabel(jobOrEngine: GenerateJob | QuickEditEngine | un
   return engine === "gemini-3-pro-image" ? "Nano Banana Pro" : "GPT Image 2";
 }
 
-function estimateJobProgress(job: GenerateJob) {
-  if (job.status === "done") return 100;
-  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 1000));
-  return Math.min(95, Math.max(12, Math.round((elapsedSeconds / 60) * 70)));
+function getQuickEditBlueCost(quality: "low" | "medium" | "high", count: (typeof IMAGE_COUNTS)[number]) {
+  const option = QUICK_QUALITY_OPTIONS.find(item => item.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
+  return option.blueCost * count;
 }
 
-function toActiveGenerationJob(job: GenerateJob, title?: string): ActiveGenerationJob {
+function toActiveGenerationJob(
+  job: GenerateJob,
+  title?: string,
+  kind: GenerationJobKind = "generate",
+  lastUpdatedAt?: string | null
+): ActiveGenerationJob {
+  const progress = getJobProgressInfo({
+    type: kind === "edit" ? "headshot-edit" : "headshot-generate",
+    status: job.status,
+    createdAt: job.createdAt,
+    lastUpdatedAt
+  });
   return {
     id: job.id,
     status: job.status,
-    progress: estimateJobProgress(job),
+    progress: progress.progress,
+    stage: progress.stage,
+    statusText: progress.statusText,
+    lastUpdatedLabel: progress.lastUpdatedLabel,
+    isOverEta: progress.isOverEta,
     style: getJobStyle(job),
     title,
     count: getJobCount(job),
@@ -399,9 +430,11 @@ export function HeadshotsApp({
 
   // Models
   const [trainedModels, setTrainedModels] = useState<TrainingJob[]>([]);
+  const [failedTrainingJobs, setFailedTrainingJobs] = useState<TrainingJob[]>([]);
   const [activeTrainingJob, setActiveTrainingJob] = useState<TrainingJob | null>(null);
   const [loadingModels, setLoadingModels] = useState(true);
   const [trainingElapsed, setTrainingElapsed] = useState(0);
+  const [modelsLastUpdatedAt, setModelsLastUpdatedAt] = useState<string | null>(null);
   const trainingStartRef = useRef<number | null>(null);
 
   // Nav
@@ -446,6 +479,8 @@ export function HeadshotsApp({
   const [generationJobKind, setGenerationJobKind] = useState<GenerationJobKind | null>(null);
   const [generationStatus, setGenerationStatus] = useState<JobStatus | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generationCreditsUsed, setGenerationCreditsUsed] = useState<number>(0);
+  const [generationCreditKind, setGenerationCreditKind] = useState<"blue" | "gold">("blue");
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
   const [signedUrlsKind, setSignedUrlsKind] = useState<GenerationJobKind | null>(null);
@@ -453,12 +488,15 @@ export function HeadshotsApp({
   const [generationElapsed, setGenerationElapsed] = useState(0);
   const [generationCreatedAt, setGenerationCreatedAt] = useState<string | null>(null);
   const generationStartRef = useRef<number | null>(null);
+  const refreshedFailedJobIdsRef = useRef<Set<string>>(new Set());
 
   // History (all generate jobs, filtered per model client-side)
   const [generateJobs, setGenerateJobs] = useState<GenerateJob[]>([]);
+  const [generateJobsLastUpdatedAt, setGenerateJobsLastUpdatedAt] = useState<string | null>(null);
 
   // Quick edit history (all headshot-edit jobs)
   const [editJobs, setEditJobs] = useState<GenerateJob[]>([]);
+  const [editJobsLastUpdatedAt, setEditJobsLastUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     photosRef.current = photos;
@@ -482,6 +520,13 @@ export function HeadshotsApp({
     if (data.credits) setCredits(data.credits);
   }, []);
 
+  const refreshCreditsForNewFailures = useCallback((jobs: Array<{ id: string; status: JobStatus }>) => {
+    const nextFailed = jobs.filter(job => job.status === "failed" && !refreshedFailedJobIdsRef.current.has(job.id));
+    if (nextFailed.length === 0) return;
+    for (const job of nextFailed) refreshedFailedJobIdsRef.current.add(job.id);
+    void loadCredits();
+  }, [loadCredits]);
+
   const loadModels = useCallback(async () => {
     try {
       const res = await fetch("/api/jobs?type=headshot-training&limit=20");
@@ -494,8 +539,11 @@ export function HeadshotsApp({
         return r && r.lora_url && r.trigger_word;
       });
       setTrainedModels(done);
+      setFailedTrainingJobs(all.filter(j => j.status === "failed"));
       setSelectedModelId(prev => (prev ? prev : (done[0]?.id ?? null)));
       const active = all.find(j => j.status === "pending" || j.status === "processing") ?? null;
+      setModelsLastUpdatedAt(new Date().toISOString());
+      refreshCreditsForNewFailures(all);
       setActiveTrainingJob(prev => {
         if (active && !trainingStartRef.current) {
           trainingStartRef.current = new Date(active.createdAt).getTime();
@@ -506,21 +554,27 @@ export function HeadshotsApp({
     } finally {
       setLoadingModels(false);
     }
-  }, []);
+  }, [refreshCreditsForNewFailures]);
 
   const loadHistory = useCallback(async () => {
     const res = await fetch("/api/jobs?type=headshot-generate&limit=50");
     if (!res.ok) return;
     const data = (await res.json()) as { jobs?: GenerateJob[] };
-    setGenerateJobs(data.jobs ?? []);
-  }, []);
+    const jobs = data.jobs ?? [];
+    setGenerateJobs(jobs);
+    setGenerateJobsLastUpdatedAt(new Date().toISOString());
+    refreshCreditsForNewFailures(jobs);
+  }, [refreshCreditsForNewFailures]);
 
   const loadEditHistory = useCallback(async () => {
     const res = await fetch("/api/jobs?type=headshot-edit&limit=50");
     if (!res.ok) return;
     const data = (await res.json()) as { jobs?: GenerateJob[] };
-    setEditJobs(data.jobs ?? []);
-  }, []);
+    const jobs = data.jobs ?? [];
+    setEditJobs(jobs);
+    setEditJobsLastUpdatedAt(new Date().toISOString());
+    refreshCreditsForNewFailures(jobs);
+  }, [refreshCreditsForNewFailures]);
 
   const deleteEditJob = useCallback(async (jobId: string) => {
     const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -596,9 +650,19 @@ export function HeadshotsApp({
     if (!generationJobId || signedUrls || generationStatus === "failed") return;
     const poll = async () => {
       const res = await fetch(`/api/jobs/${generationJobId}`);
-      const data = (await res.json()) as { status: JobStatus; error: string | null };
+      const data = (await res.json()) as {
+        status: JobStatus;
+        error: string | null;
+        creditsUsed?: number;
+        creditKind?: "blue" | "gold";
+      };
+      const now = new Date().toISOString();
+      if (generationJobKind === "edit") setEditJobsLastUpdatedAt(now);
+      else setGenerateJobsLastUpdatedAt(now);
       setGenerationStatus(data.status);
       setGenerationError(data.error);
+      if (typeof data.creditsUsed === "number") setGenerationCreditsUsed(data.creditsUsed);
+      if (data.creditKind === "blue" || data.creditKind === "gold") setGenerationCreditKind(data.creditKind);
       if (data.status === "done") {
         const sRes = await fetch(`/api/jobs/${generationJobId}/signed-urls`, { method: "POST" });
         const sData = (await sRes.json()) as { signedUrls?: string[] };
@@ -607,11 +671,16 @@ export function HeadshotsApp({
         void loadHistory();
         void loadEditHistory();
       }
+      if (data.status === "failed") {
+        refreshCreditsForNewFailures([{ id: generationJobId, status: "failed" }]);
+        void loadHistory();
+        void loadEditHistory();
+      }
     };
     poll();
     const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [generationJobId, generationJobKind, generationStatus, signedUrls, loadHistory, loadEditHistory]);
+  }, [generationJobId, generationJobKind, generationStatus, signedUrls, loadHistory, loadEditHistory, refreshCreditsForNewFailures]);
 
   useEffect(() => {
     if (!generationJobId || signedUrls || generationStatus === "failed") return;
@@ -661,6 +730,8 @@ export function HeadshotsApp({
     setGenerationJobKind(null);
     setGenerationStatus(null);
     setGenerationError(null);
+    setGenerationCreditsUsed(0);
+    setGenerationCreditKind("blue");
     setGenerationMessage(null);
     setSignedUrls(null);
     setSignedUrlsKind(null);
@@ -754,6 +825,14 @@ export function HeadshotsApp({
   }
 
   async function uploadPhotos() {
+    if (!hasEnoughCredits(credits.gold, TRAINING_GOLD_CREDITS)) {
+      setFormMessage(getInsufficientCreditsMessage({
+        kind: "gold",
+        required: TRAINING_GOLD_CREDITS,
+        available: credits.gold
+      }));
+      return;
+    }
     if (photos.length < MIN_PHOTOS) {
       setFormMessage(`Upload at least ${MIN_PHOTOS} photos.`);
       return;
@@ -801,6 +880,14 @@ export function HeadshotsApp({
 
   async function startTraining() {
     if (!uploadedUrls) return;
+    if (!hasEnoughCredits(credits.gold, TRAINING_GOLD_CREDITS)) {
+      setFormMessage(getInsufficientCreditsMessage({
+        kind: "gold",
+        required: TRAINING_GOLD_CREDITS,
+        available: credits.gold
+      }));
+      return;
+    }
     if (!modelName.trim()) {
       setFormMessage("Please give your model a name.");
       return;
@@ -817,8 +904,12 @@ export function HeadshotsApp({
         })
       });
       const data = (await res.json()) as { jobId?: string; error?: string };
-      if (res.status === 402) throw new Error("Not enough credits.");
-      if (!res.ok) throw new Error(data.error ?? "Could not start training.");
+      if (res.status === 402) throw new Error(getInsufficientCreditsMessage({
+        kind: "gold",
+        required: TRAINING_GOLD_CREDITS,
+        available: credits.gold
+      }));
+      if (!res.ok) throw new Error(getUserFacingJobError(data.error).description);
       for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
       setPhotos([]);
       setUploadedUrls(null);
@@ -838,6 +929,14 @@ export function HeadshotsApp({
     if (!model) return;
     const r = model.result;
     if (!r?.lora_url || !r?.trigger_word) return;
+    if (!hasEnoughCredits(credits.blue, numImages)) {
+      setGenerationMessage(getInsufficientCreditsMessage({
+        kind: "blue",
+        required: numImages,
+        available: credits.blue
+      }));
+      return;
+    }
     setGenerationMessage(null);
     const res = await fetch("/api/jobs/create", {
       method: "POST",
@@ -857,11 +956,15 @@ export function HeadshotsApp({
     });
     const data = (await res.json()) as { jobId?: string; error?: string };
     if (res.status === 402) {
-      setGenerationMessage("Not enough credits.");
+      setGenerationMessage(getInsufficientCreditsMessage({
+        kind: "blue",
+        required: numImages,
+        available: credits.blue
+      }));
       return;
     }
     if (!res.ok) {
-      setGenerationMessage(data.error ?? "Could not start generation.");
+      setGenerationMessage(getUserFacingJobError(data.error).description);
       return;
     }
     const startedAt = Date.now();
@@ -871,6 +974,8 @@ export function HeadshotsApp({
     setGenerationJobKind("generate");
     setGenerationStatus("pending");
     setGenerationError(null);
+    setGenerationCreditsUsed(numImages);
+    setGenerationCreditKind("blue");
     setSignedUrls(null);
     setSignedUrlsKind(null);
     setGenerationElapsed(0);
@@ -879,6 +984,15 @@ export function HeadshotsApp({
   }
 
   async function startQuickEdit() {
+    const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages);
+    if (!hasEnoughCredits(credits.blue, quickCost)) {
+      setQuickMessage(getInsufficientCreditsMessage({
+        kind: "blue",
+        required: quickCost,
+        available: credits.blue
+      }));
+      return;
+    }
     if (quickPhotos.length < QUICK_MIN_PHOTOS) {
       setQuickMessage(`Upload at least ${QUICK_MIN_PHOTOS} photos.`);
       return;
@@ -934,8 +1048,12 @@ export function HeadshotsApp({
         })
       });
       const data = (await res.json()) as { jobId?: string; error?: string };
-      if (res.status === 402) throw new Error("Not enough credits.");
-      if (!res.ok) throw new Error(data.error ?? "Could not start generation.");
+      if (res.status === 402) throw new Error(getInsufficientCreditsMessage({
+        kind: "blue",
+        required: quickCost,
+        available: credits.blue
+      }));
+      if (!res.ok) throw new Error(getUserFacingJobError(data.error).description);
 
       const startedAt = Date.now();
       generationStartRef.current = startedAt;
@@ -944,6 +1062,8 @@ export function HeadshotsApp({
       setGenerationJobKind("edit");
       setGenerationStatus("pending");
       setGenerationError(null);
+      setGenerationCreditsUsed(quickCost);
+      setGenerationCreditKind("blue");
       setSignedUrls(null);
       setSignedUrlsKind(null);
       setGenerationElapsed(0);
@@ -957,9 +1077,109 @@ export function HeadshotsApp({
     }
   }
 
+  async function startRetriedHeadshotJob(job: GenerateJob, kind: GenerationJobKind) {
+    const cost = Math.max(1, job.creditsUsed);
+    if (!hasEnoughCredits(credits.blue, cost)) {
+      const message = getInsufficientCreditsMessage({ kind: "blue", required: cost, available: credits.blue });
+      if (kind === "edit") {
+        setQuickMessage(message);
+        setShowQuickEditForm(true);
+      } else {
+        setGenerationMessage(message);
+      }
+      return;
+    }
+
+    if (!job.input) return;
+    if (kind === "edit") {
+      setShowQuickEditForm(true);
+      setShowNewModelForm(false);
+      setQuickMessage(null);
+    } else {
+      setShowQuickEditForm(false);
+      setGenerationMessage(null);
+    }
+
+    const res = await fetch("/api/jobs/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: kind === "edit" ? "headshot-edit" : "headshot-generate",
+        input: job.input
+      })
+    });
+    const data = (await res.json()) as { jobId?: string; error?: string };
+    if (res.status === 402) {
+      const message = getInsufficientCreditsMessage({ kind: "blue", required: cost, available: credits.blue });
+      if (kind === "edit") setQuickMessage(message);
+      else setGenerationMessage(message);
+      return;
+    }
+    if (!res.ok || !data.jobId) {
+      const message = getUserFacingJobError(data.error).description;
+      if (kind === "edit") setQuickMessage(message);
+      else setGenerationMessage(message);
+      return;
+    }
+
+    const startedAt = Date.now();
+    generationStartRef.current = startedAt;
+    setGenerationCreatedAt(new Date(startedAt).toISOString());
+    setGenerationJobId(data.jobId);
+    setGenerationJobKind(kind);
+    setGenerationStatus("pending");
+    setGenerationError(null);
+    setGenerationCreditsUsed(cost);
+    setGenerationCreditKind("blue");
+    setSignedUrls(null);
+    setSignedUrlsKind(null);
+    setGenerationElapsed(0);
+    if (kind === "edit") await loadEditHistory();
+    else await loadHistory();
+    void loadCredits();
+  }
+
+  async function retryTrainingJob(job: TrainingJob) {
+    const cost = Math.max(TRAINING_GOLD_CREDITS, job.creditsUsed || TRAINING_GOLD_CREDITS);
+    if (!hasEnoughCredits(credits.gold, cost)) {
+      setShowNewModelForm(true);
+      setFormMessage(getInsufficientCreditsMessage({ kind: "gold", required: cost, available: credits.gold }));
+      return;
+    }
+    if (!job.input) return;
+
+    const res = await fetch("/api/jobs/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "headshot-training",
+        input: job.input
+      })
+    });
+    const data = (await res.json()) as { jobId?: string; error?: string };
+    if (res.status === 402) {
+      setShowNewModelForm(true);
+      setFormMessage(getInsufficientCreditsMessage({ kind: "gold", required: cost, available: credits.gold }));
+      return;
+    }
+    if (!res.ok || !data.jobId) {
+      setShowNewModelForm(true);
+      setFormMessage(getUserFacingJobError(data.error).description);
+      return;
+    }
+
+    setShowNewModelForm(false);
+    setShowQuickEditForm(false);
+    setSelectedModelId(data.jobId);
+    trainingStartRef.current = Date.now();
+    await loadModels();
+    void loadCredits();
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const selectedModel = trainedModels.find(m => m.id === selectedModelId) ?? null;
+  const selectedTrainingFailedJob = failedTrainingJobs.find(m => m.id === selectedModelId) ?? null;
 
   const modelGenerateJobs = selectedModel
     ? generateJobs.filter(j => {
@@ -974,24 +1194,29 @@ export function HeadshotsApp({
       ? {
           id: generationJobId,
           status: generationStatus,
-          progress: Math.min(95, Math.max(12, Math.round((generationElapsed / 60) * 70))),
+          ...getJobProgressInfo({
+            type: generationJobKind === "edit" ? "headshot-edit" : "headshot-generate",
+            status: generationStatus,
+            createdAt: generationCreatedAt ?? FALLBACK_CREATED_AT,
+            lastUpdatedAt: generationJobKind === "edit" ? editJobsLastUpdatedAt : generateJobsLastUpdatedAt
+          }),
           style,
           title: generationJobKind === "edit" ? getQuickEditEngineLabel(quickEngine) : undefined,
           count: generationJobKind === "edit" ? quickNumImages : numImages,
           background,
           elapsed: generationElapsed,
-          createdAt: generationCreatedAt ?? new Date().toISOString()
+          createdAt: generationCreatedAt ?? FALLBACK_CREATED_AT
         }
       : null;
   const activeAccountGenerateJob = generateJobs.find(isActiveJob) ?? null;
   const activeSelectedModelJob = modelGenerateJobs.find(isActiveJob) ?? null;
   const activeEditJob = editJobs.find(isActiveJob) ?? null;
   const activeTaskJob =
-    activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob) :
-    activeEditJob ? toActiveGenerationJob(activeEditJob, getQuickEditEngineLabel(activeEditJob)) :
+    activeAccountGenerateJob ? toActiveGenerationJob(activeAccountGenerateJob, undefined, "generate", generateJobsLastUpdatedAt) :
+    activeEditJob ? toActiveGenerationJob(activeEditJob, getQuickEditEngineLabel(activeEditJob), "edit", editJobsLastUpdatedAt) :
     localActiveGenerationJob;
   const activeGenerationJob =
-    activeSelectedModelJob ? toActiveGenerationJob(activeSelectedModelJob) :
+    activeSelectedModelJob ? toActiveGenerationJob(activeSelectedModelJob, undefined, "generate", generateJobsLastUpdatedAt) :
     generationJobKind === "generate" ? localActiveGenerationJob : null;
 
   const mode: DashboardMode = showNewModelForm
@@ -1002,6 +1227,8 @@ export function HeadshotsApp({
         ? "loading"
         : selectedModel
           ? "model"
+          : selectedTrainingFailedJob
+            ? "training-failed"
           : activeTrainingJob
             ? "training-only"
             : "empty";
@@ -1015,11 +1242,14 @@ export function HeadshotsApp({
         userEmail={userEmail}
         credits={credits}
         models={trainedModels}
+        failedTrainingJobs={failedTrainingJobs}
         loadingModels={loadingModels}
         selectedModel={selectedModel}
+        selectedTrainingFailedJob={selectedTrainingFailedJob}
         selectedModelId={selectedModelId}
         activeTrainingJob={activeTrainingJob}
         trainingElapsed={trainingElapsed}
+        trainingLastUpdatedAt={modelsLastUpdatedAt}
         activeTaskJob={activeTaskJob}
         activeGenerationJob={activeGenerationJob}
         style={style}
@@ -1028,8 +1258,10 @@ export function HeadshotsApp({
         attire={attireType}
         generationMessage={generationMessage}
         jobs={modelGenerateJobs}
+        generationLastUpdatedAt={generateJobsLastUpdatedAt}
         newModelContent={
           <NewModelPanel
+            credits={credits}
             modelName={modelName}
             photos={photos}
             uploadedUrls={uploadedUrls}
@@ -1050,6 +1282,7 @@ export function HeadshotsApp({
         }
         quickEditContent={
           <QuickEditPanel
+            credits={credits}
             photos={quickPhotos}
             preset={quickPreset}
             prompt={quickPrompt}
@@ -1064,7 +1297,11 @@ export function HeadshotsApp({
             generationJobId={generationJobKind === "edit" ? generationJobId : null}
             generationStatus={generationJobKind === "edit" ? generationStatus : null}
             generationError={generationJobKind === "edit" ? generationError : null}
+            generationCreditsUsed={generationJobKind === "edit" ? generationCreditsUsed : 0}
+            generationCreditKind={generationJobKind === "edit" ? generationCreditKind : "blue"}
             generationElapsed={generationJobKind === "edit" ? generationElapsed : 0}
+            generationCreatedAt={generationJobKind === "edit" ? generationCreatedAt : null}
+            generationLastUpdatedAt={editJobsLastUpdatedAt}
             signedUrls={generationJobKind === "edit" && signedUrlsKind === "edit" ? signedUrls : null}
             selectedImageUrl={selectedImageUrl}
             fileInputRef={quickFileInputRef}
@@ -1078,6 +1315,7 @@ export function HeadshotsApp({
             onRemovePhoto={removeQuickPhoto}
             onGenerate={() => void startQuickEdit()}
             onReset={resetGeneration}
+            onRetryJob={job => void startRetriedHeadshotJob(job, "edit")}
             onSelectImage={setSelectedImageUrl}
             onCloseImage={() => setSelectedImageUrl(null)}
             onCancel={() => {
@@ -1093,6 +1331,8 @@ export function HeadshotsApp({
         onSelectModel={handleSelectModel}
         onNewModel={handleNewModel}
         onQuickEdit={handleQuickEdit}
+        onRetryTraining={job => void retryTrainingJob(job as TrainingJob)}
+        onRetryGeneration={job => void startRetriedHeadshotJob(job as GenerateJob, "generate")}
         onStyleChange={setStyle}
         onCountChange={setNumImages}
         onBackgroundChange={setBackground}
@@ -1127,6 +1367,7 @@ export function HeadshotsApp({
 // ── New model form ────────────────────────────────────────────────────────────
 
 function NewModelPanel({
+  credits,
   modelName,
   photos,
   uploadedUrls,
@@ -1141,6 +1382,7 @@ function NewModelPanel({
   onStartTraining,
   onCancel
 }: {
+  credits: DashboardCredits;
   modelName: string;
   photos: SelectedPhoto[];
   uploadedUrls: string[] | null;
@@ -1155,6 +1397,7 @@ function NewModelPanel({
   onStartTraining: () => void;
   onCancel: () => void;
 }) {
+  const lacksTrainingCredits = !hasEnoughCredits(credits.gold, TRAINING_GOLD_CREDITS);
   return (
     <div className="flex-1 overflow-y-auto px-8 py-8">
       <div className="mb-8 flex items-center gap-3">
@@ -1202,7 +1445,7 @@ function NewModelPanel({
                 e.preventDefault();
                 onAddFiles(e.dataTransfer.files);
               }}
-              disabled={uploading}
+              disabled={uploading || lacksTrainingCredits}
               className="flex min-h-32 w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-surface px-6 py-6 text-center transition-colors hover:border-navy hover:bg-bg disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Upload className="mb-2 h-6 w-6 text-ink-muted" />
@@ -1254,13 +1497,20 @@ function NewModelPanel({
             )}
 
             <div className="mt-5">
-              {photos.length >= MIN_PHOTOS ? (
+              {lacksTrainingCredits ? (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-red-600">
+                  <span>{getInsufficientCreditsMessage({ kind: "gold", required: TRAINING_GOLD_CREDITS, available: credits.gold })}</span>
+                  <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                    <Link href="/pricing">Comprar creditos</Link>
+                  </Button>
+                </div>
+              ) : photos.length >= MIN_PHOTOS ? (
                 <Button
                   type="button"
                   onClick={onUpload}
-                  disabled={uploading}
+                  disabled={uploading || lacksTrainingCredits}
                   variant="pill"
-                size="pill"
+                  size="pill"
                 >
                   {uploading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1288,7 +1538,7 @@ function NewModelPanel({
               <Button
                 type="button"
                 onClick={onStartTraining}
-                disabled={trainingCreating || !modelName.trim()}
+                disabled={trainingCreating || !modelName.trim() || lacksTrainingCredits}
                 variant="pill"
                 size="pill"
               >
@@ -1296,10 +1546,17 @@ function NewModelPanel({
                 {trainingCreating ? "Starting..." : "Train model"}
               </Button>
               {formMessage ? (
-                <p className="text-sm text-red-600">{formMessage}</p>
+                <div className="flex flex-wrap items-center gap-2 text-sm text-red-600">
+                  <span>{formMessage}</span>
+                  {formMessage.toLowerCase().includes("credit") ? (
+                    <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                      <Link href="/pricing">Comprar creditos</Link>
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
                 <p className="text-sm text-ink-muted">
-                  Costs {TRAINING_GOLD_CREDITS} gold credit · Takes 15–30 minutes.
+                  Costs {TRAINING_GOLD_CREDITS} gold credit · Usually ready in 4-9 minutes.
                 </p>
               )}
             </div>
@@ -1313,6 +1570,7 @@ function NewModelPanel({
 // ── Quick edit form ───────────────────────────────────────────────────────────
 
 function QuickEditPanel({
+  credits,
   photos,
   preset,
   prompt,
@@ -1327,7 +1585,11 @@ function QuickEditPanel({
   generationJobId,
   generationStatus,
   generationError,
+  generationCreditsUsed,
+  generationCreditKind,
   generationElapsed,
+  generationCreatedAt,
+  generationLastUpdatedAt,
   signedUrls,
   selectedImageUrl,
   fileInputRef,
@@ -1341,10 +1603,12 @@ function QuickEditPanel({
   onRemovePhoto,
   onGenerate,
   onReset,
+  onRetryJob,
   onSelectImage,
   onCloseImage,
   onCancel
 }: {
+  credits: DashboardCredits;
   photos: SelectedPhoto[];
   preset: QuickEditPreset;
   prompt: string;
@@ -1359,7 +1623,11 @@ function QuickEditPanel({
   generationJobId: string | null;
   generationStatus: JobStatus | null;
   generationError: string | null;
+  generationCreditsUsed: number;
+  generationCreditKind: "blue" | "gold";
   generationElapsed: number;
+  generationCreatedAt: string | null;
+  generationLastUpdatedAt: string | null;
   signedUrls: string[] | null;
   selectedImageUrl: string | null;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -1373,14 +1641,25 @@ function QuickEditPanel({
   onRemovePhoto: (id: string) => void;
   onGenerate: () => void;
   onReset: () => void;
+  onRetryJob: (job: GenerateJob) => void;
   onSelectImage: (url: string) => void;
   onCloseImage: () => void;
   onCancel: () => void;
 }) {
   const isGenerating = !!generationJobId && !signedUrls && generationStatus !== "failed";
   const qualityOption = QUICK_QUALITY_OPTIONS.find(option => option.value === quality) ?? QUICK_QUALITY_OPTIONS[0];
-  const blueCost = qualityOption.blueCost * numImages;
+  const blueCost = getQuickEditBlueCost(quality, numImages);
+  const lacksCredits = !hasEnoughCredits(credits.blue, blueCost);
   const selectedEngineLabel = QUICK_ENGINE_OPTIONS.find(option => option.value === engine)?.label ?? "Quick edit";
+  const currentProgress = generationJobId
+    ? getJobProgressInfo({
+        type: "headshot-edit",
+        status: generationStatus,
+        createdAt: generationCreatedAt ?? FALLBACK_CREATED_AT,
+        lastUpdatedAt: generationLastUpdatedAt
+      })
+    : null;
+  const currentFailure = getUserFacingJobError(generationError);
   const resultAspectClass =
     imageSize === "auto" ? "h-80" :
     imageSize === "landscape_16_9" ? "aspect-video" :
@@ -1422,31 +1701,42 @@ function QuickEditPanel({
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-bg-2">
                 <Loader2 className="h-5 w-5 animate-spin text-ink-soft" />
               </div>
-              <div>
-                <p className="font-medium text-ink">Generating with {selectedEngineLabel}...</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-ink">{currentProgress?.stage ?? "Generando"} with {selectedEngineLabel}...</p>
                 <p className="mt-0.5 text-sm text-ink-muted">
-                  {formatElapsed(generationElapsed)} · Usually finishes in about a minute
+                  {formatElapsed(generationElapsed)} · {currentProgress?.statusText ?? "Tiempo estimado: 3m 00s"}
                 </p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-2">
+                  <span className="block h-full rounded-full bg-navy" style={{ width: `${currentProgress?.progress ?? 8}%` }} />
+                </div>
+                {currentProgress?.lastUpdatedLabel ? (
+                  <p className="mt-1.5 text-xs text-ink-muted">{currentProgress.lastUpdatedLabel}</p>
+                ) : null}
               </div>
             </div>
-            {generationError && <p className="mt-3 text-sm text-red-600">{generationError}</p>}
           </div>
         ) : generationStatus === "failed" ? (
           <div className="mb-8 rounded-xl border border-red-100 bg-red-50 p-6">
-            <p className="font-medium text-red-800">Could not generate photos.</p>
-            <p className="mt-1 text-sm text-red-500">
-              {generationError ?? "Credits were refunded if applicable."}
+            <p className="font-medium text-red-800">{currentFailure.title}</p>
+            <p className="mt-1 text-sm text-red-600">{currentFailure.description}</p>
+            <p className="mt-2 text-sm font-semibold text-red-800">
+              {getRefundCopy(generationCreditsUsed || blueCost, generationCreditKind)}
             </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={onReset}
+              onClick={onGenerate}
               className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Try again
+              Reintentar
             </Button>
+            {currentFailure.cta === "contact" ? (
+              <Button asChild variant="outline" size="sm" className="ml-2 mt-4 border-red-200 text-red-700 hover:bg-red-50">
+                <Link href={`mailto:${SUPPORT_EMAIL}`}>Contactar soporte</Link>
+              </Button>
+            ) : null}
           </div>
         ) : signedUrls?.length ? (
           <div className="mb-8">
@@ -1566,13 +1856,21 @@ function QuickEditPanel({
                   e.preventDefault();
                   onAddFiles(e.dataTransfer.files);
                 }}
-                disabled={uploading}
+                disabled={uploading || lacksCredits}
                 className="flex min-h-28 w-full flex-col items-center justify-center rounded-[13px] border border-dashed border-line-strong bg-bg px-6 py-6 text-center transition-colors hover:border-navy hover:bg-navy-tint disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="mb-2 h-6 w-6 text-ink-muted" />
                 <span className="text-sm font-medium text-ink-soft">Drag or click to select</span>
                 <span className="mt-1 text-xs text-ink-muted">JPG or PNG · Originals under 4 MB are preserved</span>
               </button>
+              {lacksCredits ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-red-600">
+                  <span>{getInsufficientCreditsMessage({ kind: "blue", required: blueCost, available: credits.blue })}</span>
+                  <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                    <Link href="/pricing">Comprar creditos</Link>
+                  </Button>
+                </div>
+              ) : null}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1697,9 +1995,9 @@ function QuickEditPanel({
 
             <div className="flex flex-wrap items-center gap-3">
               <Button
-                type="button"
-                onClick={onGenerate}
-                disabled={uploading || photos.length < QUICK_MIN_PHOTOS}
+	                type="button"
+	                onClick={onGenerate}
+	                disabled={uploading || photos.length < QUICK_MIN_PHOTOS || lacksCredits}
                 variant="pill"
                 size="pill"
                 className="shadow-[0_18px_34px_-20px_rgba(20,27,50,.82)]"
@@ -1712,7 +2010,7 @@ function QuickEditPanel({
                   <div className="flex items-center gap-2 text-sm text-red-600">
                     <span>{message}</span>
                     <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-                      <Link href="/pricing">Buy credits</Link>
+	                      <Link href="/pricing">Comprar creditos</Link>
                     </Button>
                   </div>
                 ) : (
@@ -1723,11 +2021,11 @@ function QuickEditPanel({
         )}
 
         {/* Saved quick edits */}
-        {editJobs.length > 0 && (
-          <div className="mt-8">
-            <ResultsHistory jobs={editJobs} kind="edit" onDelete={onDeleteEdit} />
-          </div>
-        )}
+	        {editJobs.length > 0 && (
+	          <div className="mt-8">
+	            <ResultsHistory jobs={editJobs} kind="edit" onDelete={onDeleteEdit} onRetry={onRetryJob} lastUpdatedAt={generationLastUpdatedAt} />
+	          </div>
+	        )}
       </div>
 
       {selectedImageUrl && (
@@ -2083,7 +2381,7 @@ function ModelWorkspace({
 
         {/* Past generates for this model */}
         {modelGenerateJobs.length > 0 && (
-          <ResultsHistory jobs={modelGenerateJobs} />
+          <ResultsHistory jobs={modelGenerateJobs} onRetry={job => void onGenerate()} lastUpdatedAt={null} />
         )}
       </div>
 
@@ -2126,17 +2424,20 @@ const HISTORY_PAGE_SIZE = 10;
 function ResultsHistory({
   jobs,
   kind = "generate",
-  onDelete
+  onDelete,
+  onRetry,
+  lastUpdatedAt
 }: {
   jobs: GenerateJob[];
   kind?: "generate" | "edit";
   onDelete?: (id: string) => void;
+  onRetry?: (job: GenerateJob) => void;
+  lastUpdatedAt?: string | null;
 }) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const activeJobs = jobs.filter(isActiveJob);
-  const doneJobs = jobs.filter(j => j.status === "done");
-  if (activeJobs.length === 0 && doneJobs.length === 0) return null;
+  const { activeJobs, failedJobs, doneJobs } = splitJobsByStatus(jobs);
+  if (activeJobs.length === 0 && failedJobs.length === 0 && doneJobs.length === 0) return null;
 
   const visibleJobs = doneJobs.slice(0, visibleCount);
   const remaining = doneJobs.length - visibleCount;
@@ -2148,7 +2449,15 @@ function ResultsHistory({
       </p>
       <div className="space-y-2">
         {activeJobs.map(job => (
-          <RunningHistoryRow key={job.id} job={job} kind={kind} />
+          <RunningHistoryRow key={job.id} job={job} kind={kind} lastUpdatedAt={lastUpdatedAt} />
+        ))}
+        {failedJobs.map(job => (
+          <FailedHistoryRow
+            key={job.id}
+            job={job}
+            kind={kind}
+            onRetry={onRetry ? () => onRetry(job) : undefined}
+          />
         ))}
         {visibleJobs.map(job => (
           <HistoryRow
@@ -2203,16 +2512,23 @@ function ResultsHistory({
 
 function RunningHistoryRow({
   job,
-  kind = "generate"
+  kind = "generate",
+  lastUpdatedAt
 }: {
   job: GenerateJob;
   kind?: "generate" | "edit";
+  lastUpdatedAt?: string | null;
 }) {
   const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
   const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
   const label = kind === "edit" ? getQuickEditEngineLabel(job) : styleLabel;
   const count = (job.input as { num_images?: number } | null)?.num_images ?? 1;
-  const progress = estimateJobProgress(job);
+  const progress = getJobProgressInfo({
+    type: kind === "edit" ? "headshot-edit" : "headshot-generate",
+    status: job.status,
+    createdAt: job.createdAt,
+    lastUpdatedAt
+  });
 
   return (
     <div className="rounded-xl border border-sage-line bg-sage-tint px-4 py-3">
@@ -2224,14 +2540,62 @@ function RunningHistoryRow({
           <p className="text-sm font-medium text-ink">
             {label} · {count} {count === 1 ? "photo" : "photos"}
           </p>
-          <p className="text-xs text-ink-muted">Generating · runs in background</p>
+          <p className="text-xs text-ink-muted">
+            {progress.stage} · {progress.statusText}{progress.lastUpdatedLabel ? ` · ${progress.lastUpdatedLabel}` : ""}
+          </p>
           <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-surface">
-            <span className="block h-full rounded-full bg-sage" style={{ width: `${progress}%` }} />
+            <span className="block h-full rounded-full bg-sage" style={{ width: `${progress.progress}%` }} />
           </div>
         </div>
         <span className="rounded-full border border-sage-line bg-surface px-3 py-1 text-xs font-semibold text-sage-deep">
-          {progress}%
+          {progress.progress}%
         </span>
+      </div>
+    </div>
+  );
+}
+
+function FailedHistoryRow({
+  job,
+  kind = "generate",
+  onRetry
+}: {
+  job: GenerateJob;
+  kind?: "generate" | "edit";
+  onRetry?: () => void;
+}) {
+  const jobStyle = (job.input as { style?: string } | null)?.style ?? "professional";
+  const styleLabel = STYLE_OPTIONS.find(s => s.value === jobStyle)?.label ?? jobStyle;
+  const label = kind === "edit" ? getQuickEditEngineLabel(job) : styleLabel;
+  const count = (job.input as { num_images?: number } | null)?.num_images ?? job.creditsUsed;
+  const message = getUserFacingJobError(job.error);
+
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-white text-red-600">
+          <AlertCircle className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-red-900">
+            {label} · {count} {count === 1 ? "photo" : "photos"} fallaron
+          </p>
+          <p className="mt-1 text-xs text-red-700">{message.description}</p>
+          <p className="mt-1 text-xs font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
+        </div>
+        {onRetry ? (
+          <div className="flex shrink-0 flex-col gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reintentar
+            </Button>
+            {message.cta === "contact" ? (
+              <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
+                <Link href={`mailto:${SUPPORT_EMAIL}`}>Soporte</Link>
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import type React from "react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   ChevronRight,
@@ -16,10 +17,17 @@ import {
   Loader2,
   LogOut,
   Plus,
+  RefreshCw,
   Sparkles,
   Wallet
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  getJobProgressInfo,
+  getRefundCopy,
+  getUserFacingJobError,
+  splitJobsByStatus
+} from "@/lib/job-ux";
 import { cn } from "@/lib/utils";
 
 export type StyleValue = "professional" | "cinematic" | "natural";
@@ -33,7 +41,11 @@ export type TrainingJobLike = {
   status: JobStatus;
   input: Record<string, unknown> | null;
   result: { lora_url?: string; trigger_word?: string } | null;
+  error?: string | null;
+  creditsUsed?: number;
+  creditKind?: "blue" | "gold";
   createdAt: string;
+  updatedAt?: string;
 };
 
 export type GenerateJobLike = {
@@ -41,7 +53,11 @@ export type GenerateJobLike = {
   status: JobStatus;
   input: Record<string, unknown> | null;
   result: string[] | null;
+  error?: string | null;
+  creditsUsed?: number;
+  creditKind?: "blue" | "gold";
   createdAt: string;
+  updatedAt?: string;
   completedAt: string | null;
 };
 
@@ -49,6 +65,10 @@ export type ActiveGenerationJob = {
   id: string;
   status: JobStatus | null;
   progress: number;
+  stage: string;
+  statusText: string;
+  lastUpdatedLabel: string | null;
+  isOverEta: boolean;
   style: StyleValue;
   title?: string;
   count: CountValue;
@@ -57,7 +77,7 @@ export type ActiveGenerationJob = {
   createdAt: string;
 };
 
-export type DashboardMode = "model" | "new-model" | "quick-edit" | "loading" | "training-only" | "empty";
+export type DashboardMode = "model" | "new-model" | "quick-edit" | "loading" | "training-only" | "training-failed" | "empty";
 
 export type DashboardWorkspaceProps = {
   mode: DashboardMode;
@@ -73,11 +93,14 @@ export type DashboardWorkspaceProps = {
     subscriptionStatus?: string;
   };
   models: TrainingJobLike[];
+  failedTrainingJobs: TrainingJobLike[];
   loadingModels: boolean;
   selectedModel: TrainingJobLike | null;
+  selectedTrainingFailedJob: TrainingJobLike | null;
   selectedModelId: string | null;
   activeTrainingJob: TrainingJobLike | null;
   trainingElapsed: number;
+  trainingLastUpdatedAt: string | null;
   activeTaskJob: ActiveGenerationJob | null;
   activeGenerationJob: ActiveGenerationJob | null;
   style: StyleValue;
@@ -86,11 +109,14 @@ export type DashboardWorkspaceProps = {
   attire: AttireValue;
   generationMessage: string | null;
   jobs: GenerateJobLike[];
+  generationLastUpdatedAt: string | null;
   newModelContent?: React.ReactNode;
   quickEditContent?: React.ReactNode;
   onSelectModel: (id: string) => void;
   onNewModel: () => void;
   onQuickEdit: () => void;
+  onRetryTraining: (job: TrainingJobLike) => void;
+  onRetryGeneration: (job: GenerateJobLike) => void;
   onStyleChange: (value: StyleValue) => void;
   onCountChange: (value: CountValue) => void;
   onBackgroundChange: (value: BackgroundValue) => void;
@@ -152,6 +178,7 @@ function MobileActionStrip({
   mode,
   userEmail,
   models,
+  failedTrainingJobs,
   loadingModels,
   selectedModelId,
   onSelectModel,
@@ -183,7 +210,23 @@ function MobileActionStrip({
                 {getModelName(model)}
               </button>
             );
-          })
+          }).concat(failedTrainingJobs.map(model => {
+            const active = mode === "training-failed" && selectedModelId === model.id;
+            return (
+              <button
+                key={model.id}
+                type="button"
+                onClick={() => onSelectModel(model.id)}
+                className={cn(
+                  "dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] font-semibold",
+                  active ? "bg-white text-navy-sidebar" : "bg-white/[.06] text-[#cfd3e0]"
+                )}
+              >
+                <span className="size-2 rounded-full bg-red-400" />
+                {getModelName(model)}
+              </button>
+            );
+          }))
         )}
         <button
           type="button"
@@ -229,7 +272,10 @@ function DashboardContent(props: DashboardWorkspaceProps) {
   if (props.mode === "new-model") return <div className="flex flex-1 flex-col overflow-hidden">{props.newModelContent}</div>;
   if (props.mode === "quick-edit") return <div className="flex flex-1 flex-col overflow-hidden">{props.quickEditContent}</div>;
   if (props.mode === "loading") return <LoadingState />;
-  if (props.mode === "training-only") return <TrainingOnlyState job={props.activeTrainingJob} elapsed={props.trainingElapsed} />;
+  if (props.mode === "training-only") return <TrainingOnlyState job={props.activeTrainingJob} elapsed={props.trainingElapsed} lastUpdatedAt={props.trainingLastUpdatedAt} />;
+  if (props.mode === "training-failed" && props.selectedTrainingFailedJob) {
+    return <TrainingFailedState job={props.selectedTrainingFailedJob} onRetry={() => props.onRetryTraining(props.selectedTrainingFailedJob!)} />;
+  }
   if (props.mode === "empty") return <EmptyModelsState onNewModel={props.onNewModel} />;
 
   return (
@@ -244,6 +290,7 @@ function DashboardSidebar({
   userEmail,
   credits,
   models,
+  failedTrainingJobs,
   loadingModels,
   selectedModelId,
   activeTrainingJob,
@@ -272,6 +319,14 @@ function DashboardSidebar({
         ) : (
           <>
             {models.map(model => (
+              <ModelButton
+                key={model.id}
+                model={model}
+                active={selectedModelId === model.id}
+                onClick={() => onSelectModel(model.id)}
+              />
+            ))}
+            {failedTrainingJobs.map(model => (
               <ModelButton
                 key={model.id}
                 model={model}
@@ -350,11 +405,12 @@ function DashboardSidebar({
   );
 }
 
-function DashboardTopBar({ selectedModel, activeTaskJob, mode, activeTrainingJob }: DashboardWorkspaceProps) {
+function DashboardTopBar({ selectedModel, selectedTrainingFailedJob, activeTaskJob, mode, activeTrainingJob }: DashboardWorkspaceProps) {
   const title =
     mode === "new-model" ? "New model" :
     mode === "quick-edit" ? "Quick edit" :
     selectedModel ? getModelName(selectedModel) :
+    selectedTrainingFailedJob ? getModelName(selectedTrainingFailedJob) :
     activeTrainingJob ? getModelName(activeTrainingJob) :
     "Dashboard";
   const modelReady = mode === "model" && selectedModel;
@@ -379,7 +435,7 @@ function TaskPill({ job }: { job: ActiveGenerationJob }) {
   return (
     <div role="status" className="flex items-center gap-2.5 rounded-full border border-line bg-surface py-[7px] pl-[13px] pr-[9px]">
       <Loader2 className="dsh-task-spin size-[15px] text-sage" />
-      <span className="text-[13px] text-ink-soft"><b className="font-bold text-ink">Generating</b> · {job.count} photos</span>
+      <span className="text-[13px] text-ink-soft"><b className="font-bold text-ink">{job.stage}</b> · {job.count} photos</span>
       <span className="text-[12.5px] font-bold text-sage">· {job.progress}%</span>
       <ProgressBar value={job.progress} className="w-[60px]" />
     </div>
@@ -479,8 +535,9 @@ function GenerationCard(props: DashboardWorkspaceProps) {
   );
 }
 
-function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspaceProps) {
-  const doneJobs = jobs.filter(job => job.status === "done").slice(0, 3);
+function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration }: DashboardWorkspaceProps) {
+  const { failedJobs, doneJobs } = splitJobsByStatus(jobs);
+  const visibleDoneJobs = doneJobs.slice(0, 3);
   return (
     <section className="flex flex-col gap-[11px]" aria-label="Recent generations">
       <div className="flex items-center justify-between px-0.5 pb-0.5">
@@ -490,7 +547,14 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspa
         </button>
       </div>
       {activeGenerationJob ? <RunningGenerationRow job={activeGenerationJob} /> : null}
-      {doneJobs.map(job => (
+      {failedJobs.map(job => (
+        <FailedGenerationRow
+          key={job.id}
+          job={job}
+          onRetry={() => onRetryGeneration(job)}
+        />
+      ))}
+      {visibleDoneJobs.map(job => (
         <GenerationHistoryRow
           key={job.id}
           job={job}
@@ -501,20 +565,61 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage }: DashboardWorkspa
   );
 }
 
+function FailedGenerationRow({
+  job,
+  onRetry
+}: {
+  job: GenerateJobLike;
+  onRetry: () => void;
+}) {
+  const message = getUserFacingJobError(job.error);
+  const input = job.input;
+  const style = typeof input?.style === "string" ? input.style : "professional";
+  const count = typeof input?.num_images === "number" ? input.num_images : job.creditsUsed ?? 1;
+  return (
+    <div className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-[13px]">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-white text-red-600">
+          <AlertCircle className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14.5px] font-bold text-red-900">{styleLabel(style)} · {count} {count === 1 ? "photo" : "photos"} fallaron</p>
+          <p className="mt-1 text-sm text-red-700">{message.description}</p>
+          <p className="mt-1 text-sm font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
+        </div>
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
+            <RefreshCw className="size-3.5" />
+            Reintentar
+          </Button>
+          {message.cta === "contact" ? (
+            <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
+              <Link href="mailto:juanimolfinooo@gmail.com">Soporte</Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RunningGenerationRow({ job }: { job: ActiveGenerationJob }) {
   return (
     <div className="flex items-center gap-4 rounded-[14px] border border-sage-line bg-sage-tint px-4 py-[13px]">
       <div className="dsh-shimmer relative size-14 shrink-0 overflow-hidden rounded-[9px] bg-[#e6ddcf]" />
       <div className="min-w-0 flex-1">
         <div className="text-[14.5px] font-bold text-ink">{job.title ?? styleLabel(job.style)} · {job.count} {job.count === 1 ? "photo" : "photos"}</div>
-        <div className="text-[12.5px] text-ink-muted">{formatBackground(job.background)} · {formatRelativeTime(job.createdAt)}</div>
+        <div className="text-[12.5px] text-ink-muted">{job.stage} · {formatBackground(job.background)} · {formatRelativeTime(job.createdAt)}</div>
         <ProgressBar value={job.progress} className="mt-1.5 max-w-[300px]" />
+        <div className="mt-1 text-[11.5px] text-ink-muted">
+          {job.statusText}{job.lastUpdatedLabel ? ` · ${job.lastUpdatedLabel}` : ""}
+        </div>
       </div>
       <div className="flex flex-col items-end gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-sage-line bg-surface px-[11px] py-1 text-xs font-semibold text-sage-deep">
-          <Loader2 className="dsh-task-spin size-3" />Generating {job.progress}%
+          <Loader2 className="dsh-task-spin size-3" />{job.stage} {job.progress}%
         </span>
-        <span className="text-[11.5px] text-ink-muted">Runs in background - keep working</span>
+        <span className="text-[11.5px] text-ink-muted">{job.isOverEta ? "Longer than usual" : "Runs in background"}</span>
       </div>
     </div>
   );
@@ -759,7 +864,23 @@ function EmptyModelsState({ onNewModel }: { onNewModel: () => void }) {
   );
 }
 
-function TrainingOnlyState({ job, elapsed }: { job: TrainingJobLike | null; elapsed: number }) {
+function TrainingOnlyState({
+  job,
+  elapsed,
+  lastUpdatedAt
+}: {
+  job: TrainingJobLike | null;
+  elapsed: number;
+  lastUpdatedAt: string | null;
+}) {
+  const progress = job
+    ? getJobProgressInfo({
+        type: "headshot-training",
+        status: job.status,
+        createdAt: job.createdAt,
+        lastUpdatedAt
+      })
+    : null;
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
       <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-sage-tint text-sage">
@@ -767,9 +888,48 @@ function TrainingOnlyState({ job, elapsed }: { job: TrainingJobLike | null; elap
       </div>
       <h2 className="text-xl font-bold text-ink">{job ? getModelName(job) : "Model"} is training</h2>
       <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
-        Training runs in the background. You can keep using the app and generate once the model is ready.
+        Training usually takes 4-9 minutes. You can keep using the app and generate once the model is ready.
       </p>
-      <p className="mt-4 text-sm font-semibold text-sage-deep">Training · {formatElapsed(elapsed)}</p>
+      <div className="mt-5 w-full max-w-sm">
+        <ProgressBar value={progress?.progress ?? 8} className="h-2 w-full" />
+        <p className="mt-3 text-sm font-semibold text-sage-deep">
+          {progress?.stage ?? "Entrenando"} · {formatElapsed(elapsed)}
+        </p>
+        <p className="mt-1 text-xs text-ink-muted">
+          {progress?.statusText ?? "Tiempo estimado: 9m 00s"}{progress?.lastUpdatedLabel ? ` · ${progress.lastUpdatedLabel}` : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TrainingFailedState({
+  job,
+  onRetry
+}: {
+  job: TrainingJobLike;
+  onRetry: () => void;
+}) {
+  const message = getUserFacingJobError(job.error);
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center px-8 py-20 text-center">
+      <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+        <AlertCircle className="size-7" />
+      </div>
+      <h2 className="text-xl font-bold text-ink">No pudimos entrenar {getModelName(job)}</h2>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">{message.description}</p>
+      <p className="mt-3 text-sm font-semibold text-red-700">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <Button type="button" variant="sage" onClick={onRetry} className="h-auto rounded-xl px-[26px] py-3.5">
+          <RefreshCw className="size-4" />
+          Reintentar
+        </Button>
+        {message.cta === "contact" ? (
+          <Button asChild variant="outline" className="h-auto rounded-xl px-[22px] py-3.5">
+            <Link href="mailto:juanimolfinooo@gmail.com">Contactar soporte</Link>
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -796,6 +956,7 @@ function ModelButton({
 }) {
   const name = getModelName(model);
   const training = model.status === "pending" || model.status === "processing";
+  const failed = model.status === "failed";
   const photoCount = getPhotoCount(model);
   return (
     <button
@@ -807,16 +968,16 @@ function ModelButton({
         active && "bg-[color-mix(in_srgb,var(--sage-side)_17%,transparent)] before:absolute before:bottom-[9px] before:left-[-14px] before:top-[9px] before:w-[3px] before:rounded-r-[3px] before:bg-sage-side"
       )}
     >
-      <span className={cn("flex size-[34px] shrink-0 items-center justify-center rounded-[10px] text-sm font-bold", training ? "bg-[#2a3354] text-[#aeb6d4]" : "bg-white text-navy-sidebar")}>
+      <span className={cn("flex size-[34px] shrink-0 items-center justify-center rounded-[10px] text-sm font-bold", training || failed ? "bg-[#2a3354] text-[#aeb6d4]" : "bg-white text-navy-sidebar")}>
         {name.charAt(0).toUpperCase()}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-semibold text-[#eef0f6]">{name}</span>
         <span className="block truncate text-[11.5px] text-[#7e87a6]">
-          {training ? `Training · ${trainingElapsed ? formatElapsed(trainingElapsed) : "~6 min left"}` : `Ready · ${photoCount} photos`}
+          {failed ? "Fallo · credito devuelto" : training ? `Training · ${trainingElapsed ? formatElapsed(trainingElapsed) : "4-9 min"}` : `Ready · ${photoCount} photos`}
         </span>
       </span>
-      {training ? <Loader2 className="dsh-ring size-[15px] shrink-0 text-sage-side" aria-label="Training" /> : <span className="size-[7px] shrink-0 rounded-full bg-ready" />}
+      {failed ? <AlertCircle className="size-[15px] shrink-0 text-red-300" aria-label="Failed" /> : training ? <Loader2 className="dsh-ring size-[15px] shrink-0 text-sage-side" aria-label="Training" /> : <span className="size-[7px] shrink-0 rounded-full bg-ready" />}
     </button>
   );
 }

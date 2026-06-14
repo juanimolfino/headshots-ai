@@ -33,7 +33,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     status: job.status,
     result: job.result ?? null,
     error: job.error,
+    creditsUsed: job.creditsUsed,
+    creditKind: job.creditKind,
     createdAt: job.createdAt.toISOString(),
+    updatedAt: job.updatedAt.toISOString(),
     completedAt: job.completedAt?.toISOString() ?? null
   });
 }
