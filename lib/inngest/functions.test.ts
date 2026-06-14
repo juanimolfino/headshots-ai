@@ -23,10 +23,20 @@ describe("Inngest AI job safeguards", () => {
   });
 
   it("sends completed job notifications through the JobReadyEmail template helper", () => {
-    expect(source).toContain('import { sendJobReadyEmail } from "@/lib/email/send"');
+    expect(source).toContain('import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send"');
     expect(source).toContain("sendJobReadyEmail(user.email");
     expect(source).toContain("/dashboard/headshots");
     expect(source).toContain("Ver modelo");
     expect(source).toContain("Ver resultados");
+  });
+
+  it("sends failure/refund email only when a new refund was applied", () => {
+    expect(source).toContain('import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send"');
+    expect(source).toContain("getUserFacingJobError(reason)");
+    expect(source).toContain("getRefundCopy(job.creditsUsed, job.creditKind)");
+    expect(source).toContain('const refunded = await step.run("refund credits"');
+    expect(source).toContain("if (refunded) {");
+    expect(source).toContain('await step.run("send failure email"');
+    expect(source).toContain("sendUserFailureEmail(job, message)");
   });
 });

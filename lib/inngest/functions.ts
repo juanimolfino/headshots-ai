@@ -15,7 +15,8 @@ import {
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
 import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
-import { sendJobReadyEmail } from "@/lib/email/send";
+import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send";
+import { getRefundCopy, getUserFacingJobError } from "@/lib/job-ux";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { inngest } from "./client";
@@ -264,6 +265,21 @@ async function sendUserEmail(userId: string, subject: string, text: string, acti
   }
 }
 
+async function sendUserFailureEmail(job: { userId: string; creditsUsed: number; creditKind: "blue" | "gold" }, reason: string) {
+  const user = await getDb().query.users.findFirst({ where: eq(users.id, job.userId) });
+  const failure = getUserFacingJobError(reason);
+  if (user?.email) {
+    await sendJobFailedEmail(user.email, {
+      subject: "No pudimos completar tu trabajo",
+      heading: failure.title,
+      body: failure.description,
+      refund: getRefundCopy(job.creditsUsed, job.creditKind),
+      actionUrl: getDashboardUrl(),
+      actionLabel: "Reintentar"
+    });
+  }
+}
+
 type TrainingPrepResult = {
   triggerWord: string;
   trainerInput: ReturnType<typeof buildFluxLoraTrainerInput>;
@@ -476,7 +492,10 @@ export const runAiJob = inngest.createFunction(
     } catch (error) {
       const message = formatJobError(error);
       console.error("[runAiJob] failed:", message);
-      await step.run("refund credits", async () => refundJobCredits(job.id, message));
+      const refunded = await step.run("refund credits", async () => refundJobCredits(job.id, message));
+      if (refunded) {
+        await step.run("send failure email", async () => sendUserFailureEmail(job, message));
+      }
       throw error;
     } finally {
       await step.run("release concurrency slot", async () => releaseJobSlot(job.userId));

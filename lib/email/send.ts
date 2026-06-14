@@ -1,4 +1,5 @@
 import { JobReadyEmail } from "@/emails/job-ready";
+import { JobFailedEmail } from "@/emails/job-failed";
 import { PurchaseConfirmationEmail } from "@/emails/purchase-confirmation";
 import { WelcomeEmail } from "@/emails/welcome";
 import { getResend } from "@/lib/email/client";
@@ -56,6 +57,31 @@ export async function sendJobReadyEmail(email: string, input: {
       react: JobReadyEmail({
         heading: input.heading,
         body: input.body,
+        actionUrl: input.actionUrl,
+        actionLabel: input.actionLabel
+      })
+    })
+  );
+}
+
+export async function sendJobFailedEmail(email: string, input: {
+  subject: string;
+  heading: string;
+  body: string;
+  refund: string;
+  actionUrl: string;
+  actionLabel?: string;
+}) {
+  if (!canSendEmail()) return;
+  await sendSafely("job failed", () =>
+    getResend().emails.send({
+      from: process.env.RESEND_FROM_EMAIL!,
+      to: email,
+      subject: input.subject,
+      react: JobFailedEmail({
+        heading: input.heading,
+        body: input.body,
+        refund: input.refund,
         actionUrl: input.actionUrl,
         actionLabel: input.actionLabel
       })
