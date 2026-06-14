@@ -61,16 +61,29 @@ As of 2026-06-14, Phase 1 is complete and deployed with green production runs:
 - Reaper thresholds are intentionally above normal job duration and above the explicit generate/edit timeout: `headshot-generate` 15 minutes, `headshot-edit` 15 minutes, `headshot-training` 50 minutes. Training's webhook wait remains 45 minutes.
 - Inngest is registered through `app/api/inngest/route.ts` with both `runAiJob` and `reapStaleAiJobs`.
 
-Deferred for a later hardening batch:
-
-- Retry/resubmit UX for failed jobs.
-
 Additional robustness completed on 2026-06-14:
 
 - Legacy jobs without `jobs.metadata.creditDebits` still fall back to refunding `{ bucket: "pack", credits: job.creditsUsed }`, but `refundJobCredits()` now emits a structured `console.warn` with code `REFUND_FALLBACK_NO_CREDIT_DEBITS`. Search production logs for that code to find legacy/accounting fallback cases. The warning includes `jobId`, `userId`, `jobType`, `creditKind`, and `credits`.
 - Credit balances are protected by DB CHECK constraints in `drizzle/0010_non_negative_credit_balances.sql`: `subscription_blue_balance`, `subscription_gold_balance`, `pack_blue_balance`, and `pack_gold_balance` must be non-negative.
 - Migration `0010_non_negative_credit_balances.sql` preflights existing data and raises an explicit exception if any current balance is negative instead of silently adding constraints over bad data.
 - Concurrency coverage lives in `lib/db/create-pending-job-concurrency.test.ts`. It simulates two parallel `createPendingJob()` calls for the same user with balance for only one job, including a split subscription+pack balance case. These tests use an in-memory transactional fake and do not require a real test database.
+
+## Phase 2 UX Reliability
+
+As of 2026-06-14, the dashboard handles job failures and long-running states explicitly:
+
+- Failed `headshot-training`, `headshot-generate`, and `headshot-edit` jobs remain visible in the UI instead of disappearing from filtered histories. Failed states show a human-readable error, explicit refund copy based on `jobs.creditsUsed`/`jobs.creditKind`, and a retry CTA that re-enqueues with the original job input when possible.
+- `GET /api/jobs` and `GET /api/jobs/[id]` expose `creditsUsed`, `creditKind`, and `updatedAt` so the client can render refund and status context without guessing.
+- The client refreshes credits automatically when polling observes a new `failed` job, using a per-job in-memory guard to avoid repeated refresh loops.
+- Training and quick edit now precheck credits before uploads/job creation: training requires gold credits, quick edit requires blue credits based on quality x image count. Generation keeps its existing blue-credit precheck.
+- User-facing job error copy is centralized in `lib/job-ux.ts`; it maps provider failures, timeouts, invalid images, insufficient credits, and generic errors away from raw Fal/OpenAI/Gemini/JSON details.
+- Long-job feedback uses status-derived stages, ETA-based progress, and last successful poll timestamps. Training copy is normalized around a realistic 4-9 minute expectation; generate/edit use shorter ETA windows and show an over-ETA message instead of pretending progress is still precise.
+- Completed training/generate/edit jobs now send the React `JobReadyEmail` template via `sendJobReadyEmail()`, with a direct link back to `/dashboard/headshots`.
+
+Deferred from this UX batch:
+
+- In-app toast notifications.
+- Failure/refund transactional emails.
 
 ## Generation Details
 
@@ -211,7 +224,8 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 
 ## Useful Next Work
 
-1. Add retry/resubmit for failed jobs.
-2. Add admin support UI for users, jobs, credits, and stuck-job recovery.
-3. Move Resend to a verified product domain.
-4. Swap Stripe to production keys before launch.
+1. Add in-app toast notifications for success/failure/refund events.
+2. Add failure/refund transactional emails.
+3. Add admin support UI for users, jobs, credits, and stuck-job recovery.
+4. Move Resend to a verified product domain.
+5. Swap Stripe to production keys before launch.
