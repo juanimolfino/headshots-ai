@@ -51,6 +51,27 @@ Production AI SaaS for professional headshots. Users upload photos, train a pers
 9. Worker signs LoRA URL, calls `fal.subscribe("fal-ai/flux-lora", ...)`, downloads generated URLs, uploads final JPGs to Supabase Storage at `headshots/{userId}/{jobId}/{index}.jpg`, and stores the URL array in `jobs.result`.
 10. Quick edit: UI uploads 1-4 original reference images without client compression and creates `headshot-edit` with `{ image_urls, prompt, engine, quality, image_size, num_images }`. Default `image_size` is `auto` to preserve the source aspect ratio; UI also offers `portrait_4_3` and `landscape_16_9`. Worker calls fal.ai `fal-ai/nano-banana-pro/edit` when `engine` is `gemini-3-pro-image`, then falls back to direct Gemini `gemini-3-pro-image` if fal.ai fails; otherwise it calls `openai/gpt-image-2/edit` through fal.ai. Quick edit outputs request PNG and are stored like generated headshots.
 
+## Phase 1 Production Hardening
+
+As of 2026-06-14, Phase 1 is complete and deployed with green production runs:
+
+- Stripe `invoice.paid` replay bug is fixed. `replaceSubscriptionCredits()` only resets subscription balances when the subscription grant transaction was newly inserted. Replayed Stripe event IDs no longer restore spent subscription credits.
+- Stripe subscription lifecycle events are order-protected. `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.payment_failed` flow through `applySubscriptionLifecycleEvent()`, which stores `last_stripe_event_id` and `last_stripe_event_created_at` on `subscriptions` and discards replays or older out-of-order events.
+- AI jobs have explicit timeouts and a stale-job reaper. `headshot-generate` and `headshot-edit` wrap fal.ai calls in 10 minute timeouts. The Inngest cron `reap-stale-ai-jobs` runs every 10 minutes and fails/refunds active jobs older than their type threshold.
+- Reaper thresholds are intentionally above normal job duration and above the explicit generate/edit timeout: `headshot-generate` 15 minutes, `headshot-edit` 15 minutes, `headshot-training` 50 minutes. Training's webhook wait remains 45 minutes.
+- Inngest is registered through `app/api/inngest/route.ts` with both `runAiJob` and `reapStaleAiJobs`.
+
+Deferred for a later hardening batch:
+
+- Retry/resubmit UX for failed jobs.
+
+Additional robustness completed on 2026-06-14:
+
+- Legacy jobs without `jobs.metadata.creditDebits` still fall back to refunding `{ bucket: "pack", credits: job.creditsUsed }`, but `refundJobCredits()` now emits a structured `console.warn` with code `REFUND_FALLBACK_NO_CREDIT_DEBITS`. Search production logs for that code to find legacy/accounting fallback cases. The warning includes `jobId`, `userId`, `jobType`, `creditKind`, and `credits`.
+- Credit balances are protected by DB CHECK constraints in `drizzle/0010_non_negative_credit_balances.sql`: `subscription_blue_balance`, `subscription_gold_balance`, `pack_blue_balance`, and `pack_gold_balance` must be non-negative.
+- Migration `0010_non_negative_credit_balances.sql` preflights existing data and raises an explicit exception if any current balance is negative instead of silently adding constraints over bad data.
+- Concurrency coverage lives in `lib/db/create-pending-job-concurrency.test.ts`. It simulates two parallel `createPendingJob()` calls for the same user with balance for only one job, including a split subscription+pack balance case. These tests use an in-memory transactional fake and do not require a real test database.
+
 ## Generation Details
 
 `lib/ai/providers/flux-lora-generator.ts` builds prompts from a style base plus optional background and attire controls. Current styles are `professional`, `cinematic`, and `natural`.
@@ -109,6 +130,12 @@ Important job shapes:
 - `headshot-generate.result` and `headshot-edit.result`: `string[]` of Supabase URLs. `/signed-urls` normalizes URLs/paths and returns 1-hour signed URLs.
 
 Credits are debited atomically in `createPendingJob()` and refunded by `refundJobCredits()` on worker failure. Redis key `jobs:active:{userId}` limits concurrent jobs; default `MAX_CONCURRENT_JOBS=3`.
+
+Refunds are idempotent by `stripeEventId` keys of the shape `job_refund:{jobId}:{bucket}`. The reaper uses the same `refundJobCredits()` path, so a stale job cannot be refunded twice and refunds go back to the original debit bucket recorded in `jobs.metadata.creditDebits`.
+
+Subscription lifecycle ordering requires migration `drizzle/0009_subscription_event_ordering.sql`, which adds `subscriptions.last_stripe_event_id` and `subscriptions.last_stripe_event_created_at`.
+
+Non-negative credit balance constraints require migration `drizzle/0010_non_negative_credit_balances.sql`. If that migration fails with `credits table contains negative balances`, inspect/fix those rows before rerunning it.
 
 ## Environment
 
@@ -173,18 +200,18 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 ## Known Constraints
 
 - Vercel Pro function timeout is 300 s, so LoRA training must stay webhook-driven.
-- Training timeout is 45 minutes; there is no watchdog for jobs stuck in `processing`.
+- Training webhook wait timeout is 45 minutes; stale `headshot-training` jobs are reaped after 50 minutes.
+- Generate/edit fal.ai calls time out after 10 minutes; the stale-job reaper fails active generate/edit jobs after 15 minutes.
 - R2 signed URLs are method-specific; GET-signed URLs fail on HEAD.
 - Supabase free tier has a 50 MB per-file limit; LoRAs are about 125 MB, so LoRAs live in R2.
 - Legacy LoRA URLs from fal.storage may expire and fail generation.
 - UI uses polling every 8 s, not Supabase Realtime.
-- No admin UI yet; stuck jobs require direct DB intervention.
+- No admin UI yet; stuck jobs are auto-reaped/refunded, but manual support still requires DB access.
 - Stripe production keys and a verified Resend domain are still needed before real users.
 
 ## Useful Next Work
 
-1. Add a watchdog that fails/refunds jobs stuck in `processing`.
-2. Add retry/resubmit for failed jobs.
-3. Add admin support UI for users, jobs, credits, and stuck-job recovery.
-4. Move Resend to a verified product domain.
-5. Swap Stripe to production keys before launch.
+1. Add retry/resubmit for failed jobs.
+2. Add admin support UI for users, jobs, credits, and stuck-job recovery.
+3. Move Resend to a verified product domain.
+4. Swap Stripe to production keys before launch.

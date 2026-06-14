@@ -76,9 +76,20 @@ Webhook endpoint:
 /api/stripe/webhook
 ```
 
-Handled events are `checkout.session.completed`, `invoice.paid`, and `customer.subscription.deleted`.
+Handled events are `checkout.session.completed`, `invoice.paid`, `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.payment_failed`.
 
-Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe events do not increment balances twice.
+Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe events do not increment balances twice or reset spent subscription credits. Subscription lifecycle events are also order-protected per Stripe subscription using the last applied event ID and event timestamp.
+
+## Job Watchdog
+
+Inngest registers two functions through `/api/inngest`: `runAiJob` and the cron `reap-stale-ai-jobs`.
+
+- `headshot-generate` and `headshot-edit` fal.ai calls time out after 10 minutes.
+- The stale-job reaper runs every 10 minutes.
+- Reaper thresholds: generate/edit 15 minutes, training 50 minutes.
+- Refunds use the original credit bucket recorded on the job and are idempotent.
+
+Legacy jobs without `metadata.creditDebits` still refund through the pack fallback, but `refundJobCredits()` emits a structured `console.warn` with code `REFUND_FALLBACK_NO_CREDIT_DEBITS` so those cases are searchable in production logs.
 
 ## Security Defaults
 
@@ -86,6 +97,7 @@ Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe even
 - `/api/health` is protected in production with `HEALTHCHECK_SECRET`; call it with `Authorization: Bearer <secret>`.
 - Public auth/session debug endpoints are not part of the template.
 - Blue/gold credit debits, purchases, subscription grants, and refunds are recorded in `transactions`.
+- Credit balances are protected by database CHECK constraints so subscription and pack blue/gold balances cannot go negative.
 - Rotate every secret before creating a new product from this repo.
 
 ## Deploy to Vercel
