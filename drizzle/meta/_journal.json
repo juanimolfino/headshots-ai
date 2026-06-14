@@ -71,6 +71,13 @@
       "when": 1781308800000,
       "tag": "0009_subscription_event_ordering",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781395200000,
+      "tag": "0010_non_negative_credit_balances",
+      "breakpoints": true
     }
   ]
 }

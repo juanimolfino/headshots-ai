@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   integer,
   jsonb,
   pgEnum,
@@ -42,7 +43,12 @@ export const credits = pgTable("credits", {
   subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end", { withTimezone: true }),
   subscriptionStatus: text("subscription_status").default("none").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
-});
+}, (table) => [
+  check("credits_subscription_blue_balance_non_negative", sql`${table.subscriptionBlueBalance} >= 0`),
+  check("credits_subscription_gold_balance_non_negative", sql`${table.subscriptionGoldBalance} >= 0`),
+  check("credits_pack_blue_balance_non_negative", sql`${table.packBlueBalance} >= 0`),
+  check("credits_pack_gold_balance_non_negative", sql`${table.packGoldBalance} >= 0`)
+]);
 
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),

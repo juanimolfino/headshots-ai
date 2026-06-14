@@ -6,6 +6,7 @@ describe("two-credit balance migration", () => {
   const sql = readFileSync(join(process.cwd(), "drizzle/0007_two_credit_balances.sql"), "utf8");
   const bucketSql = readFileSync(join(process.cwd(), "drizzle/0008_subscription_pack_credit_buckets.sql"), "utf8");
   const subscriptionEventSql = readFileSync(join(process.cwd(), "drizzle/0009_subscription_event_ordering.sql"), "utf8");
+  const nonNegativeSql = readFileSync(join(process.cwd(), "drizzle/0010_non_negative_credit_balances.sql"), "utf8");
 
   it("moves the legacy balance into blue_balance and starts gold_balance at zero", () => {
     expect(sql).toContain('"blue_balance" = COALESCE("blue_balance", "balance", 0)');
@@ -35,5 +36,13 @@ describe("two-credit balance migration", () => {
   it("records the last processed Stripe subscription event", () => {
     expect(subscriptionEventSql).toContain('ADD COLUMN IF NOT EXISTS "last_stripe_event_id" text');
     expect(subscriptionEventSql).toContain('ADD COLUMN IF NOT EXISTS "last_stripe_event_created_at" timestamp with time zone');
+  });
+
+  it("preflights and constrains credit balances to be non-negative", () => {
+    expect(nonNegativeSql).toContain("credits table contains negative balances");
+    expect(nonNegativeSql).toContain('CHECK ("subscription_blue_balance" >= 0)');
+    expect(nonNegativeSql).toContain('CHECK ("subscription_gold_balance" >= 0)');
+    expect(nonNegativeSql).toContain('CHECK ("pack_blue_balance" >= 0)');
+    expect(nonNegativeSql).toContain('CHECK ("pack_gold_balance" >= 0)');
   });
 });
