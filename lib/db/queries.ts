@@ -27,6 +27,8 @@ const ACTIVE_JOB_STATUSES = ["pending", "processing"] as const;
 
 type ActiveJobForReaper = Pick<Job, "id" | "type" | "status" | "createdAt">;
 
+export const REFUND_FALLBACK_NO_CREDIT_DEBITS = "REFUND_FALLBACK_NO_CREDIT_DEBITS";
+
 export type SubscriptionLifecycleEventInput = {
   userId: string;
   subscriptionId: string;
@@ -253,7 +255,19 @@ export async function refundJobCredits(jobId: string, reason: string) {
     if (!job) throw new Error("Job not found");
     if (job.status === "done") return;
 
-    const debits = metadataWithDebits(job.metadata) ?? [{ bucket: "pack" as CreditBucket, credits: job.creditsUsed }];
+    const metadataDebits = metadataWithDebits(job.metadata);
+    if (!metadataDebits) {
+      console.warn(REFUND_FALLBACK_NO_CREDIT_DEBITS, {
+        code: REFUND_FALLBACK_NO_CREDIT_DEBITS,
+        jobId,
+        userId: job.userId,
+        jobType: job.type,
+        creditKind: job.creditKind,
+        credits: job.creditsUsed
+      });
+    }
+
+    const debits = metadataDebits ?? [{ bucket: "pack" as CreditBucket, credits: job.creditsUsed }];
     const refundKey = `job_refund:${jobId}`;
     let refunded = false;
 
