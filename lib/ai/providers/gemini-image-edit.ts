@@ -1,4 +1,5 @@
 import { fal } from "@fal-ai/client";
+import { falPrivacyHeaders } from "@/lib/fal/privacy";
 import type { HeadshotEditInput } from "@/lib/ai/types";
 
 export const NANO_BANANA_PRO_MODEL = "gemini-3-pro-image";
@@ -120,6 +121,7 @@ async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
       resolution: QUALITY_RESOLUTION[input.quality ?? "low"]
     } as never,
     logs: true,
+    headers: falPrivacyHeaders(),
     pollInterval: 5000,
     onEnqueue(requestId) {
       console.log("[nano-banana-pro-edit] enqueued:", requestId);

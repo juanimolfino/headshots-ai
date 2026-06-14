@@ -9,7 +9,18 @@ type CookieToSet = {
 
 export async function GET(request: NextRequest) {
   const origin = new URL(request.url).origin;
+  const requestUrl = new URL(request.url);
   const cookiesToApply: CookieToSet[] = [];
+  if (requestUrl.searchParams.get("legal_consent") !== "1") {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("error", "Aceptá los términos y la política de privacidad para continuar.");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const callbackUrl = new URL(`${origin}/callback`);
+  callbackUrl.searchParams.set("legal_consent", "1");
+  callbackUrl.searchParams.set("terms_version", requestUrl.searchParams.get("terms_version") ?? "");
+  callbackUrl.searchParams.set("privacy_version", requestUrl.searchParams.get("privacy_version") ?? "");
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +42,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${origin}/callback`,
+      redirectTo: callbackUrl.toString(),
       queryParams: {
         access_type: "offline",
         prompt: "select_account"

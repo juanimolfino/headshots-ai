@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { checkUploadRateLimit } from "@/lib/redis/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  initiateFalStorageUpload,
+  FAL_OBJECT_LIFECYCLE_HEADER,
+  FAL_SOURCE_OBJECT_EXPIRATION_SECONDS,
+  falObjectLifecyclePreference
+} from "@/lib/fal/privacy";
+import { ensureUserProfile } from "@/lib/db/queries";
+import { hasCurrentLegalConsent, hasCurrentPhotoProcessingConsent } from "@/lib/legal/consent";
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
@@ -20,7 +28,7 @@ function sanitizeFilename(filename: string): string {
   return base.replace(/[^a-zA-Z0-9._-]/g, "_").substring(0, 100) || "upload.jpg";
 }
 
-function validateInput(input: { filename?: unknown; contentType?: unknown; size?: unknown }) {
+function validateInput(input: { filename?: unknown; contentType?: unknown; size?: unknown; purpose?: unknown }) {
   if (typeof input.filename !== "string" || !input.filename.trim()) return "filename is required";
   if (typeof input.contentType !== "string" || !ALLOWED_IMAGE_TYPES.has(input.contentType)) {
     return "contentType must be image/jpeg or image/png";
@@ -32,6 +40,9 @@ function validateInput(input: { filename?: unknown; contentType?: unknown; size?
 
   const extension = getExtension(input.filename);
   if (!ALLOWED_EXTENSIONS.has(extension)) return `File must be a JPG or PNG image`;
+  if (input.purpose !== "training-source" && input.purpose !== "quick-edit-reference") {
+    return "purpose must be training-source or quick-edit-reference";
+  }
 
   return null;
 }
@@ -44,7 +55,7 @@ export async function POST(request: Request) {
 
   if (!user) return jsonError("Unauthorized", 401);
 
-  let body: { filename?: unknown; contentType?: unknown; size?: unknown };
+  let body: { filename?: unknown; contentType?: unknown; size?: unknown; purpose?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -54,10 +65,22 @@ export async function POST(request: Request) {
   const validationError = validateInput(body);
   if (validationError) return jsonError(validationError, 400);
 
+  let profile;
+  try {
+    profile = await ensureUserProfile(user);
+  } catch {
+    return jsonError("Could not load profile", 500);
+  }
+
+  if (!hasCurrentLegalConsent(profile)) {
+    return jsonError("Legal consent required before uploading photos", 403);
+  }
+  if (body.purpose === "training-source" && !hasCurrentPhotoProcessingConsent(profile)) {
+    return jsonError("Photo processing consent required before training a model", 403);
+  }
+
   // Rate limit: 20 initiations per user per 2 minutes
   try {
-    const { ensureUserProfile } = await import("@/lib/db/queries");
-    const profile = await ensureUserProfile(user);
     await checkUploadRateLimit(profile.id);
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
@@ -68,20 +91,11 @@ export async function POST(request: Request) {
 
   const safeFilename = sanitizeFilename(body.filename as string);
 
-  const response = await fetch("https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Key ${process.env.FAL_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      content_type: body.contentType,
-      file_name: safeFilename
-    })
+  const { response, data } = await initiateFalStorageUpload({
+    filename: safeFilename,
+    contentType: body.contentType as string,
+    expirationSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
   });
-
-  const data = (await response.json()) as { upload_url?: string; file_url?: string; detail?: unknown };
   if (!response.ok) {
     return jsonError(
       typeof data?.detail === "string" ? data.detail : "Could not initiate upload",
@@ -91,6 +105,10 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     uploadUrl: data.upload_url,
-    fileUrl: data.file_url
+    fileUrl: data.file_url,
+    uploadHeaders: {
+      [FAL_OBJECT_LIFECYCLE_HEADER]: falObjectLifecyclePreference(FAL_SOURCE_OBJECT_EXPIRATION_SECONDS)
+    },
+    expiresInSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
   });
 }

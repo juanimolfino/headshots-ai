@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import type { AiProvider, HeadshotTrainingInput } from "@/lib/ai/types";
+import { falPrivacyHeaders } from "@/lib/fal/privacy";
 
 export const FLUX_LORA_TRAINER_ENDPOINT = "fal-ai/flux-lora-portrait-trainer";
 
@@ -54,7 +55,8 @@ export async function submitFluxLoraTrainer(input: HeadshotTrainingInput, webhoo
   const trainerInput = buildFluxLoraTrainerInput(input);
   const { request_id } = await fal.queue.submit(FLUX_LORA_TRAINER_ENDPOINT, {
     input: trainerInput as never,
-    ...(webhookUrl ? { webhookUrl } : {})
+    ...(webhookUrl ? { webhookUrl } : {}),
+    headers: falPrivacyHeaders()
   });
   console.log("[flux-lora-trainer] submitted, request_id:", request_id, "webhook:", webhookUrl ?? "none");
   return request_id;

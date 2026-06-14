@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { ensureUserProfile } from "@/lib/db/queries";
+import { ensureUserProfile, recordUserConsent } from "@/lib/db/queries";
+import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
 
 type CookieToSet = {
   name: string;
@@ -54,7 +55,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await ensureUserProfile(user);
+    const profile = await ensureUserProfile(user);
+    if (
+      requestUrl.searchParams.get("legal_consent") === "1" &&
+      requestUrl.searchParams.get("terms_version") === LEGAL_TERMS_VERSION &&
+      requestUrl.searchParams.get("privacy_version") === LEGAL_PRIVACY_VERSION
+    ) {
+      await recordUserConsent(profile.id, { legal: true });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown profile setup error";
     console.error("Auth callback profile setup failed", { message });

@@ -29,6 +29,12 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   fullName: text("full_name"),
   stripeCustomerId: text("stripe_customer_id").unique(),
+  acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
+  acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
+  legalTermsVersion: text("legal_terms_version"),
+  legalPrivacyVersion: text("legal_privacy_version"),
+  photoProcessingConsentAt: timestamp("photo_processing_consent_at", { withTimezone: true }),
+  photoProcessingConsentVersion: text("photo_processing_consent_version"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
 });
@@ -84,7 +90,7 @@ export const jobs = pgTable("jobs", {
 
 export const transactions = pgTable("transactions", {
   id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   type: transactionTypeEnum("type").notNull(),
   credits: integer("credits").notNull(),
   creditKind: creditKindEnum("credit_kind").default("blue").notNull(),

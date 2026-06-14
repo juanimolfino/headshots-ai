@@ -5,9 +5,10 @@ export const metadata = { title: "Iniciar sesión" };
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; message?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, message } = await searchParams;
+  const initialMessage = error ?? (message === "account-deleted" ? "Cuenta eliminada. Tus datos fueron procesados para borrado." : undefined);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg px-6">
@@ -21,7 +22,7 @@ export default async function LoginPage({
           <h1 className="font-serif text-2xl font-medium tracking-tight text-ink">Headshots AI</h1>
           <p className="mt-2 text-sm text-ink-soft">Iniciá sesión para generar tus headshots</p>
         </div>
-        <LoginForm initialMessage={error} />
+        <LoginForm initialMessage={initialMessage} />
       </div>
     </main>
   );

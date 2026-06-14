@@ -1,5 +1,7 @@
-import { fal } from "@fal-ai/client";
 import { NextResponse } from "next/server";
+import { ensureUserProfile } from "@/lib/db/queries";
+import { uploadFalStorageFile, FAL_SOURCE_OBJECT_EXPIRATION_SECONDS } from "@/lib/fal/privacy";
+import { hasCurrentPhotoProcessingConsent } from "@/lib/legal/consent";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const MIN_FILES = 10;
@@ -49,7 +51,12 @@ function validateFiles(files: File[]) {
 
 async function uploadFile(file: File, index: number) {
   try {
-    return await fal.storage.upload(file);
+    return await uploadFalStorageFile({
+      file,
+      filename: file.name || `file-${index + 1}.jpg`,
+      contentType: file.type,
+      expirationSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
+    });
   } catch (error) {
     const filename = file.name || `file ${index + 1}`;
     const message = error instanceof Error ? error.message : String(error);
@@ -64,6 +71,10 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) return jsonError("Unauthorized", 401);
+  const profile = await ensureUserProfile(user);
+  if (!hasCurrentPhotoProcessingConsent(profile)) {
+    return jsonError("Photo processing consent required before training a model", 403);
+  }
 
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("multipart/form-data")) {
@@ -84,8 +95,6 @@ export async function POST(request: Request) {
 
   const validationError = validateFiles(values);
   if (validationError) return jsonError(validationError, 400);
-
-  fal.config({ credentials: process.env.FAL_KEY });
 
   try {
     const urls = await Promise.all(values.map(uploadFile));

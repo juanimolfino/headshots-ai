@@ -39,4 +39,14 @@ describe("Inngest AI job safeguards", () => {
     expect(source).toContain('await step.run("send failure email"');
     expect(source).toContain("sendUserFailureEmail(job, message)");
   });
+
+  it("cleans up training source artifacts and redacts source URLs after success", () => {
+    expect(source).toContain("uploadFalStorageFile");
+    expect(source).toContain("FAL_SOURCE_OBJECT_EXPIRATION_SECONDS");
+    expect(source).toContain("deleteFalRequestPayloadsBestEffort");
+    expect(source).toContain('await step.run("cleanup source photos"');
+    expect(source).toContain("source_photos_deleted_at");
+    expect(source).toContain("archive_url: null");
+    expect(source).toContain("updateJobInput");
+  });
 });

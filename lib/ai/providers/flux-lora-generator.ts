@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { createLoraSignedUrl, createLoraSignedUrlR2, isR2LoraKey, isSupabaseLoraPath } from "@/lib/ai/storage";
+import { falPrivacyHeaders } from "@/lib/fal/privacy";
 import type { AiProvider, HeadshotGenerateInput } from "@/lib/ai/types";
 
 const FLUX_LORA_GENERATOR_ENDPOINT = "fal-ai/flux-lora";
@@ -84,6 +85,7 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
       loras: [{ path: loraUrl, scale: 1.0 }]
     } as never,
     logs: true,
+    headers: falPrivacyHeaders(),
     pollInterval: 5000,
     onEnqueue(requestId) {
       console.log("[flux-lora-generator] enqueued:", requestId);

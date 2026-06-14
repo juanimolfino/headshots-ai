@@ -1,21 +1,32 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
+import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
 
 export function LoginForm({ initialMessage }: { initialMessage?: string }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(initialMessage ?? null);
   const [loading, setLoading] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   async function signInWithMagicLink(event: React.FormEvent) {
     event.preventDefault();
+    if (!legalAccepted) {
+      setMessage("Aceptá los términos y la política de privacidad para continuar.");
+      return;
+    }
     const supabase = createSupabaseBrowserClient();
+    const redirectUrl = new URL(`${window.location.origin}/callback`);
+    redirectUrl.searchParams.set("legal_consent", "1");
+    redirectUrl.searchParams.set("terms_version", LEGAL_TERMS_VERSION);
+    redirectUrl.searchParams.set("privacy_version", LEGAL_PRIVACY_VERSION);
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/callback` }
+      options: { emailRedirectTo: redirectUrl.toString() }
     });
     setLoading(false);
     setMessage(error ? error.message : "Revisá tu email para el magic link.");
@@ -38,6 +49,21 @@ export function LoginForm({ initialMessage }: { initialMessage?: string }) {
         </Button>
       </form>
 
+      <label className="flex items-start gap-2 rounded-lg border border-line bg-surface px-3 py-2.5 text-left text-xs leading-relaxed text-ink-soft">
+        <input
+          type="checkbox"
+          checked={legalAccepted}
+          onChange={event => setLegalAccepted(event.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-navy"
+        />
+        <span>
+          Acepto los{" "}
+          <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>
+          {" "}y la{" "}
+          <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>.
+        </span>
+      </label>
+
       <div className="relative py-1">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-line" />
@@ -51,7 +77,10 @@ export function LoginForm({ initialMessage }: { initialMessage?: string }) {
         type="button"
         variant="pillGhost"
         size="pill"
-        onClick={() => { window.location.href = "/login/google"; }}
+        disabled={!legalAccepted}
+        onClick={() => {
+          window.location.href = `/login/google?legal_consent=1&terms_version=${encodeURIComponent(LEGAL_TERMS_VERSION)}&privacy_version=${encodeURIComponent(LEGAL_PRIVACY_VERSION)}`;
+        }}
         className="w-full gap-2.5"
       >
         <svg width="16" height="16" viewBox="0 0 24 24">

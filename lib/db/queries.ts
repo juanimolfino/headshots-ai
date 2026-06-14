@@ -3,6 +3,11 @@ import { getDb } from "@/lib/db";
 import { credits, jobs, subscriptions, transactions, users, type CreditBucket, type CreditKind, type Job, type JobType } from "@/lib/db/schema";
 import { getUsableCreditTotals, planCreditDebit, type CreditBalanceSnapshot, type CreditDebit } from "@/lib/db/credit-balances";
 import { sendPurchaseConfirmationEmail, sendWelcomeEmail } from "@/lib/email/send";
+import {
+  LEGAL_PRIVACY_VERSION,
+  LEGAL_TERMS_VERSION,
+  PHOTO_PROCESSING_CONSENT_VERSION
+} from "@/lib/legal/consent";
 import type { User } from "@supabase/supabase-js";
 
 export type CreditGrant = {
@@ -145,6 +150,29 @@ export async function ensureUserProfile(authUser: User) {
   if (createdProfile) await sendWelcomeEmail(email, { blue: signupBlueCredits, gold: signupGoldCredits });
 
   return profile;
+}
+
+export async function recordUserConsent(userId: string, input: { legal?: boolean; photoProcessing?: boolean }) {
+  const now = new Date();
+  const patch: Partial<typeof users.$inferInsert> = { updatedAt: now };
+
+  if (input.legal) {
+    patch.acceptedTermsAt = now;
+    patch.acceptedPrivacyAt = now;
+    patch.legalTermsVersion = LEGAL_TERMS_VERSION;
+    patch.legalPrivacyVersion = LEGAL_PRIVACY_VERSION;
+  }
+
+  if (input.photoProcessing) {
+    patch.acceptedTermsAt = now;
+    patch.acceptedPrivacyAt = now;
+    patch.legalTermsVersion = LEGAL_TERMS_VERSION;
+    patch.legalPrivacyVersion = LEGAL_PRIVACY_VERSION;
+    patch.photoProcessingConsentAt = now;
+    patch.photoProcessingConsentVersion = PHOTO_PROCESSING_CONSENT_VERSION;
+  }
+
+  return getDb().update(users).set(patch).where(eq(users.id, userId));
 }
 
 function emptyCreditSnapshot(): CreditBalanceSnapshot {
@@ -349,6 +377,13 @@ export async function updateJobMetadata(jobId: string, metadata: Record<string, 
     .where(eq(jobs.id, jobId));
 }
 
+export async function updateJobInput(jobId: string, input: Record<string, unknown>) {
+  return getDb()
+    .update(jobs)
+    .set({ input, updatedAt: new Date() })
+    .where(eq(jobs.id, jobId));
+}
+
 export async function markJobDone(jobId: string, resultUrl: string, result?: unknown) {
   const now = new Date();
   return getDb()
@@ -367,6 +402,20 @@ export async function listJobsForUser(input: { userId: string; type?: JobType; l
     orderBy: desc(jobs.createdAt),
     limit: input.limit ?? 50
   });
+}
+
+export async function anonymizeTransactionsForDeletedUser(userId: string) {
+  const anonymizedAt = new Date().toISOString();
+  return getDb()
+    .update(transactions)
+    .set({
+      userId: null,
+      metadata: sql`coalesce(${transactions.metadata}, '{}'::jsonb) || ${JSON.stringify({
+        userDeleted: true,
+        anonymizedAt
+      })}::jsonb`
+    })
+    .where(eq(transactions.userId, userId));
 }
 
 export async function addPackCredits(userId: string, grant: CreditGrant, metadata: Record<string, unknown>, stripeEventId?: string) {

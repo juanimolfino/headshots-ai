@@ -1,4 +1,5 @@
 import { fal } from "@fal-ai/client";
+import { falPrivacyHeaders } from "@/lib/fal/privacy";
 import type { AiProvider, HeadshotEditInput } from "@/lib/ai/types";
 
 const GPT_IMAGE_EDIT_ENDPOINT = "openai/gpt-image-2/edit";
@@ -36,6 +37,7 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
       output_format: "png"
     } as never,
     logs: true,
+    headers: falPrivacyHeaders(),
     pollInterval: 5000,
     onEnqueue(requestId) {
       console.log("[gpt-image-edit] enqueued:", requestId);

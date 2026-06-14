@@ -1,4 +1,3 @@
-import { fal } from "@fal-ai/client";
 import { getAiProvider } from "@/lib/ai/providers";
 import { storeAiResult, storeLoraFileR2 } from "@/lib/ai/storage";
 import { generateFluxLoraImageUrls } from "@/lib/ai/providers/flux-lora-generator";
@@ -14,8 +13,13 @@ import {
 } from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
-import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobMetadata } from "@/lib/db/queries";
+import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobInput, updateJobMetadata } from "@/lib/db/queries";
 import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send";
+import {
+  deleteFalRequestPayloadsBestEffort,
+  FAL_SOURCE_OBJECT_EXPIRATION_SECONDS,
+  uploadFalStorageFile
+} from "@/lib/fal/privacy";
 import { getRefundCopy, getUserFacingJobError } from "@/lib/job-ux";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -203,8 +207,12 @@ async function createAndUploadHeadshotArchive(imageUrls: string[]) {
   }
 
   const archiveBytes = await zip.generateAsync({ type: "arraybuffer" });
-  fal.config({ credentials: process.env.FAL_KEY });
-  return fal.storage.upload(new File([archiveBytes], "headshot-sources.zip", { type: "application/zip" }));
+  return uploadFalStorageFile({
+    file: new File([archiveBytes], "headshot-sources.zip", { type: "application/zip" }),
+    filename: "headshot-sources.zip",
+    contentType: "application/zip",
+    expirationSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
+  });
 }
 
 async function checkPublicUrl(url: string) {
@@ -226,7 +234,7 @@ async function storeSupabaseFile(input: {
   });
   if (error) throw error;
 
-  return supabase.storage.from(input.bucket).getPublicUrl(input.path).data.publicUrl;
+  return input.path;
 }
 
 async function storeHeadshotImage(input: {
@@ -305,6 +313,45 @@ async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResu
   console.log("[headshot-training] prep: fal input built", JSON.stringify(sanitizeTrainerParams(trainerInput)));
 
   return { triggerWord, trainerInput };
+}
+
+async function cleanupTrainingSourceArtifacts(input: {
+  jobId: string;
+  jobInput: Record<string, unknown>;
+  jobMetadata: Record<string, unknown>;
+  falRequestId: string | null | undefined;
+  imageCount: number;
+}) {
+  try {
+    await deleteFalRequestPayloadsBestEffort(input.falRequestId, {
+      jobId: input.jobId,
+      reason: "training_complete_source_cleanup"
+    });
+  } catch (error) {
+    console.warn("[headshot-training] fal cleanup failed:", error);
+  }
+
+  const cleanedAt = new Date().toISOString();
+  const cleanedInput = {
+    ...input.jobInput,
+    archive_url: null,
+    source_photos_deleted_at: cleanedAt,
+    source_photo_count: input.imageCount
+  };
+
+  const cleanedMetadata = {
+    ...input.jobMetadata,
+    source_photos_cleanup: {
+      cleanedAt,
+      sourcePhotoCount: input.imageCount,
+      falRequestPayloadsBestEffort: true,
+      falSourceExpirationSeconds: FAL_SOURCE_OBJECT_EXPIRATION_SECONDS
+    }
+  };
+
+  await updateJobInput(input.jobId, cleanedInput);
+  await updateJobMetadata(input.jobId, cleanedMetadata);
+  console.log("[headshot-training] source URLs redacted", { jobId: input.jobId, imageCount: input.imageCount });
 }
 
 async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId: string): Promise<string> {
@@ -434,6 +481,15 @@ export const runAiJob = inngest.createFunction(
 
         const result = { lora_url: loraUrl, trigger_word: triggerWord };
         await step.run("mark done", async () => markJobDone(job.id, loraUrl, result));
+        await step.run("cleanup source photos", async () =>
+          cleanupTrainingSourceArtifacts({
+            jobId: job.id,
+            jobInput: workerJob.input,
+            jobMetadata: { ...workerJob.metadata, trigger_word: triggerWord, fal_request_id: falRequestId },
+            falRequestId,
+            imageCount: parseImageUrls(workerJob.input.archive_url).length
+          })
+        );
         await step.run("send ready email", async () =>
           sendUserEmail(
             job.userId,
