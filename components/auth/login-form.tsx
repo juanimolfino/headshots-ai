@@ -59,8 +59,12 @@ export function LoginForm({ initialMessage }: { initialMessage?: string }) {
         <span>
           Acepto los{" "}
           <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>
-          {" "}y la{" "}
-          <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>.
+          {", la "}
+          <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
+          {", la "}
+          <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Cookies</Link>
+          {" y la "}
+          <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Reembolsos</Link>.
         </span>
       </label>
 

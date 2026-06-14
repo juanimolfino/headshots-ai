@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       metadata: { userId: profile.id, kind: "subscription", plan: plan.id, ...checkoutLegalMetadata },
       subscription_data: { metadata: { userId: profile.id, plan: plan.id } },
       custom_text: {
-        submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, and Refund Policy linked before checkout." }
+        submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, Cookie Policy, and Refund Policy linked before checkout." }
       }
     });
     return NextResponse.redirect(session.url!, 303);
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     cancel_url: `${appUrl}/pricing`,
     metadata: { userId: profile.id, kind: "pack", packId: pack.id, ...checkoutLegalMetadata },
     custom_text: {
-      submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, and Refund Policy linked before checkout." }
+      submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, Cookie Policy, and Refund Policy linked before checkout." }
     }
   });
 

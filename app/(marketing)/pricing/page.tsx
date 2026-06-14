@@ -70,7 +70,8 @@ export default function PricingPage() {
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted">
                   By continuing to checkout, you agree to our{" "}
                   <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
-                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>,{" "}
+                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Cookie Policy</Link>, and{" "}
                   <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
                 </p>
               </form>
@@ -95,7 +96,8 @@ export default function PricingPage() {
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted">
                   By continuing to checkout, you agree to our{" "}
                   <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
-                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>,{" "}
+                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Cookie Policy</Link>, and{" "}
                   <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
                 </p>
               </form>
@@ -121,7 +123,8 @@ export default function PricingPage() {
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted">
                   By continuing to checkout, you agree to our{" "}
                   <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
-                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>,{" "}
+                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Cookie Policy</Link>, and{" "}
                   <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
                 </p>
               </form>

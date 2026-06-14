@@ -1697,6 +1697,8 @@ function NewModelPanel({
                 <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>,
                 {" "}la{" "}
                 <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
+                {" "}y la{" "}
+                <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Cookies</Link>
                 {" "}y el procesamiento de mis fotos y datos faciales para entrenar un modelo personal.
               </span>
             </label>
@@ -2139,8 +2141,10 @@ function QuickEditPanel({
                 <span>
                   Acepto los{" "}
                   <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>
-                  {" "}y la{" "}
+                  {", la "}
                   <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
+                  {" y la "}
+                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Cookies</Link>
                   {" "}antes de subir fotos de referencia.
                 </span>
               </label>

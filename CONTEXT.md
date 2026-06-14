@@ -85,16 +85,18 @@ As of 2026-06-14, the dashboard handles job failures and long-running states exp
 
 ## Phase 3 Legal, Privacy, And Data Handling
 
-As of 2026-06-14, Phase 3A adds the first concrete privacy controls:
+As of 2026-06-14, Phase 3A/3B adds concrete privacy controls and final legal-page wiring:
 
-- Legal placeholder routes exist at `/terms`, `/privacy`, and `/refund-policy`. They are explicitly marked as drafts and must be replaced with reviewed legal text before launch.
-- Signup/login requires acceptance of Terms and Privacy. The accepted versions and timestamps are stored on `users`.
+- Final legal document routes exist at `/terms`, `/privacy`, `/cookies`, and `/refund-policy`. They render Markdown from `docs/legal/documentos` through `components/legal/legal-document-page.tsx`.
+- Legal placeholders such as `[LEGAL ENTITY NAME]`, `[PRIVACY EMAIL]`, and `[EFFECTIVE DATE]` are centralized in `lib/legal/company-info.ts`.
+- Signup/login requires acceptance of Terms, Privacy, Cookie Policy, and Refund Policy. The accepted Terms/Privacy versions and timestamps are stored on `users`.
+- Current consent versions are `2026-06-14-v1` for Terms, Privacy, and photo/facial processing consent.
 - Training uploads require explicit consent to process photos/facial data for a personal model. `/api/upload/initiate` enforces current legal consent for uploads and current photo-processing consent for `purpose: "training-source"`.
 - Fal source uploads and intermediate training ZIPs request a 48-hour CDN expiration via `X-Fal-Object-Lifecycle-Preference`. Fal request payload/output cleanup is attempted best-effort by request id after successful training and on account deletion.
 - Successful training redacts source photo URLs from `jobs.input` after the LoRA is stored. The LoRA itself remains in R2 for the life of the account.
 - Account deletion is exposed through `/api/account/delete`: external deletions are best-effort, generated images and LoRAs are deleted, Supabase Auth/profile data is deleted, and transactions are anonymized/retained for accounting.
 - Generated results are expected to live in a private Supabase Storage bucket and be served only through authenticated signed URL endpoints. New generated results store storage paths rather than public URLs.
-- `docs/legal/DATA_INVENTORY.md` is the source inventory for drafting final legal documents.
+- `docs/legal/DATA_INVENTORY.md` remains the technical source inventory behind the published legal documents.
 
 ## Generation Details
 

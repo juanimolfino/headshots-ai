@@ -1,6 +1,6 @@
-export const LEGAL_TERMS_VERSION = "2026-06-14-draft";
-export const LEGAL_PRIVACY_VERSION = "2026-06-14-draft";
-export const PHOTO_PROCESSING_CONSENT_VERSION = "2026-06-14-draft";
+export const LEGAL_TERMS_VERSION = "2026-06-14-v1";
+export const LEGAL_PRIVACY_VERSION = "2026-06-14-v1";
+export const PHOTO_PROCESSING_CONSENT_VERSION = "2026-06-14-v1";
 
 export type ConsentProfile = {
   acceptedTermsAt?: Date | string | null;
