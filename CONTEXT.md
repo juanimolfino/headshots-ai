@@ -83,6 +83,19 @@ As of 2026-06-14, the dashboard handles job failures and long-running states exp
 - Failed job rows can be hidden with the X/Ocultar action. This is a local UI dismissal stored in `localStorage` per user email; it does not delete the failed job from the database.
 - Failed/refunded jobs send the React `JobFailedEmail` template through `sendJobFailedEmail()`. The Inngest worker only sends it when `refundJobCredits()` returns true, so worker retries or duplicate failure handling do not email the same refund twice.
 
+## Phase 3 Legal, Privacy, And Data Handling
+
+As of 2026-06-14, Phase 3A adds the first concrete privacy controls:
+
+- Legal placeholder routes exist at `/terms`, `/privacy`, and `/refund-policy`. They are explicitly marked as drafts and must be replaced with reviewed legal text before launch.
+- Signup/login requires acceptance of Terms and Privacy. The accepted versions and timestamps are stored on `users`.
+- Training uploads require explicit consent to process photos/facial data for a personal model. `/api/upload/initiate` enforces current legal consent for uploads and current photo-processing consent for `purpose: "training-source"`.
+- Fal source uploads and intermediate training ZIPs request a 48-hour CDN expiration via `X-Fal-Object-Lifecycle-Preference`. Fal request payload/output cleanup is attempted best-effort by request id after successful training and on account deletion.
+- Successful training redacts source photo URLs from `jobs.input` after the LoRA is stored. The LoRA itself remains in R2 for the life of the account.
+- Account deletion is exposed through `/api/account/delete`: external deletions are best-effort, generated images and LoRAs are deleted, Supabase Auth/profile data is deleted, and transactions are anonymized/retained for accounting.
+- Generated results are expected to live in a private Supabase Storage bucket and be served only through authenticated signed URL endpoints. New generated results store storage paths rather than public URLs.
+- `docs/legal/DATA_INVENTORY.md` is the source inventory for drafting final legal documents.
+
 ## Generation Details
 
 `lib/ai/providers/flux-lora-generator.ts` builds prompts from a style base plus optional background and attire controls. Current styles are `professional`, `cinematic`, and `natural`.

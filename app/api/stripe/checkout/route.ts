@@ -4,6 +4,12 @@ import { getAppUrl } from "@/lib/app-url";
 import { getCreditPack, getSubscriptionPlan } from "@/lib/stripe/pricing";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
+
+const checkoutLegalMetadata = {
+  legalTermsVersion: LEGAL_TERMS_VERSION,
+  legalPrivacyVersion: LEGAL_PRIVACY_VERSION
+};
 
 export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
@@ -29,8 +35,11 @@ export async function POST(request: Request) {
       line_items: [{ price, quantity: 1 }],
       success_url: `${appUrl}/dashboard?checkout=success`,
       cancel_url: `${appUrl}/pricing`,
-      metadata: { userId: profile.id, kind: "subscription", plan: plan.id },
-      subscription_data: { metadata: { userId: profile.id, plan: plan.id } }
+      metadata: { userId: profile.id, kind: "subscription", plan: plan.id, ...checkoutLegalMetadata },
+      subscription_data: { metadata: { userId: profile.id, plan: plan.id } },
+      custom_text: {
+        submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, and Refund Policy linked before checkout." }
+      }
     });
     return NextResponse.redirect(session.url!, 303);
   }
@@ -48,7 +57,10 @@ export async function POST(request: Request) {
     line_items: [{ price, quantity: 1 }],
     success_url: `${appUrl}/dashboard?checkout=success`,
     cancel_url: `${appUrl}/pricing`,
-    metadata: { userId: profile.id, kind: "pack", packId: pack.id }
+    metadata: { userId: profile.id, kind: "pack", packId: pack.id, ...checkoutLegalMetadata },
+    custom_text: {
+      submit: { message: "By confirming payment, you agree to the Terms, Privacy Policy, and Refund Policy linked before checkout." }
+    }
   });
 
   return NextResponse.redirect(session.url!, 303);

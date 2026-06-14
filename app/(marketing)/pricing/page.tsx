@@ -67,6 +67,12 @@ export default function PricingPage() {
                   <CreditCard className="h-4 w-4" />
                   Subscribe to {plan.name}
                 </Button>
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  By continuing to checkout, you agree to our{" "}
+                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
+                </p>
               </form>
             </section>
           );
@@ -79,14 +85,20 @@ export default function PricingPage() {
             <h3 className="font-serif text-xl font-medium">{pack.blue} blue credits</h3>
             <p className="mt-2 font-serif text-4xl font-medium tracking-[-0.02em]">${pack.price}</p>
             <p className="mt-3 text-sm text-ink-soft">For generation and quick edits. Credits do not expire.</p>
-            <form action="/api/stripe/checkout" method="post" className="mt-6">
+              <form action="/api/stripe/checkout" method="post" className="mt-6">
               <input type="hidden" name="mode" value="pack" />
               <input type="hidden" name="packId" value={pack.id} />
               <Button type="submit" variant="pill" size="pill" className="w-full">
                 <Wallet className="h-4 w-4" />
                 Buy {pack.blue} blue
-              </Button>
-            </form>
+                </Button>
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  By continuing to checkout, you agree to our{" "}
+                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
+                </p>
+              </form>
           </section>
         ))}
       </div>
@@ -99,14 +111,20 @@ export default function PricingPage() {
             </h3>
             <p className="mt-2 font-serif text-4xl font-medium tracking-[-0.02em]">${pack.price}</p>
             <p className="mt-3 text-sm text-ink-soft">For training personal LoRA models. Credits do not expire.</p>
-            <form action="/api/stripe/checkout" method="post" className="mt-6">
+              <form action="/api/stripe/checkout" method="post" className="mt-6">
               <input type="hidden" name="mode" value="pack" />
               <input type="hidden" name="packId" value={pack.id} />
               <Button type="submit" variant="pillGold" size="pill" className="w-full">
                 <Wallet className="h-4 w-4" />
                 Buy {pack.gold} gold
-              </Button>
-            </form>
+                </Button>
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  By continuing to checkout, you agree to our{" "}
+                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms</Link>,{" "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>, and{" "}
+                  <Link href="/refund-policy" className="font-semibold text-navy underline-offset-2 hover:underline">Refund Policy</Link>.
+                </p>
+              </form>
           </section>
         ))}
       </div>

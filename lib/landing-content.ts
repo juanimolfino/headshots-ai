@@ -148,7 +148,7 @@ export const FAQ = [
   },
   {
     q: "Are my photos stored securely?",
-    a: "Your uploaded selfies are used only for training your model and deleted afterward. Generated headshots are stored in your account for download.",
+    a: "Your uploaded selfies are used to train your personal model, uploaded with a short Fal CDN expiration window, and removed from our job record after successful training. Generated headshots stay in your account for download until you delete your data.",
   },
   {
     // Email de contacto (placeholder; cambiar por el oficial más adelante)
