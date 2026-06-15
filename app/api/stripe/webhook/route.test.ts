@@ -64,4 +64,15 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain("stripeEventId: event.id");
     expect(source).toContain('status: 500');
   });
+
+  it("emits structured operational logs for payment reconstruction", () => {
+    expect(source).toContain("logInfo");
+    expect(source).toContain("stripe_webhook_event_received");
+    expect(source).toContain("stripe_pack_grant_applied");
+    expect(source).toContain("stripe_pack_grant_skipped_idempotent");
+    expect(source).toContain("stripe_subscription_grant_applied");
+    expect(source).toContain("stripe_subscription_grant_skipped_idempotent");
+    expect(source).toContain("stripe_webhook_event_processed");
+    expect(source).toContain("stripe_webhook_signature_rejected");
+  });
 });

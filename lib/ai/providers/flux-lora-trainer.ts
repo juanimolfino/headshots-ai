@@ -1,6 +1,7 @@
 import { fal } from "@fal-ai/client";
 import type { AiProvider, HeadshotTrainingInput } from "@/lib/ai/types";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { logInfo } from "@/lib/observability/logger";
 
 export const FLUX_LORA_TRAINER_ENDPOINT = "fal-ai/flux-lora-portrait-trainer";
 
@@ -47,10 +48,14 @@ export function getFluxLoraUrl(resultData: FluxLoraTrainerOutput | undefined) {
 export async function submitFluxLoraTrainer(input: HeadshotTrainingInput, webhookUrl?: string): Promise<string> {
   if (process.env.FAL_MOCK_TRAINING === "true") {
     const mockId = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    console.log("[flux-lora-trainer] MOCK MODE — skipping fal.ai, fake request_id:", mockId);
+    logInfo("provider_fal_flux_lora_trainer_mock_submitted", {
+      area: "provider.fal.training",
+      falRequestId: mockId
+    });
     return mockId;
   }
 
+  const startedAt = Date.now();
   fal.config({ credentials: process.env.FAL_KEY });
   const trainerInput = buildFluxLoraTrainerInput(input);
   const { request_id } = await fal.queue.submit(FLUX_LORA_TRAINER_ENDPOINT, {
@@ -58,14 +63,23 @@ export async function submitFluxLoraTrainer(input: HeadshotTrainingInput, webhoo
     ...(webhookUrl ? { webhookUrl } : {}),
     headers: falPrivacyHeaders()
   });
-  console.log("[flux-lora-trainer] submitted, request_id:", request_id, "webhook:", webhookUrl ?? "none");
+  logInfo("provider_fal_flux_lora_trainer_submitted", {
+    area: "provider.fal.training",
+    falRequestId: request_id,
+    webhookConfigured: Boolean(webhookUrl),
+    durationMs: Date.now() - startedAt
+  });
   return request_id;
 }
 
 export async function pollFluxLoraTrainer(requestId: string): Promise<{ done: boolean; result?: FluxLoraTrainerOutput }> {
   fal.config({ credentials: process.env.FAL_KEY });
   const status = await fal.queue.status(FLUX_LORA_TRAINER_ENDPOINT, { requestId, logs: true });
-  console.log("[flux-lora-trainer] poll status:", status.status);
+  logInfo("provider_fal_flux_lora_trainer_poll_status", {
+    area: "provider.fal.training",
+    falRequestId: requestId,
+    status: status.status
+  });
 
   if (status.status === "COMPLETED") {
     const resultResponse = await fal.queue.result(FLUX_LORA_TRAINER_ENDPOINT, { requestId });

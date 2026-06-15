@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sendTelegramErrorAlert } from "@/lib/notifications/telegram";
+import { logError, logWarn } from "@/lib/observability/logger";
 import { checkRateLimit } from "@/lib/redis/rate-limit";
 
 type ReportSeverity = "critical" | "warning";
@@ -99,11 +100,11 @@ async function shouldSendAlert(fingerprint: string, windowSeconds: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === "RATE_LIMITED") return false;
-    console.warn(JSON.stringify({
-      level: "warn",
+    logWarn("error_alert_throttle_unavailable", {
+      area: "observability.report-error",
       code: "ERROR_ALERT_THROTTLE_UNAVAILABLE",
       message
-    }));
+    });
     return true;
   }
 }
@@ -140,7 +141,7 @@ export async function reportError(error: unknown, context: ReportErrorContext) {
     context: contextPayload
   };
 
-  console.error(JSON.stringify(payload));
+  logError("app_error", payload);
 
   if (context.alert === false) return payload;
   const shouldAlert = await shouldSendAlert(fingerprint, context.throttleWindowSeconds ?? 5 * 60);

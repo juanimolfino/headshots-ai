@@ -1,3 +1,5 @@
+import { logInfo } from "@/lib/observability/logger";
+
 export const FAL_SOURCE_OBJECT_EXPIRATION_SECONDS = 48 * 60 * 60;
 export const FAL_GENERATED_OBJECT_EXPIRATION_SECONDS = 48 * 60 * 60;
 export const FAL_OBJECT_LIFECYCLE_HEADER = "X-Fal-Object-Lifecycle-Preference";
@@ -106,8 +108,9 @@ export async function deleteFalRequestPayloadsBestEffort(
   context: { jobId?: string; reason?: string } = {}
 ) {
   const result = await deleteFalRequestPayloads(requestId, { reason: context.reason });
-  console.log("[fal-cleanup] request payload cleanup", {
-    requestId,
+  logInfo("fal_request_payload_cleanup", {
+    area: "fal.cleanup",
+    falRequestId: requestId,
     jobId: context.jobId,
     ...result
   });

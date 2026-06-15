@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { addPackCredits, applySubscriptionLifecycleEvent, replaceSubscriptionCredits } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
 import { sendTelegramPaymentNotification } from "@/lib/notifications/telegram";
+import { logInfo, logWarn } from "@/lib/observability/logger";
 import { reportError } from "@/lib/observability/report-error";
 import { getStripe } from "@/lib/stripe/client";
 import { getCreditPackByStripePriceId, getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
@@ -191,6 +192,7 @@ async function upsertSubscriptionRow(input: {
 }
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const payload = await request.text();
   const signature = request.headers.get("stripe-signature");
   if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
@@ -200,8 +202,21 @@ export async function POST(request: Request) {
     event = getStripe().webhooks.constructEvent(payload, signature, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid webhook";
+    logWarn("stripe_webhook_signature_rejected", {
+      area: "stripe.webhook",
+      route: "/api/stripe/webhook",
+      durationMs: Date.now() - startedAt,
+      message
+    });
     return NextResponse.json({ error: message }, { status: 400 });
   }
+
+  logInfo("stripe_webhook_event_received", {
+    area: "stripe.webhook",
+    route: "/api/stripe/webhook",
+    stripeEventId: event.id,
+    stripeEventType: event.type
+  });
 
   try {
     if (event.type === "checkout.session.completed") {
@@ -220,6 +235,16 @@ export async function POST(request: Request) {
             priceId: price?.id,
             amountCents: session.amount_total ?? 0
           }, event.id);
+          logInfo(applied ? "stripe_pack_grant_applied" : "stripe_pack_grant_skipped_idempotent", {
+            area: "stripe.webhook",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            userId,
+            priceId: price?.id,
+            blue: grant.blue,
+            gold: grant.gold,
+            amountCents: session.amount_total ?? 0
+          });
           if (applied) {
             const customer = await getUserPaymentLabel(userId);
             const pack = getCreditPackByStripePriceId(price?.id);
@@ -247,6 +272,14 @@ export async function POST(request: Request) {
           const price = await resolveInvoicePrice(invoice, subscription);
           const grant = parseStripeCreditGrant(price?.metadata ?? {});
           if (!grant || grant.kind !== "subscription") {
+            logWarn("stripe_invoice_paid_skipped_no_subscription_grant", {
+              area: "stripe.webhook",
+              stripeEventId: event.id,
+              stripeEventType: event.type,
+              userId,
+              subscriptionId,
+              priceId: price?.id
+            });
             return NextResponse.json({ received: true });
           }
           const plan = getPlanByStripePriceId(price?.id);
@@ -262,6 +295,18 @@ export async function POST(request: Request) {
             priceId: price?.id,
             amountCents: invoice.amount_paid
           }, event.id);
+          logInfo(applied ? "stripe_subscription_grant_applied" : "stripe_subscription_grant_skipped_idempotent", {
+            area: "stripe.webhook",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            userId,
+            subscriptionId,
+            priceId: price?.id,
+            plan: plan?.id ?? subscription.metadata.plan,
+            blue: grant.blue,
+            gold: grant.gold,
+            amountCents: invoice.amount_paid
+          });
           if (applied) {
             const customer = await getUserPaymentLabel(userId);
             await sendTelegramPaymentNotification({
@@ -280,7 +325,20 @@ export async function POST(request: Request) {
             plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
             invoice
           });
+        } else {
+          logWarn("stripe_invoice_paid_skipped_missing_user", {
+            area: "stripe.webhook",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            subscriptionId
+          });
         }
+      } else {
+        logWarn("stripe_invoice_paid_skipped_missing_subscription", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type
+        });
       }
     }
 
@@ -302,6 +360,21 @@ export async function POST(request: Request) {
           cancelAtPeriodEnd: subscription.cancel_at_period_end,
           stripeEventId: event.id,
           stripeEventCreatedAt: stripeEventCreatedDate(event)
+        });
+        logInfo("stripe_subscription_updated_applied", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          userId,
+          subscriptionId: subscription.id,
+          status
+        });
+      } else {
+        logWarn("stripe_subscription_updated_skipped_missing_user", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          subscriptionId: subscription.id
         });
       }
     }
@@ -325,6 +398,20 @@ export async function POST(request: Request) {
           stripeEventId: event.id,
           stripeEventCreatedAt: stripeEventCreatedDate(event)
         });
+        logInfo("stripe_subscription_deleted_applied", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          userId,
+          subscriptionId: subscription.id
+        });
+      } else {
+        logWarn("stripe_subscription_deleted_skipped_missing_user", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type,
+          subscriptionId: subscription.id
+        });
       }
     }
 
@@ -347,7 +434,27 @@ export async function POST(request: Request) {
             stripeEventId: event.id,
             stripeEventCreatedAt: stripeEventCreatedDate(event)
           });
+          logInfo("stripe_invoice_payment_failed_applied", {
+            area: "stripe.webhook",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            userId,
+            subscriptionId
+          });
+        } else {
+          logWarn("stripe_invoice_payment_failed_skipped_missing_user", {
+            area: "stripe.webhook",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            subscriptionId
+          });
         }
+      } else {
+        logWarn("stripe_invoice_payment_failed_skipped_missing_subscription", {
+          area: "stripe.webhook",
+          stripeEventId: event.id,
+          stripeEventType: event.type
+        });
       }
     }
   } catch (error) {
@@ -355,10 +462,19 @@ export async function POST(request: Request) {
       area: "stripe.webhook",
       stripeEventId: event.id,
       stripeEventType: event.type,
+      durationMs: Date.now() - startedAt,
       throttleKey: `stripe.webhook:${event.type}`
     });
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
+
+  logInfo("stripe_webhook_event_processed", {
+    area: "stripe.webhook",
+    route: "/api/stripe/webhook",
+    stripeEventId: event.id,
+    stripeEventType: event.type,
+    durationMs: Date.now() - startedAt
+  });
 
   return NextResponse.json({ received: true });
 }

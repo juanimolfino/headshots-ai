@@ -21,6 +21,7 @@ import {
   uploadFalStorageFile
 } from "@/lib/fal/privacy";
 import { getRefundCopy, getUserFacingJobError } from "@/lib/job-ux";
+import { logError, logInfo, logWarn } from "@/lib/observability/logger";
 import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -129,9 +130,10 @@ function sanitizeTrainerParams(params: ReturnType<typeof buildFluxLoraTrainerInp
 
 function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxLoraTrainerInput>) {
   const falError = error as { message?: unknown; body?: unknown; status?: unknown };
-  console.log("[headshot-training] fal error:", falError.message, falError.body, falError.status);
-  console.error("fal.ai Flux LoRA trainer failed", {
+  logError("fal_trainer_failed", {
+    area: "provider.fal.training",
     endpoint: FLUX_LORA_TRAINER_ENDPOINT,
+    status: falError.status,
     params: sanitizeTrainerParams(params),
     error: serializeError(error)
   });
@@ -140,7 +142,10 @@ function logFalTrainerError(error: unknown, params: ReturnType<typeof buildFluxL
 function parseJsonObject(value: unknown, label: string, allowEmpty = false) {
   if (value === null || value === undefined) {
     if (allowEmpty) {
-      console.log(`[parseJsonObject] ${label} is null/undefined → using {}`);
+      logInfo("json_object_empty_default", {
+        area: "inngest.run-ai-job",
+        label
+      });
       return {} as Record<string, unknown>;
     }
     throw new Error(`${label} es null/undefined`);
@@ -218,7 +223,11 @@ async function createAndUploadHeadshotArchive(imageUrls: string[]) {
 
 async function checkPublicUrl(url: string) {
   const response = await fetch(url, { method: "HEAD" });
-  console.log("[headshot-training] ZIP accessible:", response.ok, response.status);
+  logInfo("training_zip_accessibility_checked", {
+    area: "headshot-training",
+    ok: response.ok,
+    status: response.status
+  });
   return response;
 }
 
@@ -296,14 +305,25 @@ type TrainingPrepResult = {
 
 async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResult> {
   const input = job.input as HeadshotTrainingInput;
-  console.log("[headshot-training] prep: input", JSON.stringify({ archiveUrlType: typeof input.archive_url, steps: input.steps }));
+  const startedAt = Date.now();
+  logInfo("training_prepare_started", {
+    area: "headshot-training",
+    userId: job.userId,
+    jobId: job.id,
+    archiveUrlType: typeof input.archive_url,
+    steps: input.steps
+  });
 
   const triggerWord = createTriggerWord(job.userId);
   await updateJobMetadata(job.id, { ...(job.metadata ?? {}), trigger_word: triggerWord });
-  console.log("[headshot-training] prep: triggerWord", triggerWord);
 
   const imageUrls = parseImageUrls(input.archive_url);
-  console.log("[headshot-training] prep: parsed", imageUrls.length, "image URLs");
+  logInfo("training_source_images_parsed", {
+    area: "headshot-training",
+    userId: job.userId,
+    jobId: job.id,
+    imageCount: imageUrls.length
+  });
 
   const archiveUrl = await createAndUploadHeadshotArchive(imageUrls);
 
@@ -311,7 +331,13 @@ async function prepareHeadshotTraining(job: WorkerJob): Promise<TrainingPrepResu
   if (!zipCheck.ok) throw new Error(`Training ZIP not publicly accessible: ${zipCheck.status}`);
 
   const trainerInput = buildFluxLoraTrainerInput({ images_data_url: archiveUrl, trigger_word: triggerWord, steps: input.steps });
-  console.log("[headshot-training] prep: fal input built", JSON.stringify(sanitizeTrainerParams(trainerInput)));
+  logInfo("training_prepare_completed", {
+    area: "headshot-training",
+    userId: job.userId,
+    jobId: job.id,
+    durationMs: Date.now() - startedAt,
+    trainerParams: sanitizeTrainerParams(trainerInput)
+  });
 
   return { triggerWord, trainerInput };
 }
@@ -329,7 +355,12 @@ async function cleanupTrainingSourceArtifacts(input: {
       reason: "training_complete_source_cleanup"
     });
   } catch (error) {
-    console.warn("[headshot-training] fal cleanup failed:", error);
+    logWarn("training_source_fal_cleanup_failed", {
+      area: "headshot-training",
+      jobId: input.jobId,
+      falRequestId: input.falRequestId,
+      error: serializeError(error)
+    });
   }
 
   const cleanedAt = new Date().toISOString();
@@ -352,7 +383,11 @@ async function cleanupTrainingSourceArtifacts(input: {
 
   await updateJobInput(input.jobId, cleanedInput);
   await updateJobMetadata(input.jobId, cleanedMetadata);
-  console.log("[headshot-training] source URLs redacted", { jobId: input.jobId, imageCount: input.imageCount });
+  logInfo("training_source_urls_redacted", {
+    area: "headshot-training",
+    jobId: input.jobId,
+    imageCount: input.imageCount
+  });
 }
 
 async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId: string): Promise<string> {
@@ -363,7 +398,12 @@ async function storeTrainedLora(temporaryLoraUrl: string, userId: string, jobId:
     const r2Key = await storeLoraFileR2({ userId, jobId, bytes: loraBytes });
     return r2Key;
   } catch (err) {
-    console.warn("[headshot-training] R2 storage failed, using fal.storage URL:", err);
+    logWarn("training_lora_r2_store_failed_using_fal_url", {
+      area: "headshot-training",
+      userId,
+      jobId,
+      error: serializeError(err)
+    });
     return temporaryLoraUrl;
   }
 }
@@ -422,7 +462,12 @@ export const runAiJob = inngest.createFunction(
 
     try {
       await step.run("mark processing", async () => markJobProcessing(job.id));
-      console.log(`[runAiJob] job.type: ${job.type}`);
+      logInfo("ai_job_processing_started", {
+        area: "inngest.run-ai-job",
+        userId: job.userId,
+        jobId: job.id,
+        jobType: job.type
+      });
 
       const workerJob: WorkerJob = {
         ...job,
@@ -465,7 +510,13 @@ export const runAiJob = inngest.createFunction(
           }
         });
 
-        console.log("[headshot-training] fal request_id:", falRequestId, "— waiting for webhook");
+        logInfo("training_fal_request_submitted", {
+          area: "headshot-training",
+          userId: job.userId,
+          jobId: job.id,
+          jobType: job.type,
+          falRequestId
+        });
         await step.run("store fal request id", async () =>
           updateJobMetadata(job.id, { ...workerJob.metadata, trigger_word: triggerWord, fal_request_id: falRequestId })
         );
@@ -557,7 +608,13 @@ export const runAiJob = inngest.createFunction(
       return { resultUrl };
     } catch (error) {
       const message = formatJobError(error);
-      console.error("[runAiJob] failed:", message);
+      logError("ai_job_failed", {
+        area: "inngest.run-ai-job",
+        userId: job.userId,
+        jobId: job.id,
+        jobType: job.type,
+        message
+      });
       const refunded = await step.run("refund credits", async () => refundJobCredits(job.id, message));
       if (refunded) {
         await step.run("send failure email", async () => sendUserFailureEmail(job, message));

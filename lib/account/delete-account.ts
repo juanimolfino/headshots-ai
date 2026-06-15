@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { anonymizeTransactionsForDeletedUser } from "@/lib/db/queries";
 import { jobs, subscriptions, users, type Job } from "@/lib/db/schema";
 import { deleteFalRequestPayloads } from "@/lib/fal/privacy";
+import { logWarn } from "@/lib/observability/logger";
 import { getStripe } from "@/lib/stripe/client";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -36,7 +37,11 @@ async function runStep(steps: DeleteAccountStep[], step: string, fn: () => Promi
     steps.push(statusFromResult(step, result));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[delete-account] ${step} failed:`, message);
+    logWarn("account_delete_step_failed", {
+      area: "account.delete",
+      step,
+      message
+    });
     steps.push({ step, ok: false, message });
   }
 }

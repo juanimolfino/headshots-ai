@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { logInfo, logWarn } from "@/lib/observability/logger";
 import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { HeadshotEditInput } from "@/lib/ai/types";
 
@@ -67,6 +68,7 @@ function getGeminiApiKey() {
 }
 
 async function generateOneGeminiNanoBananaProImage(input: HeadshotEditInput) {
+  const startedAt = Date.now();
   const aspectRatio = IMAGE_SIZE_ASPECT_RATIO[input.image_size ?? "auto"];
   const parts = [
     { text: `${input.prompt}\n\nCreate the final image in a ${aspectRatio} aspect ratio.` },
@@ -89,11 +91,20 @@ async function generateOneGeminiNanoBananaProImage(input: HeadshotEditInput) {
 
   const data = (await response.json()) as GeminiGenerateResponse & { error?: { message?: string } };
   if (!response.ok) {
+    logWarn("provider_google_gemini_image_edit_failed_response", {
+      area: "provider.google.gemini-image-edit",
+      status: response.status,
+      durationMs: Date.now() - startedAt
+    });
     throw new Error(data.error?.message ?? `Gemini image edit fallback failed with status ${response.status}`);
   }
 
   const inlineImage = data.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.data)?.inlineData;
   if (!inlineImage?.data) throw new Error("Gemini Nano Banana Pro fallback did not return an image");
+  logInfo("provider_google_gemini_image_edit_completed", {
+    area: "provider.google.gemini-image-edit",
+    durationMs: Date.now() - startedAt
+  });
 
   return `data:${inlineImage.mimeType ?? "image/png"};base64,${inlineImage.data}`;
 }
@@ -108,6 +119,7 @@ async function generateGeminiNanoBananaProEditUrls(input: HeadshotEditInput) {
 }
 
 async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
+  const startedAt = Date.now();
   const count = Math.max(1, Math.min(4, input.num_images ?? 1));
   const imageSize = input.image_size ?? "auto";
   fal.config({ credentials: process.env.FAL_KEY });
@@ -127,12 +139,23 @@ async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
       headers: falPrivacyHeaders(),
       pollInterval: 5000,
       onEnqueue(requestId) {
-        console.log("[nano-banana-pro-edit] enqueued:", requestId);
+        logInfo("provider_fal_nano_banana_pro_edit_enqueued", {
+          area: "provider.fal.nano-banana-pro-edit",
+          falRequestId: requestId
+        });
       },
       onQueueUpdate(update) {
-        console.log("[nano-banana-pro-edit] status:", update.status);
+        logInfo("provider_fal_nano_banana_pro_edit_status", {
+          area: "provider.fal.nano-banana-pro-edit",
+          status: update.status
+        });
         if ("logs" in update) {
-          for (const log of update.logs) console.log("[nano-banana-pro-edit]", log.message);
+          for (const log of update.logs) {
+            logInfo("provider_fal_nano_banana_pro_edit_log", {
+              area: "provider.fal.nano-banana-pro-edit",
+              message: log.message
+            });
+          }
         }
       }
     });
@@ -146,11 +169,19 @@ async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
     }
     throw error;
   }
+  logInfo("provider_fal_nano_banana_pro_edit_completed", {
+    area: "provider.fal.nano-banana-pro-edit",
+    durationMs: Date.now() - startedAt
+  });
 
   const imageUrls = (result.data as NanoBananaProEditOutput | undefined)?.images
     ?.map((image) => image.url)
     .filter((url): url is string => typeof url === "string" && url.length > 0);
   if (!imageUrls?.length) {
+    logWarn("provider_fal_nano_banana_pro_edit_empty_result", {
+      area: "provider.fal.nano-banana-pro-edit",
+      durationMs: Date.now() - startedAt
+    });
     throw new Error("fal.ai Nano Banana Pro Edit did not return any image URLs");
   }
 
@@ -161,7 +192,10 @@ export async function generateNanoBananaProEditUrls(input: HeadshotEditInput) {
   try {
     return await generateFalNanoBananaProEditUrls(input);
   } catch (error) {
-    console.warn("[nano-banana-pro-edit] fal.ai failed; trying Gemini direct fallback:", error);
+    logWarn("provider_fal_nano_banana_pro_edit_fallback_to_gemini", {
+      area: "provider.fal.nano-banana-pro-edit",
+      error: error instanceof Error ? { name: error.name, message: error.message } : String(error)
+    });
     try {
       return await generateGeminiNanoBananaProEditUrls(input);
     } catch (fallbackError) {

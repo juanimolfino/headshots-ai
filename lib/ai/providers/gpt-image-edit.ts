@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { logInfo, logWarn } from "@/lib/observability/logger";
 import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { AiProvider, HeadshotEditInput } from "@/lib/ai/types";
 
@@ -26,6 +27,7 @@ function toArrayBuffer(value: unknown) {
 }
 
 export async function generateGptImageEditUrls(input: HeadshotEditInput): Promise<string[]> {
+  const startedAt = Date.now();
   fal.config({ credentials: process.env.FAL_KEY });
 
   let result;
@@ -43,12 +45,23 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
       headers: falPrivacyHeaders(),
       pollInterval: 5000,
       onEnqueue(requestId) {
-        console.log("[gpt-image-edit] enqueued:", requestId);
+        logInfo("provider_fal_gpt_image_edit_enqueued", {
+          area: "provider.fal.gpt-image-edit",
+          falRequestId: requestId
+        });
       },
       onQueueUpdate(update) {
-        console.log("[gpt-image-edit] status:", update.status);
+        logInfo("provider_fal_gpt_image_edit_status", {
+          area: "provider.fal.gpt-image-edit",
+          status: update.status
+        });
         if ("logs" in update) {
-          for (const log of update.logs) console.log("[gpt-image-edit]", log.message);
+          for (const log of update.logs) {
+            logInfo("provider_fal_gpt_image_edit_log", {
+              area: "provider.fal.gpt-image-edit",
+              message: log.message
+            });
+          }
         }
       }
     });
@@ -61,11 +74,19 @@ export async function generateGptImageEditUrls(input: HeadshotEditInput): Promis
     }
     throw error;
   }
+  logInfo("provider_fal_gpt_image_edit_completed", {
+    area: "provider.fal.gpt-image-edit",
+    durationMs: Date.now() - startedAt
+  });
 
   const imageUrls = (result.data as GptImageEditOutput | undefined)?.images
     ?.map((image) => image.url)
     .filter((url): url is string => typeof url === "string" && url.length > 0);
   if (!imageUrls?.length) {
+    logWarn("provider_fal_gpt_image_edit_empty_result", {
+      area: "provider.fal.gpt-image-edit",
+      durationMs: Date.now() - startedAt
+    });
     throw new Error("fal.ai GPT Image 2 Edit did not return any image URLs");
   }
 

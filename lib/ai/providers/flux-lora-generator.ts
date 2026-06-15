@@ -1,6 +1,7 @@
 import { fal } from "@fal-ai/client";
 import { createLoraSignedUrl, createLoraSignedUrlR2, isR2LoraKey, isSupabaseLoraPath } from "@/lib/ai/storage";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { logInfo, logWarn } from "@/lib/observability/logger";
 import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { AiProvider, HeadshotGenerateInput } from "@/lib/ai/types";
 
@@ -68,6 +69,7 @@ function buildPrompt(input: HeadshotGenerateInput): string {
 }
 
 export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): Promise<string[]> {
+  const startedAt = Date.now();
   fal.config({ credentials: process.env.FAL_KEY });
 
   const loraUrl = isR2LoraKey(input.lora_url)
@@ -91,12 +93,23 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
       headers: falPrivacyHeaders(),
       pollInterval: 5000,
       onEnqueue(requestId) {
-        console.log("[flux-lora-generator] enqueued:", requestId);
+        logInfo("provider_fal_flux_lora_enqueued", {
+          area: "provider.fal.flux-lora-generator",
+          falRequestId: requestId
+        });
       },
       onQueueUpdate(update) {
-        console.log("[flux-lora-generator] status:", update.status);
+        logInfo("provider_fal_flux_lora_status", {
+          area: "provider.fal.flux-lora-generator",
+          status: update.status
+        });
         if ("logs" in update) {
-          for (const log of update.logs) console.log("[flux-lora-generator]", log.message);
+          for (const log of update.logs) {
+            logInfo("provider_fal_flux_lora_log", {
+              area: "provider.fal.flux-lora-generator",
+              message: log.message
+            });
+          }
         }
       }
     });
@@ -109,11 +122,19 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
     }
     throw error;
   }
+  logInfo("provider_fal_flux_lora_completed", {
+    area: "provider.fal.flux-lora-generator",
+    durationMs: Date.now() - startedAt
+  });
 
   const imageUrls = (result.data as FluxLoraGeneratorOutput | undefined)?.images
     ?.map((image) => image.url)
     .filter((url): url is string => typeof url === "string" && url.length > 0);
   if (!imageUrls?.length) {
+    logWarn("provider_fal_flux_lora_empty_result", {
+      area: "provider.fal.flux-lora-generator",
+      durationMs: Date.now() - startedAt
+    });
     throw new Error("fal.ai Flux LoRA generator did not return any image URLs");
   }
 
