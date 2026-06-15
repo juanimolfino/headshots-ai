@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { verifyFalWebhookSignature } from "@/lib/fal/webhook-verification";
 import { inngest } from "@/lib/inngest/client";
+import { logInfo, logWarn } from "@/lib/observability/logger";
 import { reportError } from "@/lib/observability/report-error";
 
 type FalWebhookBody = {
@@ -20,17 +22,39 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  // Verify the shared secret embedded as a query param in the webhook URL.
-  // The secret is injected when submitting to fal.ai: /api/webhooks/fal?secret=xxx
-  // If FAL_WEBHOOK_SECRET is configured, the incoming request MUST match.
+  const startedAt = Date.now();
+  const rawBody = await request.text();
+  const signatureResult = await verifyFalWebhookSignature(rawBody, request.headers);
+
+  if (!signatureResult.ok) {
+    logWarn("fal_webhook_signature_rejected", {
+      area: "fal.webhook",
+      route: "/api/webhooks/fal",
+      falRequestId: signatureResult.falRequestId,
+      reason: signatureResult.reason
+    });
+  }
+
+  // Temporary transition fallback. Fal's official ED25519 signature is preferred.
+  // Remove this once FAL_WEBHOOK_LEGACY_SECRET no longer appears in production logs
+  // for a full training retry window plus operational buffer.
   const configuredSecret = process.env.FAL_WEBHOOK_SECRET;
-  if (configuredSecret) {
+  if (!signatureResult.ok && configuredSecret) {
     const incomingSecret = request.nextUrl.searchParams.get("secret") ?? "";
     if (!safeEqual(incomingSecret, configuredSecret)) {
-      console.warn("[fal-webhook] rejected: invalid or missing secret");
+      logWarn("fal_webhook_rejected", {
+        area: "fal.webhook",
+        route: "/api/webhooks/fal",
+        reason: "invalid_signature_and_legacy_secret"
+      });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-  } else if (process.env.NODE_ENV === "production") {
+    logWarn("fal_webhook_legacy_secret_fallback", {
+      area: "fal.webhook",
+      route: "/api/webhooks/fal",
+      code: "FAL_WEBHOOK_LEGACY_SECRET"
+    });
+  } else if (!signatureResult.ok && process.env.NODE_ENV === "production") {
     await reportError(new Error("FAL_WEBHOOK_SECRET is not configured in production"), {
       area: "fal.webhook",
       route: "/api/webhooks/fal",
@@ -41,7 +65,7 @@ export async function POST(request: NextRequest) {
 
   let body: FalWebhookBody;
   try {
-    body = (await request.json()) as FalWebhookBody;
+    body = JSON.parse(rawBody) as FalWebhookBody;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -57,7 +81,14 @@ export async function POST(request: NextRequest) {
     ? body.status
     : "UNKNOWN";
 
-  console.log("[fal-webhook] received:", requestId, "status:", status);
+  logInfo("fal_webhook_received", {
+    area: "fal.webhook",
+    route: "/api/webhooks/fal",
+    falRequestId: requestId,
+    status,
+    verification: signatureResult.ok ? "jwks" : "legacy_secret",
+    durationMs: Date.now() - startedAt
+  });
 
   await inngest.send({
     name: `fal/training.${requestId}`,

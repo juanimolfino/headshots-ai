@@ -43,4 +43,27 @@ describe("Fal webhook auth", () => {
     }));
     expect(mocks.send).not.toHaveBeenCalled();
   });
+
+  it("accepts legacy query-string secret fallback during transition", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("FAL_WEBHOOK_SECRET", "legacy-secret");
+
+    const request = new NextRequest("https://example.com/api/webhooks/fal?secret=legacy-secret", {
+      method: "POST",
+      body: JSON.stringify({ request_id: "req_legacy", status: "OK" })
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(mocks.send).toHaveBeenCalledWith({
+      name: "fal/training.req_legacy",
+      data: {
+        status: "OK",
+        payload: null,
+        error: null
+      }
+    });
+  });
 });
