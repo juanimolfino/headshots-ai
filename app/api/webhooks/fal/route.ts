@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { inngest } from "@/lib/inngest/client";
+import { reportError } from "@/lib/observability/report-error";
 
 type FalWebhookBody = {
   request_id?: string;
@@ -30,8 +31,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   } else if (process.env.NODE_ENV === "production") {
-    // Warn but allow through so existing deployments don't break before the env var is set
-    console.warn("[fal-webhook] FAL_WEBHOOK_SECRET not set — webhook is unauthenticated");
+    await reportError(new Error("FAL_WEBHOOK_SECRET is not configured in production"), {
+      area: "fal.webhook",
+      route: "/api/webhooks/fal",
+      throttleKey: "fal-webhook-secret-missing"
+    });
+    return NextResponse.json({ error: "Webhook secret is not configured" }, { status: 500 });
   }
 
   let body: FalWebhookBody;
