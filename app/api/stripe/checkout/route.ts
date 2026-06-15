@@ -5,6 +5,7 @@ import { getCreditPack, getSubscriptionPlan } from "@/lib/stripe/pricing";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
+import { checkCheckoutRateLimit } from "@/lib/redis/rate-limit";
 
 const checkoutLegalMetadata = {
   legalTermsVersion: LEGAL_TERMS_VERSION,
@@ -20,6 +21,16 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.redirect(new URL("/login", request.url), 303);
 
   const profile = await ensureUserProfile(user);
+  try {
+    await checkCheckoutRateLimit(profile.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "CHECKOUT_RATE_LIMITED";
+    if (message === "CHECKOUT_RATE_LIMITED") {
+      return NextResponse.json({ error: "Too many checkout sessions. Please wait a few minutes." }, { status: 429 });
+    }
+    throw error;
+  }
+
   const form = await request.formData();
   const mode = String(form.get("mode") ?? "pack");
   const appUrl = getAppUrl(new URL(request.url).origin);

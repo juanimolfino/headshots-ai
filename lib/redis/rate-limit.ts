@@ -61,6 +61,24 @@ export async function checkUploadRateLimit(userId: string) {
   }
 }
 
+// Stripe Checkout session creation — max 6 sessions per user per 10 minutes.
+export async function checkCheckoutRateLimit(userId: string) {
+  const key = `checkout:rate:${userId}`;
+  const client = getRedis();
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, 10 * 60);
+  if (count > 6) throw new Error("CHECKOUT_RATE_LIMITED");
+}
+
+// Stripe Billing Portal session creation — max 6 sessions per user per 10 minutes.
+export async function checkBillingPortalRateLimit(userId: string) {
+  const key = `billing-portal:rate:${userId}`;
+  const client = getRedis();
+  const count = await client.incr(key);
+  if (count === 1) await client.expire(key, 10 * 60);
+  if (count > 6) throw new Error("BILLING_PORTAL_RATE_LIMITED");
+}
+
 // Generic fixed-window counter — returns current count within the window.
 export async function checkRateLimit(key: string, max: number, windowSeconds: number) {
   const client = getRedis();
