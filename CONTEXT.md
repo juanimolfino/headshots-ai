@@ -98,6 +98,18 @@ As of 2026-06-14, Phase 3A/3B adds concrete privacy controls and final legal-pag
 - Generated results are expected to live in a private Supabase Storage bucket and be served only through authenticated signed URL endpoints. New generated results store storage paths rather than public URLs.
 - `docs/legal/DATA_INVENTORY.md` remains the technical source inventory behind the published legal documents.
 
+## Phase 4 Observability And Operational Resilience
+
+As of 2026-06-14, Phase 4A adds the first critical observability layer without Sentry:
+
+- `reportError()` in `lib/observability/report-error.ts` is the central operational error reporter. It emits structured `console.error` logs, redacts obvious secrets, and sends throttled Telegram alerts for critical incidents.
+- Telegram sales notifications remain separate from operational alerts. Error alerts use `sendTelegramErrorAlert()` with the clear `🚨 ALERTA OPERATIVA` prefix and silently no-op when Telegram env vars are missing.
+- Alerts are connected for Stripe webhook processing failures, Inngest AI job failures, stale-job reaper refunds, partial account deletion failures, production Fal webhook misconfiguration, and likely provider incidents from Fal/Gemini.
+- Alert throttling uses Upstash via `checkRateLimit()` plus an in-process fallback. Default error-alert throttle window is 5 minutes per fingerprint.
+- `FAL_WEBHOOK_SECRET` is now required in production. If it is missing, `POST /api/webhooks/fal` rejects the request instead of accepting unauthenticated webhooks.
+- The old multipart `POST /api/upload` route was unused after the signed upload flow moved to `POST /api/upload/initiate`, and it has been removed.
+- Stripe checkout and billing portal session creation are rate-limited per user through Upstash.
+
 ## Generation Details
 
 `lib/ai/providers/flux-lora-generator.ts` builds prompts from a style base plus optional background and attire controls. Current styles are `professional`, `cinematic`, and `natural`.
@@ -134,7 +146,6 @@ const loraUrl = isR2LoraKey(input.lora_url)
 | `POST /api/jobs/[id]/signed-urls` | Normalize stored result URLs/paths and return 1-hour signed URLs for generated or edited headshots |
 | `GET /api/jobs/result/[id]` | Authenticated result redirect |
 | `POST /api/upload/initiate` | Create fal.storage signed PUT URL |
-| `POST /api/upload` | Legacy multipart fal.storage upload route |
 | `GET/POST /api/inngest` | Inngest endpoint |
 | `POST /api/webhooks/fal` | fal.ai training webhook |
 | `POST /api/stripe/checkout` | Stripe checkout |
@@ -186,6 +197,7 @@ STRIPE_PRICE_ID_BLUE_BEST_VALUE
 STRIPE_PRICE_ID_GOLD_SINGLE
 STRIPE_PRICE_ID_GOLD_TRIPLE
 FAL_KEY
+FAL_WEBHOOK_SECRET
 OPENAI_API_KEY
 R2_ACCOUNT_ID
 R2_BUCKET_NAME
@@ -203,6 +215,13 @@ MAX_CONCURRENT_JOBS
 SUPABASE_STORAGE_BUCKET
 ```
 
+Optional observability variables:
+
+```bash
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+```
+
 Local-only:
 
 ```bash
@@ -210,7 +229,7 @@ FAL_MOCK_TRAINING=true
 INNGEST_BASE_URL=http://localhost:8288
 ```
 
-`RESEND_FROM_EMAIL` must be a verified sender/domain. `FAL_WEBHOOK_SECRET` is optional; if present, worker appends it to the fal webhook URL.
+`RESEND_FROM_EMAIL` must be a verified sender/domain. `FAL_WEBHOOK_SECRET` is required in production and the worker appends it to the fal webhook URL. Telegram env vars are optional, but without them operational alerts only remain in logs.
 
 ## Local Commands
 
