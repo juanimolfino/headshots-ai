@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { AiProvider, HeadshotEditInput } from "@/lib/ai/types";
 
 const GPT_IMAGE_EDIT_ENDPOINT = "openai/gpt-image-2/edit";
@@ -27,28 +28,39 @@ function toArrayBuffer(value: unknown) {
 export async function generateGptImageEditUrls(input: HeadshotEditInput): Promise<string[]> {
   fal.config({ credentials: process.env.FAL_KEY });
 
-  const result = await fal.subscribe(GPT_IMAGE_EDIT_ENDPOINT, {
-    input: {
-      prompt: input.prompt,
-      image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
-      image_size: input.image_size ?? "auto",
-      quality: input.quality ?? "low",
-      num_images: input.num_images ?? 1,
-      output_format: "png"
-    } as never,
-    logs: true,
-    headers: falPrivacyHeaders(),
-    pollInterval: 5000,
-    onEnqueue(requestId) {
-      console.log("[gpt-image-edit] enqueued:", requestId);
-    },
-    onQueueUpdate(update) {
-      console.log("[gpt-image-edit] status:", update.status);
-      if ("logs" in update) {
-        for (const log of update.logs) console.log("[gpt-image-edit]", log.message);
+  let result;
+  try {
+    result = await fal.subscribe(GPT_IMAGE_EDIT_ENDPOINT, {
+      input: {
+        prompt: input.prompt,
+        image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
+        image_size: input.image_size ?? "auto",
+        quality: input.quality ?? "low",
+        num_images: input.num_images ?? 1,
+        output_format: "png"
+      } as never,
+      logs: true,
+      headers: falPrivacyHeaders(),
+      pollInterval: 5000,
+      onEnqueue(requestId) {
+        console.log("[gpt-image-edit] enqueued:", requestId);
+      },
+      onQueueUpdate(update) {
+        console.log("[gpt-image-edit] status:", update.status);
+        if ("logs" in update) {
+          for (const log of update.logs) console.log("[gpt-image-edit]", log.message);
+        }
       }
+    });
+  } catch (error) {
+    if (isLikelyExternalProviderIncident(error)) {
+      await reportError(error, {
+        area: "provider.fal.gpt-image-edit",
+        throttleKey: "provider:fal:gpt-image-edit"
+      });
     }
-  });
+    throw error;
+  }
 
   const imageUrls = (result.data as GptImageEditOutput | undefined)?.images
     ?.map((image) => image.url)

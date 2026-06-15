@@ -18,6 +18,7 @@ describe("Inngest AI job safeguards", () => {
     expect(source).toContain('id: "reap-stale-ai-jobs"');
     expect(source).toContain('{ cron: "*/10 * * * *" }');
     expect(source).toContain("reapStaleJobs()");
+    expect(source).toContain('"alert reaped stale ai jobs"');
     expect(route).toContain("reapStaleAiJobs");
     expect(route).toContain("functions: [runAiJob, reapStaleAiJobs]");
   });
@@ -38,6 +39,8 @@ describe("Inngest AI job safeguards", () => {
     expect(source).toContain("if (refunded) {");
     expect(source).toContain('await step.run("send failure email"');
     expect(source).toContain("sendUserFailureEmail(job, message)");
+    expect(source).toContain('"alert job failure"');
+    expect(source).toContain('area: "inngest.run-ai-job"');
   });
 
   it("cleans up training source artifacts and redacts source URLs after success", () => {

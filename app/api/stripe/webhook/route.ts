@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { addPackCredits, applySubscriptionLifecycleEvent, replaceSubscriptionCredits } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
 import { sendTelegramPaymentNotification } from "@/lib/notifications/telegram";
+import { reportError } from "@/lib/observability/report-error";
 import { getStripe } from "@/lib/stripe/client";
 import { getCreditPackByStripePriceId, getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
 
@@ -202,151 +203,161 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const userId = session.metadata?.userId;
-    if (userId && session.customer) {
-      await getDb().update(users).set({ stripeCustomerId: String(session.customer) }).where(eq(users.id, userId));
-    }
-    if (userId && session.mode === "payment") {
-      const price = await getCheckoutSessionPrice(session.id);
-      const grant = parseStripeCreditGrant(price?.metadata ?? {});
-      if (grant?.kind === "pack") {
-        const applied = await addPackCredits(userId, { blue: grant.blue, gold: grant.gold }, {
-          kind: "pack",
-          checkoutSessionId: session.id,
-          priceId: price?.id,
-          amountCents: session.amount_total ?? 0
-        }, event.id);
-        if (applied) {
-          const customer = await getUserPaymentLabel(userId);
-          const pack = getCreditPackByStripePriceId(price?.id);
-          await sendTelegramPaymentNotification({
-            customerName: customer?.fullName,
-            customerEmail: customer?.email,
-            itemName: pack?.name ?? price?.nickname ?? price?.id ?? "Credit pack",
-            paymentType: "Pack",
-            amountCents: session.amount_total ?? 0,
-            currency: session.currency ?? price?.currency,
-            credits: { blue: grant.blue, gold: grant.gold }
-          });
-        }
+  try {
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.metadata?.userId;
+      if (userId && session.customer) {
+        await getDb().update(users).set({ stripeCustomerId: String(session.customer) }).where(eq(users.id, userId));
       }
-    }
-  }
-
-  if (event.type === "invoice.paid") {
-    const invoice = event.data.object as InvoiceWithSubscriptionDetails;
-    const subscriptionId = getInvoiceSubscriptionId(invoice);
-    if (subscriptionId) {
-      const subscription = await getSubscriptionWithPrice(subscriptionId);
-      const userId = subscription.metadata.userId;
-      if (userId) {
-        const price = await resolveInvoicePrice(invoice, subscription);
+      if (userId && session.mode === "payment") {
+        const price = await getCheckoutSessionPrice(session.id);
         const grant = parseStripeCreditGrant(price?.metadata ?? {});
-        if (!grant || grant.kind !== "subscription") {
-          return NextResponse.json({ received: true });
+        if (grant?.kind === "pack") {
+          const applied = await addPackCredits(userId, { blue: grant.blue, gold: grant.gold }, {
+            kind: "pack",
+            checkoutSessionId: session.id,
+            priceId: price?.id,
+            amountCents: session.amount_total ?? 0
+          }, event.id);
+          if (applied) {
+            const customer = await getUserPaymentLabel(userId);
+            const pack = getCreditPackByStripePriceId(price?.id);
+            await sendTelegramPaymentNotification({
+              customerName: customer?.fullName,
+              customerEmail: customer?.email,
+              itemName: pack?.name ?? price?.nickname ?? price?.id ?? "Credit pack",
+              paymentType: "Pack",
+              amountCents: session.amount_total ?? 0,
+              currency: session.currency ?? price?.currency,
+              credits: { blue: grant.blue, gold: grant.gold }
+            });
+          }
         }
-        const plan = getPlanByStripePriceId(price?.id);
-        const periodEnd = subscriptionPeriodEnd(subscription, invoice);
-        const applied = await replaceSubscriptionCredits(userId, {
-          blue: grant.blue,
-          gold: grant.gold,
-          currentPeriodEnd: periodEnd,
-          status: "active"
-        }, {
-          kind: "subscription",
-          subscriptionId,
-          priceId: price?.id,
-          amountCents: invoice.amount_paid
-        }, event.id);
-        if (applied) {
-          const customer = await getUserPaymentLabel(userId);
-          await sendTelegramPaymentNotification({
-            customerName: customer?.fullName,
-            customerEmail: customer?.email,
-            itemName: plan?.name ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "Subscription",
-            paymentType: "Subscription",
-            amountCents: invoice.amount_paid,
-            currency: invoice.currency ?? price?.currency,
-            credits: { blue: grant.blue, gold: grant.gold }
-          });
-        }
-        await upsertSubscriptionRow({
-          userId,
-          subscription,
-          plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
-          invoice
-        });
       }
     }
-  }
 
-  if (event.type === "customer.subscription.updated") {
-    const subscription = event.data.object as SubscriptionWithPeriods;
-    const userId = await getSubscriptionUserId(subscription);
-    if (userId) {
-      const price = subscription.items.data[0]?.price ?? null;
-      const plan = getPlanByStripePriceId(price?.id);
-      const status = normalizeSubscriptionStatus(subscription);
-      await applySubscriptionLifecycleEvent({
-        userId,
-        subscriptionId: subscription.id,
-        plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
-        subscriptionStatus: subscription.status,
-        creditStatus: status,
-        currentPeriodStart: subscriptionPeriodStart(subscription),
-        currentPeriodEnd: subscriptionPeriodEnd(subscription),
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        stripeEventId: event.id,
-        stripeEventCreatedAt: stripeEventCreatedDate(event)
-      });
+    if (event.type === "invoice.paid") {
+      const invoice = event.data.object as InvoiceWithSubscriptionDetails;
+      const subscriptionId = getInvoiceSubscriptionId(invoice);
+      if (subscriptionId) {
+        const subscription = await getSubscriptionWithPrice(subscriptionId);
+        const userId = subscription.metadata.userId;
+        if (userId) {
+          const price = await resolveInvoicePrice(invoice, subscription);
+          const grant = parseStripeCreditGrant(price?.metadata ?? {});
+          if (!grant || grant.kind !== "subscription") {
+            return NextResponse.json({ received: true });
+          }
+          const plan = getPlanByStripePriceId(price?.id);
+          const periodEnd = subscriptionPeriodEnd(subscription, invoice);
+          const applied = await replaceSubscriptionCredits(userId, {
+            blue: grant.blue,
+            gold: grant.gold,
+            currentPeriodEnd: periodEnd,
+            status: "active"
+          }, {
+            kind: "subscription",
+            subscriptionId,
+            priceId: price?.id,
+            amountCents: invoice.amount_paid
+          }, event.id);
+          if (applied) {
+            const customer = await getUserPaymentLabel(userId);
+            await sendTelegramPaymentNotification({
+              customerName: customer?.fullName,
+              customerEmail: customer?.email,
+              itemName: plan?.name ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "Subscription",
+              paymentType: "Subscription",
+              amountCents: invoice.amount_paid,
+              currency: invoice.currency ?? price?.currency,
+              credits: { blue: grant.blue, gold: grant.gold }
+            });
+          }
+          await upsertSubscriptionRow({
+            userId,
+            subscription,
+            plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
+            invoice
+          });
+        }
+      }
     }
-  }
 
-  if (event.type === "customer.subscription.deleted") {
-    const subscription = event.data.object as SubscriptionWithPeriods;
-    const userId = await getSubscriptionUserId(subscription);
-    if (userId) {
-      const price = subscription.items.data[0]?.price ?? null;
-      const plan = getPlanByStripePriceId(price?.id);
-      await applySubscriptionLifecycleEvent({
-        userId,
-        subscriptionId: subscription.id,
-        plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
-        subscriptionStatus: "canceled",
-        creditStatus: "canceled",
-        currentPeriodStart: subscriptionPeriodStart(subscription),
-        currentPeriodEnd: subscriptionPeriodEnd(subscription),
-        cancelAtPeriodEnd: true,
-        clearSubscriptionCredits: true,
-        stripeEventId: event.id,
-        stripeEventCreatedAt: stripeEventCreatedDate(event)
-      });
-    }
-  }
-
-  if (event.type === "invoice.payment_failed") {
-    const invoice = event.data.object as InvoiceWithSubscriptionDetails;
-    const subscriptionId = getInvoiceSubscriptionId(invoice);
-    if (subscriptionId) {
-      const subscription = await getSubscriptionWithPrice(subscriptionId);
+    if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object as SubscriptionWithPeriods;
       const userId = await getSubscriptionUserId(subscription);
       if (userId) {
+        const price = subscription.items.data[0]?.price ?? null;
+        const plan = getPlanByStripePriceId(price?.id);
+        const status = normalizeSubscriptionStatus(subscription);
         await applySubscriptionLifecycleEvent({
           userId,
-          subscriptionId,
-          plan: subscription.metadata.plan ?? "unknown",
+          subscriptionId: subscription.id,
+          plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
           subscriptionStatus: subscription.status,
-          creditStatus: "past_due",
-          currentPeriodStart: subscriptionPeriodStart(subscription, invoice),
-          currentPeriodEnd: subscriptionPeriodEnd(subscription, invoice),
+          creditStatus: status,
+          currentPeriodStart: subscriptionPeriodStart(subscription),
+          currentPeriodEnd: subscriptionPeriodEnd(subscription),
           cancelAtPeriodEnd: subscription.cancel_at_period_end,
           stripeEventId: event.id,
           stripeEventCreatedAt: stripeEventCreatedDate(event)
         });
       }
     }
+
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object as SubscriptionWithPeriods;
+      const userId = await getSubscriptionUserId(subscription);
+      if (userId) {
+        const price = subscription.items.data[0]?.price ?? null;
+        const plan = getPlanByStripePriceId(price?.id);
+        await applySubscriptionLifecycleEvent({
+          userId,
+          subscriptionId: subscription.id,
+          plan: subscription.metadata.plan ?? plan?.id ?? "unknown",
+          subscriptionStatus: "canceled",
+          creditStatus: "canceled",
+          currentPeriodStart: subscriptionPeriodStart(subscription),
+          currentPeriodEnd: subscriptionPeriodEnd(subscription),
+          cancelAtPeriodEnd: true,
+          clearSubscriptionCredits: true,
+          stripeEventId: event.id,
+          stripeEventCreatedAt: stripeEventCreatedDate(event)
+        });
+      }
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as InvoiceWithSubscriptionDetails;
+      const subscriptionId = getInvoiceSubscriptionId(invoice);
+      if (subscriptionId) {
+        const subscription = await getSubscriptionWithPrice(subscriptionId);
+        const userId = await getSubscriptionUserId(subscription);
+        if (userId) {
+          await applySubscriptionLifecycleEvent({
+            userId,
+            subscriptionId,
+            plan: subscription.metadata.plan ?? "unknown",
+            subscriptionStatus: subscription.status,
+            creditStatus: "past_due",
+            currentPeriodStart: subscriptionPeriodStart(subscription, invoice),
+            currentPeriodEnd: subscriptionPeriodEnd(subscription, invoice),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            stripeEventId: event.id,
+            stripeEventCreatedAt: stripeEventCreatedDate(event)
+          });
+        }
+      }
+    }
+  } catch (error) {
+    await reportError(error, {
+      area: "stripe.webhook",
+      stripeEventId: event.id,
+      stripeEventType: event.type,
+      throttleKey: `stripe.webhook:${event.type}`
+    });
+    return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

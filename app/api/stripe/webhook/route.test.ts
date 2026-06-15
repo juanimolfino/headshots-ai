@@ -57,4 +57,11 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain('paymentType: "Pack"');
     expect(source).toContain('paymentType: "Subscription"');
   });
+
+  it("reports processing failures for valid Stripe events", () => {
+    expect(source).toContain("reportError(error");
+    expect(source).toContain('area: "stripe.webhook"');
+    expect(source).toContain("stripeEventId: event.id");
+    expect(source).toContain('status: 500');
+  });
 });

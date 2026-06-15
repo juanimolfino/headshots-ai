@@ -1,6 +1,7 @@
 import { fal } from "@fal-ai/client";
 import { createLoraSignedUrl, createLoraSignedUrlR2, isR2LoraKey, isSupabaseLoraPath } from "@/lib/ai/storage";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { AiProvider, HeadshotGenerateInput } from "@/lib/ai/types";
 
 const FLUX_LORA_GENERATOR_ENDPOINT = "fal-ai/flux-lora";
@@ -75,28 +76,39 @@ export async function generateFluxLoraImageUrls(input: HeadshotGenerateInput): P
       ? await createLoraSignedUrl(input.lora_url)
       : input.lora_url;
 
-  const result = await fal.subscribe(FLUX_LORA_GENERATOR_ENDPOINT, {
-    input: {
-      prompt: buildPrompt(input),
-      image_size: "portrait_4_3",
-      guidance_scale: 3.5,
-      num_inference_steps: 35,
-      num_images: input.num_images ?? 4,
-      loras: [{ path: loraUrl, scale: 1.0 }]
-    } as never,
-    logs: true,
-    headers: falPrivacyHeaders(),
-    pollInterval: 5000,
-    onEnqueue(requestId) {
-      console.log("[flux-lora-generator] enqueued:", requestId);
-    },
-    onQueueUpdate(update) {
-      console.log("[flux-lora-generator] status:", update.status);
-      if ("logs" in update) {
-        for (const log of update.logs) console.log("[flux-lora-generator]", log.message);
+  let result;
+  try {
+    result = await fal.subscribe(FLUX_LORA_GENERATOR_ENDPOINT, {
+      input: {
+        prompt: buildPrompt(input),
+        image_size: "portrait_4_3",
+        guidance_scale: 3.5,
+        num_inference_steps: 35,
+        num_images: input.num_images ?? 4,
+        loras: [{ path: loraUrl, scale: 1.0 }]
+      } as never,
+      logs: true,
+      headers: falPrivacyHeaders(),
+      pollInterval: 5000,
+      onEnqueue(requestId) {
+        console.log("[flux-lora-generator] enqueued:", requestId);
+      },
+      onQueueUpdate(update) {
+        console.log("[flux-lora-generator] status:", update.status);
+        if ("logs" in update) {
+          for (const log of update.logs) console.log("[flux-lora-generator]", log.message);
+        }
       }
+    });
+  } catch (error) {
+    if (isLikelyExternalProviderIncident(error)) {
+      await reportError(error, {
+        area: "provider.fal.flux-lora-generator",
+        throttleKey: "provider:fal:flux-lora-generator"
+      });
     }
-  });
+    throw error;
+  }
 
   const imageUrls = (result.data as FluxLoraGeneratorOutput | undefined)?.images
     ?.map((image) => image.url)

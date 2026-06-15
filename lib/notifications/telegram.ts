@@ -11,6 +11,14 @@ type TelegramPaymentNotification = {
   };
 };
 
+type TelegramErrorAlert = {
+  area: string;
+  message: string;
+  severity?: "critical" | "warning";
+  context?: Record<string, unknown>;
+  fingerprint?: string;
+};
+
 function hasTelegramConfig() {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
 }
@@ -40,7 +48,34 @@ function buildPaymentMessage(input: TelegramPaymentNotification) {
   ].join("\n");
 }
 
-export async function sendTelegramPaymentNotification(input: TelegramPaymentNotification) {
+function formatContextValue(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildErrorAlertMessage(input: TelegramErrorAlert) {
+  const contextLines = Object.entries(input.context ?? {})
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${key}: ${formatContextValue(value)}`);
+
+  const lines = [
+    "🚨 ALERTA OPERATIVA",
+    `Severity: ${input.severity ?? "critical"}`,
+    `Area: ${input.area}`,
+    `Error: ${input.message}`,
+    ...(input.fingerprint ? [`Fingerprint: ${input.fingerprint}`] : []),
+    ...contextLines
+  ];
+
+  return lines.join("\n").slice(0, 3900);
+}
+
+async function sendTelegramMessage(text: string, label: string) {
   if (!hasTelegramConfig()) return false;
 
   const token = process.env.TELEGRAM_BOT_TOKEN!;
@@ -52,20 +87,28 @@ export async function sendTelegramPaymentNotification(input: TelegramPaymentNoti
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: buildPaymentMessage(input)
+        text
       }),
       signal: AbortSignal.timeout(5000)
     });
 
     if (!response.ok) {
-      console.warn(`Telegram payment notification failed with status ${response.status}`);
+      console.warn(`Telegram ${label} notification failed with status ${response.status}`);
       return false;
     }
 
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown Telegram error";
-    console.warn(`Telegram payment notification failed: ${message}`);
+    console.warn(`Telegram ${label} notification failed: ${message}`);
     return false;
   }
+}
+
+export async function sendTelegramPaymentNotification(input: TelegramPaymentNotification) {
+  return sendTelegramMessage(buildPaymentMessage(input), "payment");
+}
+
+export async function sendTelegramErrorAlert(input: TelegramErrorAlert) {
+  return sendTelegramMessage(buildErrorAlertMessage(input), "error alert");
 }

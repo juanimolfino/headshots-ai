@@ -14,6 +14,11 @@ vi.mock("@fal-ai/client", () => ({
   }
 }));
 
+vi.mock("@/lib/observability/report-error", () => ({
+  isLikelyExternalProviderIncident: () => true,
+  reportError: vi.fn(async () => undefined)
+}));
+
 describe("generateNanoBananaProEditUrls", () => {
   afterEach(() => {
     vi.clearAllMocks();

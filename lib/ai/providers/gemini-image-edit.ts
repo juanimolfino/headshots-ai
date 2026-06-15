@@ -1,5 +1,6 @@
 import { fal } from "@fal-ai/client";
 import { falPrivacyHeaders } from "@/lib/fal/privacy";
+import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import type { HeadshotEditInput } from "@/lib/ai/types";
 
 export const NANO_BANANA_PRO_MODEL = "gemini-3-pro-image";
@@ -111,28 +112,40 @@ async function generateFalNanoBananaProEditUrls(input: HeadshotEditInput) {
   const imageSize = input.image_size ?? "auto";
   fal.config({ credentials: process.env.FAL_KEY });
 
-  const result = await fal.subscribe(FAL_NANO_BANANA_PRO_EDIT_ENDPOINT, {
-    input: {
-      prompt: input.prompt,
-      image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
-      num_images: count,
-      aspect_ratio: IMAGE_SIZE_ASPECT_RATIO[imageSize],
-      output_format: "png",
-      resolution: QUALITY_RESOLUTION[input.quality ?? "low"]
-    } as never,
-    logs: true,
-    headers: falPrivacyHeaders(),
-    pollInterval: 5000,
-    onEnqueue(requestId) {
-      console.log("[nano-banana-pro-edit] enqueued:", requestId);
-    },
-    onQueueUpdate(update) {
-      console.log("[nano-banana-pro-edit] status:", update.status);
-      if ("logs" in update) {
-        for (const log of update.logs) console.log("[nano-banana-pro-edit]", log.message);
+  let result;
+  try {
+    result = await fal.subscribe(FAL_NANO_BANANA_PRO_EDIT_ENDPOINT, {
+      input: {
+        prompt: input.prompt,
+        image_urls: input.image_urls.slice(0, MAX_REFERENCE_IMAGES),
+        num_images: count,
+        aspect_ratio: IMAGE_SIZE_ASPECT_RATIO[imageSize],
+        output_format: "png",
+        resolution: QUALITY_RESOLUTION[input.quality ?? "low"]
+      } as never,
+      logs: true,
+      headers: falPrivacyHeaders(),
+      pollInterval: 5000,
+      onEnqueue(requestId) {
+        console.log("[nano-banana-pro-edit] enqueued:", requestId);
+      },
+      onQueueUpdate(update) {
+        console.log("[nano-banana-pro-edit] status:", update.status);
+        if ("logs" in update) {
+          for (const log of update.logs) console.log("[nano-banana-pro-edit]", log.message);
+        }
       }
+    });
+  } catch (error) {
+    if (isLikelyExternalProviderIncident(error)) {
+      await reportError(error, {
+        area: "provider.fal.nano-banana-pro-edit",
+        severity: "warning",
+        throttleKey: "provider:fal:nano-banana-pro-edit"
+      });
     }
-  });
+    throw error;
+  }
 
   const imageUrls = (result.data as NanoBananaProEditOutput | undefined)?.images
     ?.map((image) => image.url)
@@ -149,6 +162,16 @@ export async function generateNanoBananaProEditUrls(input: HeadshotEditInput) {
     return await generateFalNanoBananaProEditUrls(input);
   } catch (error) {
     console.warn("[nano-banana-pro-edit] fal.ai failed; trying Gemini direct fallback:", error);
-    return generateGeminiNanoBananaProEditUrls(input);
+    try {
+      return await generateGeminiNanoBananaProEditUrls(input);
+    } catch (fallbackError) {
+      if (isLikelyExternalProviderIncident(fallbackError)) {
+        await reportError(fallbackError, {
+          area: "provider.google.gemini-image-edit",
+          throttleKey: "provider:google:gemini-image-edit"
+        });
+      }
+      throw fallbackError;
+    }
   }
 }

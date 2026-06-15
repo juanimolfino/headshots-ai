@@ -21,6 +21,7 @@ import {
   uploadFalStorageFile
 } from "@/lib/fal/privacy";
 import { getRefundCopy, getUserFacingJobError } from "@/lib/job-ux";
+import { isLikelyExternalProviderIncident, reportError } from "@/lib/observability/report-error";
 import { releaseJobSlot } from "@/lib/redis/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { inngest } from "./client";
@@ -451,6 +452,15 @@ export const runAiJob = inngest.createFunction(
             );
           } catch (error) {
             logFalTrainerError(error, trainerInput);
+            if (isLikelyExternalProviderIncident(error)) {
+              await reportError(error, {
+                area: "provider.fal.training",
+                jobId: job.id,
+                jobType: job.type,
+                userId: job.userId,
+                throttleKey: "provider:fal:training-submit"
+              });
+            }
             throw error;
           }
         });
@@ -552,6 +562,16 @@ export const runAiJob = inngest.createFunction(
       if (refunded) {
         await step.run("send failure email", async () => sendUserFailureEmail(job, message));
       }
+      await step.run("alert job failure", async () =>
+        reportError(error, {
+          area: "inngest.run-ai-job",
+          userId: job.userId,
+          jobId: job.id,
+          jobType: job.type,
+          refunded,
+          throttleKey: `job-failure:${job.type}:${message}`
+        })
+      );
       throw error;
     } finally {
       await step.run("release concurrency slot", async () => releaseJobSlot(job.userId));
@@ -566,6 +586,18 @@ export const reapStaleAiJobs = inngest.createFunction(
   },
   { cron: "*/10 * * * *" },
   async ({ step }) => {
-    return step.run("reap stale ai jobs", async () => reapStaleJobs());
+    const result = await step.run("reap stale ai jobs", async () => reapStaleJobs());
+    if (result.reaped > 0) {
+      await step.run("alert reaped stale ai jobs", async () =>
+        reportError(new Error(`Reaper refunded ${result.reaped} stale AI job${result.reaped === 1 ? "" : "s"}`), {
+          area: "inngest.reap-stale-ai-jobs",
+          reaped: result.reaped,
+          checked: result.checked,
+          jobs: result.jobs,
+          throttleKey: result.reaped > 1 ? "reaper:multiple-stale-jobs" : "reaper:single-stale-job"
+        })
+      );
+    }
+    return result;
   }
 );
