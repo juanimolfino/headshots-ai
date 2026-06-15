@@ -100,15 +100,18 @@ As of 2026-06-14, Phase 3A/3B adds concrete privacy controls and final legal-pag
 
 ## Phase 4 Observability And Operational Resilience
 
-As of 2026-06-14, Phase 4A adds the first critical observability layer without Sentry:
+As of 2026-06-15, Phase 4A/4B adds the critical observability layer without Sentry:
 
 - `reportError()` in `lib/observability/report-error.ts` is the central operational error reporter. It emits structured `console.error` logs, redacts obvious secrets, and sends throttled Telegram alerts for critical incidents.
 - Telegram sales notifications remain separate from operational alerts. Error alerts use `sendTelegramErrorAlert()` with the clear `🚨 ALERTA OPERATIVA` prefix and silently no-op when Telegram env vars are missing.
 - Alerts are connected for Stripe webhook processing failures, Inngest AI job failures, stale-job reaper refunds, partial account deletion failures, production Fal webhook misconfiguration, and likely provider incidents from Fal/Gemini.
 - Alert throttling uses Upstash via `checkRateLimit()` plus an in-process fallback. Default error-alert throttle window is 5 minutes per fingerprint.
-- `FAL_WEBHOOK_SECRET` is now required in production. If it is missing, `POST /api/webhooks/fal` rejects the request instead of accepting unauthenticated webhooks.
+- Fal webhooks now prefer official JWKS/ED25519 signature verification via `lib/fal/webhook-verification.ts`, validating `X-Fal-Webhook-Request-Id`, `X-Fal-Webhook-User-Id`, `X-Fal-Webhook-Timestamp`, `X-Fal-Webhook-Signature`, raw-body hash, and timestamp replay leeway.
+- `FAL_WEBHOOK_SECRET` remains as a temporary transition fallback appended to the submitted webhook URL. Fallback use logs `FAL_WEBHOOK_LEGACY_SECRET`; remove this fallback after that code is absent from production logs for at least 7 days after the last in-flight training window.
 - The old multipart `POST /api/upload` route was unused after the signed upload flow moved to `POST /api/upload/initiate`, and it has been removed.
 - Stripe checkout and billing portal session creation are rate-limited per user through Upstash.
+- Structured JSON logging is centralized in `lib/observability/logger.ts`. Stripe webhook logs event receipt, credit grant application, idempotent skips, lifecycle changes, missing-user skips, signature rejection, and processing duration.
+- `/api/health` now returns integration-level `ok` / `missing` / `error` statuses for Supabase, DB, Stripe, Fal, R2, Inngest, Upstash, Resend, OpenAI, Gemini, Telegram, and app env. It remains protected by `HEALTHCHECK_SECRET` in production.
 
 ## Generation Details
 
@@ -197,6 +200,7 @@ STRIPE_PRICE_ID_BLUE_BEST_VALUE
 STRIPE_PRICE_ID_GOLD_SINGLE
 STRIPE_PRICE_ID_GOLD_TRIPLE
 FAL_KEY
+FAL_ADMIN_KEY
 FAL_WEBHOOK_SECRET
 OPENAI_API_KEY
 R2_ACCOUNT_ID

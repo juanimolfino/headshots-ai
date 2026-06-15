@@ -1,0 +1,63 @@
+{
+  "integrations": {
+    "supabase": [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SUPABASE_STORAGE_BUCKET"
+    ],
+    "database": [
+      "DATABASE_URL"
+    ],
+    "stripe": [
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+      "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+      "STRIPE_PRICE_ID_SUB_LITE",
+      "STRIPE_PRICE_ID_SUB_PRO",
+      "STRIPE_PRICE_ID_SUB_STUDIO",
+      "STRIPE_PRICE_ID_BLUE_STARTER",
+      "STRIPE_PRICE_ID_BLUE_POPULAR",
+      "STRIPE_PRICE_ID_BLUE_BEST_VALUE",
+      "STRIPE_PRICE_ID_GOLD_SINGLE",
+      "STRIPE_PRICE_ID_GOLD_TRIPLE"
+    ],
+    "fal": [
+      "FAL_KEY",
+      "FAL_ADMIN_KEY",
+      "FAL_WEBHOOK_SECRET"
+    ],
+    "r2": [
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET_NAME",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY"
+    ],
+    "inngest": [
+      "INNGEST_EVENT_KEY",
+      "INNGEST_SIGNING_KEY"
+    ],
+    "upstash": [
+      "UPSTASH_REDIS_REST_URL",
+      "UPSTASH_REDIS_REST_TOKEN"
+    ],
+    "resend": [
+      "RESEND_API_KEY",
+      "RESEND_FROM_EMAIL"
+    ],
+    "openai": [
+      "OPENAI_API_KEY"
+    ],
+    "gemini": [
+      "GEMINI_API_KEY"
+    ],
+    "telegram": [
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_CHAT_ID"
+    ],
+    "app": [
+      "NEXT_PUBLIC_APP_URL",
+      "HEALTHCHECK_SECRET"
+    ]
+  }
+}

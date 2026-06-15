@@ -1,40 +1,19 @@
 import nextEnv from "@next/env";
+import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { createClient } from "@supabase/supabase-js";
 import { Redis } from "@upstash/redis";
 import Stripe from "stripe";
 import OpenAI from "openai";
 import { Resend } from "resend";
+import { HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
-const required = [
-  "NEXT_PUBLIC_SUPABASE_URL",
-  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "DATABASE_URL",
-  "INNGEST_EVENT_KEY",
-  "INNGEST_SIGNING_KEY",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
-  "STRIPE_PRICE_ID_SUB_LITE",
-  "STRIPE_PRICE_ID_SUB_PRO",
-  "STRIPE_PRICE_ID_SUB_STUDIO",
-  "STRIPE_PRICE_ID_BLUE_STARTER",
-  "STRIPE_PRICE_ID_BLUE_POPULAR",
-  "STRIPE_PRICE_ID_BLUE_BEST_VALUE",
-  "STRIPE_PRICE_ID_GOLD_SINGLE",
-  "STRIPE_PRICE_ID_GOLD_TRIPLE",
-  "FAL_KEY",
-  "GEMINI_API_KEY",
-  "OPENAI_API_KEY",
-  "UPSTASH_REDIS_REST_URL",
-  "UPSTASH_REDIS_REST_TOKEN",
-  "RESEND_API_KEY",
-  "RESEND_FROM_EMAIL"
-];
+const healthConfig = JSON.parse(readFileSync(new URL("../lib/health/config.json", import.meta.url), "utf8"));
+const optional = new Set(["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GEMINI_API_KEY"]);
+const required = Object.values(healthConfig.integrations).flat().filter((key) => !optional.has(key));
 
 function ok(label) {
   console.log(`OK   ${label}`);
@@ -134,6 +113,27 @@ await check("Stripe configured price IDs exist", async () => {
   ]);
 });
 
+await check("Fal JWKS endpoint is reachable", async () => {
+  const response = await fetch("https://rest.alpha.fal.ai/.well-known/jwks.json", {
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) throw new Error(`unexpected status ${response.status}`);
+  const data = await response.json();
+  if (!Array.isArray(data.keys) || data.keys.length === 0) throw new Error("JWKS has no keys");
+});
+
+await check("Cloudflare R2 bucket is reachable", async () => {
+  const client = new S3Client({
+    region: "auto",
+    endpoint: `https://${cleanEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: cleanEnv("R2_ACCESS_KEY_ID"),
+      secretAccessKey: cleanEnv("R2_SECRET_ACCESS_KEY")
+    }
+  });
+  await client.send(new HeadBucketCommand({ Bucket: cleanEnv("R2_BUCKET_NAME") }));
+});
+
 await check("OpenAI API key can retrieve TTS model", async () => {
   const openai = new OpenAI({ apiKey: cleanEnv("OPENAI_API_KEY") });
   await openai.models.retrieve("gpt-4o-mini-tts");
@@ -148,8 +148,22 @@ if (process.env.FAL_KEY) {
   ok("FAL_KEY present");
 }
 
+if (process.env.FAL_ADMIN_KEY) {
+  ok("FAL_ADMIN_KEY present");
+}
+
+if (process.env.FAL_WEBHOOK_SECRET) {
+  ok("FAL_WEBHOOK_SECRET present for legacy transition fallback");
+}
+
 if (process.env.GEMINI_API_KEY) {
   ok("GEMINI_API_KEY present for Nano Banana Pro fallback");
+}
+
+if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+  ok("Telegram alert env vars present");
+} else {
+  warn("Telegram alert env vars missing; operational alerts will only be in logs");
 }
 
 ok("Non-destructive checks finished");
