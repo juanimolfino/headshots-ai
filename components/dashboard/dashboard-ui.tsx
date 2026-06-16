@@ -19,7 +19,7 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
-  Trash2,
+  Settings2,
   Wallet,
   X
 } from "lucide-react";
@@ -126,6 +126,7 @@ export type DashboardWorkspaceProps = {
   onAttireChange: (value: AttireValue) => void;
   onGenerate: () => void;
   onOpenImage: (url: string) => void;
+  onOpenSettings: () => void;
   onDeleteAccount: () => void;
   accountDeleting: boolean;
   accountDeletionMessage: string | null;
@@ -190,8 +191,7 @@ function MobileActionStrip({
   onSelectModel,
   onNewModel,
   onQuickEdit,
-  onDeleteAccount,
-  accountDeleting
+  onOpenSettings
 }: DashboardWorkspaceProps) {
   return (
     <div className="hidden border-b border-line bg-navy-sidebar px-3 py-2 text-[#cfd3e0] max-[860px]:block">
@@ -261,6 +261,14 @@ function MobileActionStrip({
         <Button asChild className="h-10 shrink-0 rounded-lg bg-white px-3 text-[13px] font-bold text-navy-sidebar hover:bg-[#eceae4]">
           <Link href="/pricing"><Wallet className="size-4" />Credits</Link>
         </Button>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-white/[.06] px-3 text-[13px] font-semibold text-[#cfd3e0] hover:bg-white/[.1] hover:text-white"
+        >
+          <Settings2 className="size-4" />
+          Settings
+        </button>
         <form action="/logout" method="post" className="shrink-0">
           <button
             type="submit"
@@ -271,15 +279,6 @@ function MobileActionStrip({
             Logout
           </button>
         </form>
-        <button
-          type="button"
-          onClick={onDeleteAccount}
-          disabled={accountDeleting}
-          className="dsh-focus inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-red-500/15 px-3 text-[13px] font-semibold text-red-100 disabled:opacity-60"
-        >
-          <Trash2 className="size-4" />
-          Delete
-        </button>
       </div>
     </div>
   );
@@ -321,9 +320,7 @@ function DashboardSidebar({
   onSelectModel,
   onNewModel,
   onQuickEdit,
-  onDeleteAccount,
-  accountDeleting,
-  accountDeletionMessage
+  onOpenSettings
 }: DashboardWorkspaceProps) {
   return (
     <aside className="sticky top-0 flex h-screen w-[266px] shrink-0 flex-col bg-navy-sidebar px-3.5 pb-3.5 pt-5 text-[#cfd3e0] max-[860px]:hidden">
@@ -428,16 +425,12 @@ function DashboardSidebar({
         </div>
         <button
           type="button"
-          onClick={onDeleteAccount}
-          disabled={accountDeleting}
-          className="dsh-focus flex w-full items-center justify-center gap-2 rounded-[10px] border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-100 transition hover:bg-red-500/15 disabled:opacity-60"
+          onClick={onOpenSettings}
+          className="dsh-focus flex w-full items-center justify-center gap-2 rounded-[10px] border border-white/[.08] bg-white/[.04] px-3 py-2 text-xs font-bold text-[#eef0f6] transition hover:bg-white/[.07] hover:text-white"
         >
-          <Trash2 className="size-3.5" />
-          {accountDeleting ? "Deleting..." : "Delete my data"}
+          <Settings2 className="size-3.5" />
+          Settings
         </button>
-        {accountDeletionMessage ? (
-          <p className="px-1.5 text-[11.5px] leading-relaxed text-red-100">{accountDeletionMessage}</p>
-        ) : null}
       </div>
     </aside>
   );

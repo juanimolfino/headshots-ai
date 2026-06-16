@@ -78,10 +78,15 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("disabled={uploading || trainingCreating}");
   });
 
-  it("exposes irreversible account deletion from the dashboard", () => {
+  it("hides account deletion behind a settings panel with double confirmation", () => {
     expect(appSource).toContain('/api/account/delete');
-    expect(appSource).toContain('confirm: "DELETE"');
-    expect(dashboardSource).toContain("Delete my data");
-    expect(dashboardSource).toContain("accountDeletionMessage");
+    expect(appSource).toContain("showSettingsPanel");
+    expect(appSource).toContain("deleteConfirmChecked");
+    expect(appSource).toContain("deleteConfirmText !== \"DELETE\"");
+    expect(appSource).toContain("e.target.value.toUpperCase()");
+    expect(appSource).toContain("Delete my data");
+    expect(dashboardSource).toContain("Settings");
+    expect(dashboardSource).toContain("onOpenSettings");
+    expect(dashboardSource).not.toContain("Delete my data");
   });
 });

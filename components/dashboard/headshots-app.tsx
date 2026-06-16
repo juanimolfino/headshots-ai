@@ -474,6 +474,9 @@ export function HeadshotsApp({
   );
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeletionMessage, setAccountDeletionMessage] = useState<string | null>(null);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [deleteConfirmChecked, setDeleteConfirmChecked] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const seenToastKeysRef = useRef<Set<string>>(new Set());
   const primedToastGroupsRef = useRef<Record<"training" | "generate" | "edit", boolean>>({
     training: false,
@@ -1354,11 +1357,6 @@ export function HeadshotsApp({
   }
 
   async function handleDeleteAccount() {
-    const confirmation = window.prompt(
-      "This permanently deletes your account, models, generated images, and personal data. Type DELETE to confirm."
-    );
-    if (confirmation !== "DELETE") return;
-
     setAccountDeleting(true);
     setAccountDeletionMessage(null);
     try {
@@ -1379,6 +1377,25 @@ export function HeadshotsApp({
     } finally {
       setAccountDeleting(false);
     }
+  }
+
+  function openSettingsPanel() {
+    setAccountDeletionMessage(null);
+    setDeleteConfirmChecked(false);
+    setDeleteConfirmText("");
+    setShowSettingsPanel(true);
+  }
+
+  function closeSettingsPanel() {
+    if (accountDeleting) return;
+    setShowSettingsPanel(false);
+    setDeleteConfirmChecked(false);
+    setDeleteConfirmText("");
+  }
+
+  function confirmDeleteFromSettings() {
+    if (!deleteConfirmChecked || deleteConfirmText !== "DELETE" || accountDeleting) return;
+    void handleDeleteAccount();
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -1553,10 +1570,95 @@ export function HeadshotsApp({
         onAttireChange={v => { setAttireType(v); setAttireColor(null); }}
         onGenerate={() => void startGeneration()}
         onOpenImage={setSelectedImageUrl}
+        onOpenSettings={openSettingsPanel}
         onDeleteAccount={() => void handleDeleteAccount()}
         accountDeleting={accountDeleting}
         accountDeletionMessage={accountDeletionMessage}
       />
+      {showSettingsPanel ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={closeSettingsPanel}
+        >
+          <div
+            className="w-full max-w-[640px] rounded-[24px] border border-line bg-bg p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[12px] font-semibold uppercase tracking-[.18em] text-muted">Settings</p>
+                <h2 className="mt-2 text-2xl font-bold tracking-[-.02em] text-ink">Account settings</h2>
+                <p className="mt-2 max-w-[52ch] text-sm leading-6 text-muted">
+                  This is where account-level controls will live. Today the only destructive action is account deletion, and it requires a double confirmation before anything is sent.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSettingsPanel}
+                className="dsh-focus flex h-10 w-10 items-center justify-center rounded-full border border-line bg-white/70 text-muted transition hover:bg-white"
+                aria-label="Close settings"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 rounded-[18px] border border-red-300/40 bg-red-50 px-4 py-4 text-red-950">
+              <div className="flex items-center gap-2">
+                <Trash2 className="size-4 shrink-0" />
+                <h3 className="text-sm font-semibold">Delete account and data</h3>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-red-900">
+                This permanently removes your account and the data covered by the deletion flow. It cannot be undone.
+              </p>
+              <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-red-950">
+                <input
+                  type="checkbox"
+                  checked={deleteConfirmChecked}
+                  onChange={e => setDeleteConfirmChecked(e.target.checked)}
+                  className="mt-1 size-4 rounded border-red-300 text-red-700 focus:ring-red-500"
+                />
+                <span>I understand this action is permanent and want to continue.</span>
+              </label>
+              <label className="mt-4 block text-sm font-medium text-red-950">
+                Type <span className="font-semibold">DELETE</span> to confirm
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value.toUpperCase())}
+                  placeholder="DELETE"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="mt-2 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-red-400"
+                />
+              </label>
+              {accountDeletionMessage ? (
+                <p className="mt-4 text-sm leading-6 text-red-900">{accountDeletionMessage}</p>
+              ) : null}
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={confirmDeleteFromSettings}
+                  disabled={accountDeleting || !deleteConfirmChecked || deleteConfirmText !== "DELETE"}
+                  className="dsh-focus inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Trash2 className="size-4" />
+                  {accountDeleting ? "Deleting..." : "Delete my data"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSettingsPanel}
+                  disabled={accountDeleting}
+                  className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {selectedImageUrl && mode === "model" ? (
         <div
           role="dialog"
