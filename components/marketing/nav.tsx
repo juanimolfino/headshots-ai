@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "./logo";
 import { NAV_LINKS } from "@/lib/landing-content";
 
-export function Nav() {
+export function Nav({ authenticated = false }: { authenticated?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -34,10 +34,12 @@ export function Nav() {
           <div className="nav-cta">
             {/* Sign in: oculto en mobile (≤760px), como .nav-cta .btn-ghost de la ref */}
             <Button asChild variant="pillGhost" size="pillSm" className="max-[760px]:hidden">
-              <Link href="/login">Sign in</Link>
+              <Link href={authenticated ? "/dashboard" : "/login"}>{authenticated ? "Dashboard" : "Sign in"}</Link>
             </Button>
             <Button asChild variant="pill" size="pillSm">
-              <Link href="/login">Get started</Link>
+              <Link href={authenticated ? "/dashboard/headshots" : "/login"}>
+                {authenticated ? "Open dashboard" : "Get started"}
+              </Link>
             </Button>
             <button
               className="menu-btn"
@@ -60,8 +62,8 @@ export function Nav() {
           </a>
         ))}
         <Button asChild variant="pill" size="pill" className="mt-[18px] w-full">
-          <Link href="/login" onClick={() => setOpen(false)}>
-            Get started
+          <Link href={authenticated ? "/dashboard/headshots" : "/login"} onClick={() => setOpen(false)}>
+            {authenticated ? "Open dashboard" : "Get started"}
           </Link>
         </Button>
       </div>

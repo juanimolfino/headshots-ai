@@ -13,6 +13,7 @@ import { Logo } from "@/components/marketing/logo";
 import { CheckIcon, WhyIcon } from "@/components/marketing/icons";
 import { StructuredData } from "@/components/marketing/structured-data";
 import { HERO_SHOTS, STEPS, STYLES, WHY, PLANS, ADDONS, FAQ } from "@/lib/landing-content";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 // Título absoluto para saltear el template `%s | Headshots AI` del root layout.
 // canonical y og:url se resuelven contra metadataBase (NEXT_PUBLIC_APP_URL).
@@ -62,7 +63,13 @@ function answerNode(a: string) {
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  const authenticated = Boolean(user);
+
   return (
     // `js` estático y scopeado a la landing: habilita el estado oculto de reveal
     // sin hydration mismatch. Sin JS, el <noscript> fuerza todo visible.
@@ -72,7 +79,7 @@ export default function LandingPage() {
         <style>{`.reveal{opacity:1 !important;transform:none !important}`}</style>
       </noscript>
 
-      <Nav />
+      <Nav authenticated={authenticated} />
 
       <main id="top">
         {/* ===================== HERO ===================== */}
@@ -93,8 +100,8 @@ export default function LandingPage() {
               </Reveal>
               <Reveal delay={2} className="hero-cta">
                 <Button asChild variant="pill" size="pill">
-                  <Link href="/login">
-                    Get my headshots <ButtonArrow />
+                  <Link href={authenticated ? "/dashboard/headshots" : "/login"}>
+                    {authenticated ? "Open dashboard" : "Get my headshots"} <ButtonArrow />
                   </Link>
                 </Button>
                 <a href="#how-it-works" className="linklike">

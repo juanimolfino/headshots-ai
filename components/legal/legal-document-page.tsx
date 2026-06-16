@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getLegalDocumentMarkdown, type LegalDocumentId } from "@/lib/legal/documents";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const documentLinks: Record<string, string> = {
   "Terms of Service": "/terms",
@@ -227,13 +228,17 @@ function MarkdownContent({ markdown }: { markdown: string }) {
   return <div className="space-y-5 text-sm text-ink-soft md:text-base">{blocks}</div>;
 }
 
-export function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId }) {
+export async function LegalDocumentPage({ documentId }: { documentId: LegalDocumentId }) {
   const markdown = getLegalDocumentMarkdown(documentId);
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const backHref = user ? "/dashboard/headshots" : "/";
+  const backLabel = user ? "Back to dashboard" : "Back home";
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-14 text-ink">
-      <Link href="/" className="text-sm font-semibold text-navy underline-offset-2 hover:underline">
-        Back home
+      <Link href={backHref} className="text-sm font-semibold text-navy underline-offset-2 hover:underline">
+        {backLabel}
       </Link>
       <article className="mt-8">
         <MarkdownContent markdown={markdown} />

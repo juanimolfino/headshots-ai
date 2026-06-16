@@ -50,6 +50,19 @@ describe("final legal documents", () => {
     expect(checkout).toContain("Cookie Policy");
   });
 
+  it("routes legal documents back to dashboard when the user is authenticated", () => {
+    const legalPage = read("components/legal/legal-document-page.tsx");
+    const landing = read("app/(marketing)/page.tsx");
+    const nav = read("components/marketing/nav.tsx");
+
+    expect(legalPage).toContain('backHref = user ? "/dashboard/headshots" : "/"');
+    expect(legalPage).toContain('Back to dashboard');
+    expect(landing).toContain("authenticated={authenticated}");
+    expect(landing).toContain('href={authenticated ? "/dashboard/headshots" : "/login"}');
+    expect(nav).toContain('authenticated = false');
+    expect(nav).toContain('authenticated ? "/dashboard" : "/login"');
+  });
+
   it("uses published consent versions instead of draft versions", () => {
     expect(LEGAL_TERMS_VERSION).toBe("2026-06-14-v1");
     expect(LEGAL_PRIVACY_VERSION).toBe("2026-06-14-v1");
