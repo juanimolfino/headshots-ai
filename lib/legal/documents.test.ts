@@ -60,6 +60,7 @@ describe("final legal documents", () => {
     expect(landing).toContain("authenticated={authenticated}");
     expect(landing).toContain('href={authenticated ? "/dashboard/headshots" : "/login"}');
     expect(nav).toContain('authenticated = false');
+    expect(nav).toContain('href={authenticated ? "/dashboard/headshots" : "#top"}');
     expect(nav).toContain('authenticated ? "/dashboard" : "/login"');
   });
 

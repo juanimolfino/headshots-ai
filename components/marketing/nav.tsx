@@ -21,7 +21,7 @@ export function Nav({ authenticated = false }: { authenticated?: boolean }) {
     <>
       <header className={`nav${scrolled ? " scrolled" : ""}`}>
         <div className="wrap nav-inner">
-          <a href="#top" aria-label="Headshots AI home">
+          <a href={authenticated ? "/dashboard/headshots" : "#top"} aria-label={authenticated ? "Open dashboard" : "Headshots AI home"}>
             <Logo />
           </a>
           <nav className="nav-links" aria-label="Primary">
