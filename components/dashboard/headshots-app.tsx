@@ -1597,14 +1597,14 @@ export function HeadshotsApp({
               <button
                 type="button"
                 onClick={closeSettingsPanel}
-                className="dsh-focus flex h-10 w-10 items-center justify-center rounded-full border border-line bg-white/70 text-muted transition hover:bg-white"
+                className="dsh-focus flex h-10 w-10 items-center justify-center rounded-full border border-line bg-white/70 text-black transition hover:bg-white"
                 aria-label="Close settings"
               >
-                <X className="size-4" />
+                <X className="size-4 text-black" />
               </button>
             </div>
 
-            <div className="mt-6 rounded-[18px] border border-red-300/40 bg-red-50 px-4 py-4 text-red-950">
+            <div className="mt-6 flex flex-col items-center rounded-[18px] border border-red-300/40 bg-red-50 px-4 py-4 text-center text-red-950">
               <div className="flex items-center gap-2">
                 <Trash2 className="size-4 shrink-0" />
                 <h3 className="text-sm font-semibold">Delete account and data</h3>
@@ -1612,7 +1612,7 @@ export function HeadshotsApp({
               <p className="mt-2 text-sm leading-6 text-red-900">
                 This permanently removes your account and the data covered by the deletion flow. It cannot be undone.
               </p>
-              <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-red-950">
+              <label className="mt-4 flex w-full max-w-[520px] items-start gap-3 text-left text-sm leading-6 text-red-950">
                 <input
                   type="checkbox"
                   checked={deleteConfirmChecked}
@@ -1621,7 +1621,7 @@ export function HeadshotsApp({
                 />
                 <span>I understand this action is permanent and want to continue.</span>
               </label>
-              <label className="mt-4 block text-sm font-medium text-red-950">
+              <label className="mt-4 block w-full max-w-[520px] text-left text-sm font-medium text-red-950">
                 Type <span className="font-semibold">DELETE</span> to confirm
                 <input
                   type="text"
@@ -1634,9 +1634,9 @@ export function HeadshotsApp({
                 />
               </label>
               {accountDeletionMessage ? (
-                <p className="mt-4 text-sm leading-6 text-red-900">{accountDeletionMessage}</p>
+                <p className="mt-4 w-full max-w-[520px] text-left text-sm leading-6 text-red-900">{accountDeletionMessage}</p>
               ) : null}
-              <div className="mt-5 flex flex-wrap items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
                 <button
                   type="button"
                   onClick={confirmDeleteFromSettings}
