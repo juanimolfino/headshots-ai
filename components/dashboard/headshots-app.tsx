@@ -1642,7 +1642,7 @@ function NewModelPanel({
             onChange={e => onModelNameChange(e.target.value)}
             placeholder="e.g. Alex, Jordan…"
             maxLength={60}
-            disabled={uploading || !!uploadedUrls || trainingCreating}
+            disabled={uploading || trainingCreating}
             className="w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20 disabled:opacity-60"
           />
         </div>

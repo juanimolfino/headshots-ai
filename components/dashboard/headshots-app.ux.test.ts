@@ -67,6 +67,11 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("procesamiento de mis fotos y datos faciales");
   });
 
+  it("keeps the training model name editable after upload finishes", () => {
+    expect(appSource).toContain('placeholder="e.g. Alex, Jordan…"');
+    expect(appSource).toContain("disabled={uploading || trainingCreating}");
+  });
+
   it("exposes irreversible account deletion from the dashboard", () => {
     expect(appSource).toContain('/api/account/delete');
     expect(appSource).toContain('confirm: "DELETE"');
