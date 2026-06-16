@@ -1,25 +1,25 @@
 export const legalCompanyInfo = {
-  legalEntityName: "[LEGAL ENTITY NAME]",
-  brandName: "[BRAND NAME]",
-  websiteUrl: "[WEBSITE URL]",
-  effectiveDate: "[EFFECTIVE DATE]",
-  businessAddress: "[BUSINESS ADDRESS]",
-  privacyEmail: "[PRIVACY EMAIL]",
-  supportEmail: "[SUPPORT EMAIL]",
-  contactEmail: "[CONTACT EMAIL]",
-  state: "[STATE]",
-  stateCounty: "[STATE/COUNTY]"
+  legalEntityName: "Juan Ignacio Molfino",  // tu nombre real
+  brandName: "Pic Your AI",                // nombre del producto
+  websiteUrl: "https://picyourai.com/",
+  effectiveDate: "June 15, 2026",
+  businessAddress: "Florida, United State", // tu dirección real
+  privacyEmail: "privacy@picyourai.com",
+  supportEmail: "support@picyourai.com",
+  contactEmail: "juanymolfino@hotmail.com",
+  state: "Florida",  // solo si incorporás en EEUU, si no sacalo
+  stateCounty: "United States" // solo si incorporás en EEUU, si no sacalo
 } as const;
 
 export const legalPlaceholderValues: Record<string, string> = {
-  "[LEGAL ENTITY NAME]": legalCompanyInfo.legalEntityName,
-  "[BRAND NAME]": legalCompanyInfo.brandName,
-  "[WEBSITE URL]": legalCompanyInfo.websiteUrl,
-  "[EFFECTIVE DATE]": legalCompanyInfo.effectiveDate,
-  "[BUSINESS ADDRESS]": legalCompanyInfo.businessAddress,
-  "[PRIVACY EMAIL]": legalCompanyInfo.privacyEmail,
-  "[SUPPORT EMAIL]": legalCompanyInfo.supportEmail,
-  "[CONTACT EMAIL]": legalCompanyInfo.contactEmail,
-  "[STATE]": legalCompanyInfo.state,
-  "[STATE/COUNTY]": legalCompanyInfo.stateCounty
+  "Juan Ignacio Molfino": legalCompanyInfo.legalEntityName,
+  "Pic Your AI": legalCompanyInfo.brandName,
+  "https://picyourai.com/": legalCompanyInfo.websiteUrl,
+  "June 15, 2026": legalCompanyInfo.effectiveDate,
+  "Florida, United State": legalCompanyInfo.businessAddress,
+  "privacy@picyourai.com": legalCompanyInfo.privacyEmail,
+  "support@picyourai.com": legalCompanyInfo.supportEmail,
+  "juanymolfino@hotmail.com": legalCompanyInfo.contactEmail,
+  "Florida": legalCompanyInfo.state,
+  "United States": legalCompanyInfo.stateCounty
 };
