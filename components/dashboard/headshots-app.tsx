@@ -489,6 +489,7 @@ export function HeadshotsApp({
   const [trainingElapsed, setTrainingElapsed] = useState(0);
   const [modelsLastUpdatedAt, setModelsLastUpdatedAt] = useState<string | null>(null);
   const trainingStartRef = useRef<number | null>(null);
+  const hadActiveTrainingJobRef = useRef(false);
 
   // Nav
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
@@ -626,6 +627,11 @@ export function HeadshotsApp({
       setModelsLastUpdatedAt(new Date().toISOString());
       refreshCreditsForNewFailures(all);
       emitJobToastEvents(all.map(toTrainingToastJob), "training");
+      const hadActiveTrainingJob = hadActiveTrainingJobRef.current;
+      hadActiveTrainingJobRef.current = Boolean(active);
+      if (hadActiveTrainingJob && !active) {
+        void loadCredits();
+      }
       setActiveTrainingJob(prev => {
         if (active && !trainingStartRef.current) {
           trainingStartRef.current = new Date(active.createdAt).getTime();
@@ -636,7 +642,7 @@ export function HeadshotsApp({
     } finally {
       setLoadingModels(false);
     }
-  }, [emitJobToastEvents, refreshCreditsForNewFailures]);
+  }, [emitJobToastEvents, loadCredits, refreshCreditsForNewFailures]);
 
   const loadHistory = useCallback(async () => {
     const res = await fetch("/api/jobs?type=headshot-generate&limit=50");

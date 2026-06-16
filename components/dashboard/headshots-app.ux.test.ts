@@ -30,6 +30,12 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("void loadCredits()");
   });
 
+  it("refreshes credits when training transitions from active to complete", () => {
+    expect(appSource).toContain("hadActiveTrainingJobRef");
+    expect(appSource).toContain("const hadActiveTrainingJob = hadActiveTrainingJobRef.current");
+    expect(appSource).toContain("if (hadActiveTrainingJob && !active) {\n        void loadCredits();\n      }");
+  });
+
   it("prechecks gold and blue credits before uploads or job creation", () => {
     expect(appSource).toContain("lacksTrainingCredits");
     expect(appSource).toContain("disabled={uploading || lacksTrainingCredits || !photoConsentAccepted}");
