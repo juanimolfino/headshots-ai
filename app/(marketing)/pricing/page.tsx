@@ -1,14 +1,23 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, CreditCard, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PricingStructuredData } from "@/components/marketing/structured-data";
 import { BLUE_PACKS, GOLD_PACKS, SUBSCRIPTION_PLANS } from "@/lib/stripe/pricing";
+import { publicPageMetadata, siteConfig } from "@/lib/seo";
 
-export const metadata = { title: "Pricing" };
+export const metadata: Metadata = publicPageMetadata({
+  title: `Pricing - AI Headshot Plans and Credits | ${siteConfig.name}`,
+  description:
+    "Compare AI headshot subscriptions, blue credit packs for image generation, and gold credit packs for training personal AI models.",
+  path: "/pricing"
+});
 
 export default function PricingPage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-12 text-ink">
+      <PricingStructuredData />
       <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <h1 className="font-serif text-4xl font-medium tracking-[-0.02em] text-ink">Pricing</h1>

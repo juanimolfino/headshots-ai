@@ -1,10 +1,10 @@
-// wordmark: Headshots AI
+import { siteConfig } from "@/lib/seo";
+
 export function Logo() {
   return (
     <span className="logo">
       <span className="dot" />
-      <b>Headshots</b>
-      <span className="tld">AI</span>
+      <b>{siteConfig.name}</b>
     </span>
   );
 }

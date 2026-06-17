@@ -1,9 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Primitiva neutra del design system. La composición específica
-// (shadow sutil de la style-card en hover, rounded-plan del Pro card, fondo navy)
-// se aplica vía className donde se use (Paso 4). Sin hover-lift por defecto.
+// Neutral design-system primitive. Specific compositions are applied through className.
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
@@ -22,7 +20,7 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardHeader.displayName = "CardHeader";
 
-// Títulos en serif (Newsreader), peso 500, tracking del design system.
+// Serif title styling from the design system.
 const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
     <h3

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Logo } from "./logo";
 import { NAV_LINKS } from "@/lib/landing-content";
+import { siteConfig } from "@/lib/seo";
 
 export function Nav({ authenticated = false }: { authenticated?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
@@ -21,7 +22,7 @@ export function Nav({ authenticated = false }: { authenticated?: boolean }) {
     <>
       <header className={`nav${scrolled ? " scrolled" : ""}`}>
         <div className="wrap nav-inner">
-          <a href={authenticated ? "/dashboard/headshots" : "#top"} aria-label={authenticated ? "Open dashboard" : "Headshots AI home"}>
+          <a href={authenticated ? "/dashboard/headshots" : "#top"} aria-label={authenticated ? "Open dashboard" : `${siteConfig.name} home`}>
             <Logo />
           </a>
           <nav className="nav-links" aria-label="Primary">

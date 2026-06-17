@@ -1,8 +1,6 @@
-// =========================================================
-// Landing copy (single source of truth) — adaptado del brief de diseño.
-// La copy es final. Marca = "Headshots AI".
-// Email de contacto: juanimolfinooo@gmail.com (placeholder; cambiar por el oficial más adelante)
-// =========================================================
+import { legalCompanyInfo } from "@/lib/legal/company-info";
+
+// Landing copy for public marketing pages.
 
 export const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
@@ -151,8 +149,7 @@ export const FAQ = [
     a: "Your uploaded selfies are used to train your personal model, uploaded with a short Fal CDN expiration window, and removed from our job record after successful training. Generated headshots stay in your account for download until you delete your data.",
   },
   {
-    // Email de contacto (placeholder; cambiar por el oficial más adelante)
     q: "Can I get a refund?",
-    a: "If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Reach out at juanimolfinooo@gmail.com.",
+    a: `If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Reach out at ${legalCompanyInfo.supportEmail}.`,
   },
 ];
