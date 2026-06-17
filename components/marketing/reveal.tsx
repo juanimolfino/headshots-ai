@@ -3,13 +3,8 @@
 import { useEffect, useRef, useState, type ElementType, type ReactNode } from "react";
 
 /**
- * Reveal — fade/rise suave al entrar en viewport.
- * Robusto: lo que ya está en pantalla al montar se muestra de inmediato, y si el
- * IntersectionObserver nunca reporta (previews/embeds) se revela tras un timeout.
- * El contenido nunca queda oculto permanentemente. La clase `js` se setea por JS
- * (no estática), así sin JS no hay estado oculto y todo es visible.
- *
- * `delay` mapea a las clases d1/d2/d3 de globals.css.
+ * Reveal is progressive enhancement: content is visible in server HTML and only
+ * receives the hidden animation state after the client hydrates.
  */
 export function Reveal({
   children,
@@ -28,8 +23,9 @@ export function Reveal({
   useEffect(() => {
     const el = ref.current;
     if (!el || shown) return;
+    el.classList.add("ready");
 
-    // Above-the-fold: revelar ya si está en vista.
+    // Above the fold content should become visible immediately after hydration.
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight || document.documentElement.clientHeight;
     if (r.top < vh && r.bottom > 0) {
@@ -57,7 +53,7 @@ export function Reveal({
     );
     io.observe(el);
 
-    // Safety net si el observer nunca reporta.
+    // Safety net if the observer never reports.
     const t = window.setTimeout(() => {
       if (!fired) setShown(true);
     }, 700);
@@ -68,7 +64,6 @@ export function Reveal({
     };
   }, [shown]);
 
-  // Polimórfico: `as any` evita la fricción de tipos de ref en ElementType.
   const Comp = Tag as any;
   const delayClass = delay ? ` d${delay}` : "";
   return (

@@ -129,7 +129,7 @@ html {
 }
 
 body {
-  background: var(--bg); /* fondo cálido global del design system (= bg-bg) */
+  background: var(--bg); /* Global warm background from the design system. */
   color: hsl(var(--foreground));
 }
 
@@ -138,14 +138,14 @@ body {
 }
 
 /* =========================================================
-   headshotly.pro — primitivas Grupo B (CSS portado de la referencia)
-   find/replace ACOTADO aplicado SOLO aquí (no en el resto de la app):
+   headshotly.pro - group B primitives ported from the reference.
+   Scoped find/replace applied only here:
      ref --muted  -> --ink-muted
      ref --radius -> --radius-card
-   En @layer components para que las utilidades de Tailwind puedan sobreescribir.
+   Kept in @layer components so Tailwind utilities can override it.
    ========================================================= */
 @layer components {
-  /* Eyebrow — label uppercase con línea de 22px */
+  /* Uppercase eyebrow label with a short line. */
   .eyebrow {
     font-family: var(--sans);
     font-size: 12.5px;
@@ -234,7 +234,7 @@ body {
     color: var(--ink-muted);
   }
 
-  /* FAQ accordion nativo (<details>/<summary>, single-open vía atributo name) */
+  /* Native FAQ accordion with single-open behavior through the name attribute. */
   .faq { border-top: 1px solid var(--line-strong); }
   .faq details { border-bottom: 1px solid var(--line); padding: 0; }
   .faq summary {
@@ -277,12 +277,12 @@ body {
 }
 
 /* =========================================================
-   headshotly.pro — landing layout (Paso 4, CSS portado de la referencia)
-   find/replace acotado aplicado. Adaptaciones:
-     - sin clases .btn* (se usa <Button>)
-     - .style-card / .plan se apoyan en <Card> (no redefinen bg/border)
-     - .why container = <NavyPanel> (.panel-navy); aquí solo .why-grid/.why-item
-     - bare `section{}` -> `.lp-section` para no afectar otras páginas
+   headshotly.pro landing layout ported from the reference.
+   Scoped adaptations:
+     - no .btn* classes because the app uses <Button>
+     - .style-card and .plan build on <Card> without redefining base background/border
+     - .why container maps to <NavyPanel> (.panel-navy); only grid/item rules live here
+     - bare section rules became .lp-section to avoid affecting other pages
    ========================================================= */
 @layer components {
   .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
@@ -417,14 +417,14 @@ body {
   .cta-band { text-align: center; max-width: 640px; margin: 0 auto 30px; }
   .cta-band h2 { font-size: clamp(28px, 4vw, 42px); margin-bottom: 24px; text-wrap: balance; }
 
-  /* ---------- Reveal (gate bajo .js; visible sin JS) ---------- */
-  .js .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
-  .js .reveal.in { opacity: 1; transform: none; }
-  .js .reveal.d1 { transition-delay: 0.08s; }
-  .js .reveal.d2 { transition-delay: 0.16s; }
-  .js .reveal.d3 { transition-delay: 0.24s; }
+  /* ---------- Reveal: visible by default, animated only after hydration ---------- */
+  .reveal.ready { opacity: 0; transform: translateY(14px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+  .reveal.ready.in { opacity: 1; transform: none; }
+  .reveal.ready.d1 { transition-delay: 0.08s; }
+  .reveal.ready.d2 { transition-delay: 0.16s; }
+  .reveal.ready.d3 { transition-delay: 0.24s; }
   @media (prefers-reduced-motion: reduce) {
-    .js .reveal { opacity: 1; transform: none; transition: none; }
+    .reveal.ready { opacity: 1; transform: none; transition: none; }
     html { scroll-behavior: auto; }
     .style-card, .plan { transition: none; }
   }
