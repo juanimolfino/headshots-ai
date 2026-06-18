@@ -42,6 +42,7 @@ export const STYLES = [
     title: "Professional",
     body: "Business attire, neutral background, sharp focus.",
     label: "professional",
+    src: "/examples-images/profesional.png",
     alt: "Professional style headshot sample: business attire, neutral background, sharp focus",
   },
   {
@@ -49,6 +50,7 @@ export const STYLES = [
     title: "Cinematic",
     body: "Dramatic lighting, editorial feel, high contrast.",
     label: "cinematic",
+    src: "/examples-images/cinematic.png",
     alt: "Cinematic style headshot sample: dramatic lighting, editorial feel, high contrast",
   },
   {
@@ -56,6 +58,7 @@ export const STYLES = [
     title: "Natural",
     body: "Soft light, candid, approachable.",
     label: "natural",
+    src: "/examples-images/casual.png",
     alt: "Natural style headshot sample: soft light, candid, approachable",
   },
 ];
