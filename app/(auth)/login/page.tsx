@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/login-form";
+import { getAppUrl } from "@/lib/app-url";
 import { siteConfig } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -28,7 +29,7 @@ export default async function LoginPage({
           <h1 className="font-serif text-2xl font-medium tracking-tight text-ink">{siteConfig.name}</h1>
           <p className="mt-2 text-sm text-ink-soft">Sign in to generate your AI headshots</p>
         </div>
-        <LoginForm initialMessage={initialMessage} />
+        <LoginForm appUrl={getAppUrl()} initialMessage={initialMessage} />
       </div>
     </main>
   );

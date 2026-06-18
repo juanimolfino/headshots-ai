@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { ensureUserProfile, recordUserConsent } from "@/lib/db/queries";
+import { getAppUrl } from "@/lib/app-url";
 import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
 
 type CookieToSet = {
@@ -11,10 +12,11 @@ type CookieToSet = {
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const appUrl = getAppUrl(requestUrl.origin);
   const code = requestUrl.searchParams.get("code");
   const error = requestUrl.searchParams.get("error_description") ?? requestUrl.searchParams.get("error");
-  const loginUrl = new URL("/login", request.url);
-  const dashboardUrl = new URL("/dashboard", request.url);
+  const loginUrl = new URL("/login", appUrl);
+  const dashboardUrl = new URL("/dashboard", appUrl);
 
   if (error || !code) {
     loginUrl.searchParams.set("error", error ?? "Missing auth code");

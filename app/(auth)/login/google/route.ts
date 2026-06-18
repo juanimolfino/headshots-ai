@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 
 type CookieToSet = {
   name: string;
@@ -8,16 +9,16 @@ type CookieToSet = {
 };
 
 export async function GET(request: NextRequest) {
-  const origin = new URL(request.url).origin;
   const requestUrl = new URL(request.url);
+  const appUrl = getAppUrl(requestUrl.origin);
   const cookiesToApply: CookieToSet[] = [];
   if (requestUrl.searchParams.get("legal_consent") !== "1") {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "Aceptá los términos y la política de privacidad para continuar.");
+    const loginUrl = new URL("/login", appUrl);
+    loginUrl.searchParams.set("error", "Accept the terms and privacy policy to continue.");
     return NextResponse.redirect(loginUrl);
   }
 
-  const callbackUrl = new URL(`${origin}/callback`);
+  const callbackUrl = new URL("/callback", appUrl);
   callbackUrl.searchParams.set("legal_consent", "1");
   callbackUrl.searchParams.set("terms_version", requestUrl.searchParams.get("terms_version") ?? "");
   callbackUrl.searchParams.set("privacy_version", requestUrl.searchParams.get("privacy_version") ?? "");
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (error || !data.url) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = new URL("/login", appUrl);
     loginUrl.searchParams.set("error", error?.message ?? "Could not start Google sign in");
     return NextResponse.redirect(loginUrl);
   }

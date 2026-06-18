@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { LEGAL_PRIVACY_VERSION, LEGAL_TERMS_VERSION } from "@/lib/legal/consent";
 
-export function LoginForm({ initialMessage }: { initialMessage?: string }) {
+export function LoginForm({ appUrl, initialMessage }: { appUrl: string; initialMessage?: string }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(initialMessage ?? null);
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export function LoginForm({ initialMessage }: { initialMessage?: string }) {
       return;
     }
     const supabase = createSupabaseBrowserClient();
-    const redirectUrl = new URL(`${window.location.origin}/callback`);
+    const redirectUrl = new URL("/callback", appUrl);
     redirectUrl.searchParams.set("legal_consent", "1");
     redirectUrl.searchParams.set("terms_version", LEGAL_TERMS_VERSION);
     redirectUrl.searchParams.set("privacy_version", LEGAL_PRIVACY_VERSION);
