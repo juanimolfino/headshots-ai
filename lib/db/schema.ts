@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -86,7 +87,11 @@ export const jobs = pgTable("jobs", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
-});
+}, (table) => [
+  index("jobs_user_id_created_at_idx").on(table.userId, table.createdAt.desc()),
+  index("jobs_active_status_created_at_idx").on(table.status, table.createdAt).where(sql`${table.status} in ('pending', 'processing')`),
+  index("jobs_user_id_type_idx").on(table.userId, table.type)
+]);
 
 export const transactions = pgTable("transactions", {
   id: uuid("id").defaultRandom().primaryKey(),

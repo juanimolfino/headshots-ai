@@ -85,6 +85,13 @@
       "when": 1781481600000,
       "tag": "0011_legal_privacy_controls",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781740800000,
+      "tag": "0012_jobs_retention_indexes",
+      "breakpoints": true
     }
   ]
 }
