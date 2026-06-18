@@ -13,7 +13,7 @@ import {
 } from "@/lib/ai/providers/flux-lora-trainer";
 import { getDb } from "@/lib/db";
 import { jobs, users, type JobType } from "@/lib/db/schema";
-import { markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobInput, updateJobMetadata } from "@/lib/db/queries";
+import { cleanupExpiredJobs, markJobDone, markJobProcessing, reapStaleJobs, refundJobCredits, updateJobInput, updateJobMetadata } from "@/lib/db/queries";
 import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send";
 import {
   deleteFalRequestPayloadsBestEffort,
@@ -656,5 +656,41 @@ export const reapStaleAiJobs = inngest.createFunction(
       );
     }
     return result;
+  }
+);
+
+export const cleanupExpiredAiJobs = inngest.createFunction(
+  {
+    id: "cleanup-expired-ai-jobs",
+    retries: 1
+  },
+  { cron: "0 5 * * *" },
+  async ({ step }) => {
+    try {
+      const result = await step.run("cleanup expired ai jobs", async () => cleanupExpiredJobs());
+      if (result.deletedFailedJobs > 0 || result.deletedDoneJobs > 0 || result.storageFailures > 0) {
+        logInfo("ai_job_retention_completed", {
+          area: "inngest.cleanup-expired-ai-jobs",
+          ...result
+        });
+      }
+      if (result.storageFailures > 0) {
+        await step.run("alert retention storage failures", async () =>
+          reportError(new Error(`Retention cleanup had ${result.storageFailures} storage deletion failure${result.storageFailures === 1 ? "" : "s"}`), {
+            area: "inngest.cleanup-expired-ai-jobs",
+            storageFailures: result.storageFailures,
+            checked: result.checked,
+            throttleKey: "retention:storage-delete-failed"
+          })
+        );
+      }
+      return result;
+    } catch (error) {
+      await reportError(error, {
+        area: "inngest.cleanup-expired-ai-jobs",
+        throttleKey: "retention:cron-failed"
+      });
+      throw error;
+    }
   }
 );

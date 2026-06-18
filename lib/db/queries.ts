@@ -1,8 +1,11 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { credits, jobs, subscriptions, transactions, users, type CreditBucket, type CreditKind, type Job, type JobType } from "@/lib/db/schema";
 import { getUsableCreditTotals, planCreditDebit, type CreditBalanceSnapshot, type CreditDebit } from "@/lib/db/credit-balances";
 import { sendPurchaseConfirmationEmail, sendWelcomeEmail } from "@/lib/email/send";
+import { logWarn } from "@/lib/observability/logger";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizeStoragePath } from "@/lib/ai/storage";
 import {
   LEGAL_PRIVACY_VERSION,
   LEGAL_TERMS_VERSION,
@@ -29,8 +32,14 @@ export const STALE_JOB_THRESHOLDS_MS = {
 } satisfies Record<JobType, number>;
 
 const ACTIVE_JOB_STATUSES = ["pending", "processing"] as const;
+const GALLERY_JOB_TYPES_FOR_RETENTION = ["headshot-generate", "headshot-edit", "tts"] as const satisfies JobType[];
+
+export const FAILED_JOB_RETENTION_DAYS = 90;
+export const GALLERY_JOB_RETENTION_DAYS = 180;
+export const JOB_RETENTION_BATCH_LIMIT = 100;
 
 type ActiveJobForReaper = Pick<Job, "id" | "type" | "status" | "createdAt">;
+type RetentionJob = Pick<Job, "id" | "type" | "status" | "createdAt" | "resultUrl" | "result">;
 
 export const REFUND_FALLBACK_NO_CREDIT_DEBITS = "REFUND_FALLBACK_NO_CREDIT_DEBITS";
 
@@ -360,6 +369,123 @@ export async function reapStaleJobs(input: {
     checked: activeJobs.length,
     reaped: reaped.length,
     jobs: reaped
+  };
+}
+
+function daysAgo(now: Date, days: number) {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+}
+
+function collectStrings(value: unknown, output: string[] = []): string[] {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => collectStrings(item, output));
+    return output;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value as Record<string, unknown>).forEach(item => collectStrings(item, output));
+  }
+  return output;
+}
+
+export function getRetentionJobStoragePaths(job: Pick<RetentionJob, "resultUrl" | "result">, bucket: string) {
+  const paths = new Set<string>();
+  for (const value of [job.resultUrl, ...collectStrings(job.result)]) {
+    if (!value) continue;
+    const path = normalizeStoragePath(value, bucket);
+    if (path) paths.add(path);
+  }
+  return Array.from(paths);
+}
+
+async function deleteJobResultStorage(job: RetentionJob, bucket: string) {
+  const paths = getRetentionJobStoragePaths(job, bucket);
+  if (paths.length === 0) return { deleted: 0, skipped: true };
+
+  const { error } = await getSupabaseAdmin().storage.from(bucket).remove(paths);
+  if (error) throw error;
+  return { deleted: paths.length, skipped: false };
+}
+
+export async function cleanupExpiredJobs(input: {
+  now?: Date;
+  limit?: number;
+  bucket?: string;
+  loadFailedJobs?: (cutoff: Date, limit: number) => Promise<RetentionJob[]>;
+  loadDoneGalleryJobs?: (cutoff: Date, limit: number) => Promise<RetentionJob[]>;
+  deleteJobs?: (jobIds: string[]) => Promise<unknown>;
+  deleteStorageForJob?: (job: RetentionJob, bucket: string) => Promise<{ deleted: number; skipped?: boolean }>;
+} = {}) {
+  const now = input.now ?? new Date();
+  const limit = input.limit ?? JOB_RETENTION_BATCH_LIMIT;
+  const bucket = input.bucket ?? process.env.SUPABASE_STORAGE_BUCKET ?? "ai-results";
+  const failedCutoff = daysAgo(now, FAILED_JOB_RETENTION_DAYS);
+  const galleryCutoff = daysAgo(now, GALLERY_JOB_RETENTION_DAYS);
+  const db = getDb();
+
+  const loadFailedJobs = input.loadFailedJobs ?? ((cutoff, batchLimit) =>
+    db.query.jobs.findMany({
+      where: and(eq(jobs.status, "failed"), lt(jobs.createdAt, cutoff)),
+      orderBy: asc(jobs.createdAt),
+      limit: batchLimit
+    }));
+
+  const loadDoneGalleryJobs = input.loadDoneGalleryJobs ?? ((cutoff, batchLimit) =>
+    db.query.jobs.findMany({
+      where: and(
+        eq(jobs.status, "done"),
+        inArray(jobs.type, GALLERY_JOB_TYPES_FOR_RETENTION),
+        lt(jobs.createdAt, cutoff)
+      ),
+      orderBy: asc(jobs.createdAt),
+      limit: batchLimit
+    }));
+
+  const deleteJobs = input.deleteJobs ?? ((jobIds) =>
+    jobIds.length > 0
+      ? db.delete(jobs).where(inArray(jobs.id, jobIds))
+      : Promise.resolve());
+
+  const deleteStorageForJob = input.deleteStorageForJob ?? deleteJobResultStorage;
+  const failedJobs = await loadFailedJobs(failedCutoff, limit);
+  const doneJobs = await loadDoneGalleryJobs(galleryCutoff, Math.max(0, limit - failedJobs.length));
+  const doneJobIdsToDelete: string[] = [];
+  let storageDeleted = 0;
+  let storageFailures = 0;
+
+  for (const job of doneJobs) {
+    try {
+      const deleted = await deleteStorageForJob(job, bucket);
+      storageDeleted += deleted.deleted;
+      doneJobIdsToDelete.push(job.id);
+    } catch (error) {
+      storageFailures += 1;
+      logWarn("job_retention_storage_delete_failed", {
+        area: "db.retention",
+        jobId: job.id,
+        jobType: job.type,
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const jobIdsToDelete = [...failedJobs.map(job => job.id), ...doneJobIdsToDelete];
+  await deleteJobs(jobIdsToDelete);
+
+  return {
+    checked: failedJobs.length + doneJobs.length,
+    deletedFailedJobs: failedJobs.length,
+    deletedDoneJobs: doneJobIdsToDelete.length,
+    skippedDoneJobs: doneJobs.length - doneJobIdsToDelete.length,
+    storageDeleted,
+    storageFailures,
+    thresholds: {
+      failedDays: FAILED_JOB_RETENTION_DAYS,
+      galleryDays: GALLERY_JOB_RETENTION_DAYS
+    }
   };
 }
 

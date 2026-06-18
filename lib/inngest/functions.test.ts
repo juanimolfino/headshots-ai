@@ -20,7 +20,17 @@ describe("Inngest AI job safeguards", () => {
     expect(source).toContain("reapStaleJobs()");
     expect(source).toContain('"alert reaped stale ai jobs"');
     expect(route).toContain("reapStaleAiJobs");
-    expect(route).toContain("functions: [runAiJob, reapStaleAiJobs]");
+    expect(route).toContain("functions: [runAiJob, reapStaleAiJobs, cleanupExpiredAiJobs]");
+  });
+
+  it("registers daily retention cleanup as a separate Inngest cron function", () => {
+    expect(source).toContain('id: "cleanup-expired-ai-jobs"');
+    expect(source).toContain('{ cron: "0 5 * * *" }');
+    expect(source).toContain("cleanupExpiredJobs()");
+    expect(source).toContain('"alert retention storage failures"');
+    expect(source).toContain('throttleKey: "retention:cron-failed"');
+    expect(route).toContain("cleanupExpiredAiJobs");
+    expect(route).toContain("functions: [runAiJob, reapStaleAiJobs, cleanupExpiredAiJobs]");
   });
 
   it("sends completed job notifications through the JobReadyEmail template helper", () => {
