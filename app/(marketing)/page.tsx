@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Button, ButtonArrow } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +120,16 @@ export default async function LandingPage() {
             <Reveal delay={1} className="hero-visual">
               <div className="hero-shots" role="group" aria-label="Sample AI headshots">
                 {HERO_SHOTS.map((s, i) => (
-                  <Placeholder key={i} label={s.label} alt={s.alt} />
+                  <div key={i} className="ph hero-shot-card" data-label="">
+                    <Image
+                      src={s.src}
+                      alt={s.alt}
+                      fill
+                      sizes="(max-width: 900px) 50vw, 22vw"
+                      className="hero-shot-image"
+                    />
+                    <span className="hero-shot-label">{s.label}</span>
+                  </div>
                 ))}
               </div>
             </Reveal>

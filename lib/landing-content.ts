@@ -79,19 +79,23 @@ export const WHY = [
 export const HERO_SHOTS = [
   {
     label: "professional · f",
+    src: "/images-landing-page/professional-image-example.jpg",
     alt: "Sample AI headshot: woman in business attire against a neutral background, professional style",
   },
   {
     label: "cinematic · m",
+    src: "/images-landing-page/cinematic-image-example.jpg",
     alt: "Sample AI headshot: man with dramatic editorial lighting, cinematic style",
   },
   {
     label: "natural · m",
+    src: "/images-landing-page/natural-image-example.jpg",
     alt: "Sample AI headshot: man in soft daylight with a candid, approachable expression, natural style",
   },
   {
-    label: "professional · f",
-    alt: "Sample AI headshot: woman with sharp focus and a confident expression, professional style",
+    label: "freestyle · f",
+    src: "/images-landing-page/free-image-example.jpg",
+    alt: "Sample AI headshot: woman with a more expressive creative portrait style, freestyle look",
   },
 ];
 
