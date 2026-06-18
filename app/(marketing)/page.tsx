@@ -151,7 +151,16 @@ export default async function LandingPage() {
                   delay={(i || undefined) as 1 | 2 | undefined}
                   className="step"
                 >
-                  <Placeholder label={step.label} alt={step.alt} />
+                  <div className="ph step-shot-card" data-label="">
+                    <Image
+                      src={step.src}
+                      alt={step.alt}
+                      fill
+                      sizes="(max-width: 900px) 100vw, 30vw"
+                      className="step-shot-image"
+                    />
+                    <span className="step-shot-label">{step.label}</span>
+                  </div>
                   <span className="num">{step.num}</span>
                   <h3>{step.title}</h3>
                   <p>{step.body}</p>

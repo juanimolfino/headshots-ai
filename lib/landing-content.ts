@@ -15,6 +15,7 @@ export const STEPS = [
     title: "Upload 10–20 selfies",
     body: "Any lighting, any angle. Just be yourself — variety helps the model learn your face.",
     label: "upload · selfies",
+    src: "/steps/1-step.png",
     alt: "Illustration of a grid of casual selfies being uploaded",
   },
   {
@@ -22,6 +23,7 @@ export const STEPS = [
     title: "We train your personal AI model",
     body: "Your own model, ready in about ten minutes. We'll email you the moment it's done.",
     label: "train · ~10 min",
+    src: "/steps/2-step.png",
     alt: "Illustration of an AI model training progress indicator",
   },
   {
@@ -29,6 +31,7 @@ export const STEPS = [
     title: "Generate headshots in any style",
     body: "Pick a look, generate as many as you like, and download in high resolution.",
     label: "generate · hi-res",
+    src: "/steps/3-step.png",
     alt: "Illustration of finished high-resolution headshots ready to download",
   },
 ];

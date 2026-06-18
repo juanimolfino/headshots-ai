@@ -383,6 +383,31 @@ body {
   .step .num { font-family: var(--serif); font-size: 15px; color: var(--navy); font-weight: 600; letter-spacing: 0.04em; margin-bottom: 18px; display: block; }
   .step h3 { font-size: 23px; margin-bottom: 10px; letter-spacing: -0.01em; }
   .step p { color: var(--ink-soft); font-size: 15.5px; }
+  .step-shot-card::after { content: none; }
+  .step-shot-image { object-fit: cover; }
+  .step-shot-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(17, 24, 39, 0.12), transparent 36%);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .step-shot-label {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 2;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: var(--ink-muted);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    padding: 5px 9px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    backdrop-filter: blur(2px);
+  }
   .step .ph { aspect-ratio: 16/11; margin-bottom: 26px; }
 
   /* ---------- Styles cards (contenedor = <Card>) ---------- */
