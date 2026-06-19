@@ -30,7 +30,15 @@ import {
   getUserFacingJobError,
   splitJobsByStatus
 } from "@/lib/job-ux";
+import { legalCompanyInfo } from "@/lib/legal/company-info";
 import { cn } from "@/lib/utils";
+
+const SUPPORT_EMAIL = legalCompanyInfo.supportEmail;
+
+function supportMailto(jobId?: string | null) {
+  const subject = jobId ? `Pic Your AI support - job ${jobId}` : "Pic Your AI support";
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
+}
 
 export type StyleValue = "professional" | "cinematic" | "natural";
 export type CountValue = 1 | 2 | 4;
@@ -626,8 +634,8 @@ function FailedGenerationRow({
             type="button"
             onClick={onDismiss}
             className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
-            aria-label="Ocultar fallo"
-            title="Ocultar"
+            aria-label="Borrar fallo"
+            title="Borrar"
           >
             <X className="size-4" />
           </button>
@@ -637,7 +645,7 @@ function FailedGenerationRow({
           </Button>
           {message.cta === "contact" ? (
             <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-              <Link href="mailto:juanimolfinooo@gmail.com">Soporte</Link>
+              <Link href={supportMailto(job.id)}>Soporte</Link>
             </Button>
           ) : null}
         </div>
@@ -962,8 +970,8 @@ function TrainingFailedState({
         type="button"
         onClick={onDismiss}
         className="absolute right-8 top-8 rounded-lg p-2 text-ink-muted transition hover:bg-bg-2 hover:text-ink"
-        aria-label="Ocultar fallo"
-        title="Ocultar"
+        aria-label="Borrar fallo"
+        title="Borrar"
       >
         <X className="size-5" />
       </button>
@@ -980,11 +988,11 @@ function TrainingFailedState({
         </Button>
         <Button type="button" variant="outline" onClick={onDismiss} className="h-auto rounded-xl px-[22px] py-3.5">
           <X className="size-4" />
-          Ocultar
+          Borrar
         </Button>
         {message.cta === "contact" ? (
           <Button asChild variant="outline" className="h-auto rounded-xl px-[22px] py-3.5">
-            <Link href="mailto:juanimolfinooo@gmail.com">Contactar soporte</Link>
+            <Link href={supportMailto(job.id)}>Contactar soporte</Link>
           </Button>
         ) : null}
       </div>

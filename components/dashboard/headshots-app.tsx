@@ -48,6 +48,7 @@ import {
   hasEnoughCredits,
   splitJobsByStatus
 } from "@/lib/job-ux";
+import { legalCompanyInfo } from "@/lib/legal/company-info";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -62,12 +63,17 @@ const QUICK_OPTIMIZE_THRESHOLD_BYTES = 4 * 1024 * 1024;
 const QUICK_MAX_UPLOAD_DIMENSION = 2048;
 const QUICK_UPLOAD_JPEG_QUALITY = 0.92;
 const POLL_INTERVAL_MS = 8000;
-const SUPPORT_EMAIL = "juanimolfinooo@gmail.com";
+const SUPPORT_EMAIL = legalCompanyInfo.supportEmail;
 const FALLBACK_CREATED_AT = "1970-01-01T00:00:00.000Z";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_UPLOAD_DIMENSION = 1024;
 const UPLOAD_JPEG_QUALITY = 0.88;
 const ACTIVE_JOB_STATUSES = new Set<JobStatus>(["pending", "processing"]);
+
+function supportMailto(jobId?: string | null) {
+  const subject = jobId ? `Pic Your AI support - job ${jobId}` : "Pic Your AI support";
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
+}
 
 const STYLE_OPTIONS = [
   {
@@ -491,18 +497,6 @@ function optimizeQuickEditImage(file: File): Promise<File> {
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
-function readDismissedFailedJobIds(storageKey: string) {
-  if (typeof window === "undefined") return new Set<string>();
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    const parsed = raw ? JSON.parse(raw) as unknown : null;
-    return new Set(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
 export function HeadshotsApp({
   userEmail,
   initialCredits,
@@ -514,11 +508,7 @@ export function HeadshotsApp({
 }) {
   const [credits, setCredits] = useState<DashboardCredits>(initialCredits);
   const [subscription, setSubscription] = useState<DashboardSubscription>(initialSubscription);
-  const dismissedFailedStorageKey = `headshots:dismissed-failed-jobs:${userEmail}`;
   const [toasts, setToasts] = useState<JobToastItem[]>([]);
-  const [dismissedFailedJobIds, setDismissedFailedJobIds] = useState<Set<string>>(
-    () => readDismissedFailedJobIds(dismissedFailedStorageKey)
-  );
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [accountDeletionMessage, setAccountDeletionMessage] = useState<string | null>(null);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -720,12 +710,6 @@ export function HeadshotsApp({
     emitJobToastEvents(jobs.map(job => toHeadshotToastJob(job, "headshot-edit")), "edit");
   }, [emitJobToastEvents, refreshCreditsForNewFailures]);
 
-  const deleteEditJob = useCallback(async (jobId: string) => {
-    const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setEditJobs(prev => prev.filter(j => j.id !== jobId));
-  }, []);
-
   useEffect(() => {
     const id = window.setTimeout(() => void loadModels(), 0);
     return () => window.clearTimeout(id);
@@ -879,7 +863,7 @@ export function HeadshotsApp({
     }
   }
 
-  function resetGeneration() {
+  const resetGeneration = useCallback(() => {
     setGenerationJobId(null);
     setGenerationJobKind(null);
     setGenerationStatus(null);
@@ -896,7 +880,21 @@ export function HeadshotsApp({
     setBackground(null);
     setAttireType(null);
     setAttireColor(null);
-  }
+  }, []);
+
+  const deleteJob = useCallback(async (jobId: string) => {
+    const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+    if (!res.ok) return;
+    setEditJobs(prev => prev.filter(j => j.id !== jobId));
+    setGenerateJobs(prev => prev.filter(j => j.id !== jobId));
+    setFailedTrainingJobs(prev => prev.filter(j => j.id !== jobId));
+    if (selectedModelId === jobId) {
+      setSelectedModelId(trainedModels.find(job => job.id !== jobId)?.id ?? null);
+    }
+    if (generationJobId === jobId) {
+      resetGeneration();
+    }
+  }, [generationJobId, resetGeneration, selectedModelId, trainedModels]);
 
   async function renameModel(modelId: string, newName: string) {
     const trimmed = newName.trim().slice(0, 60);
@@ -1363,23 +1361,7 @@ export function HeadshotsApp({
   }
 
   function dismissFailedJob(jobId: string) {
-    setDismissedFailedJobIds(prev => {
-      const next = new Set(prev);
-      next.add(jobId);
-      try {
-        window.localStorage.setItem(dismissedFailedStorageKey, JSON.stringify(Array.from(next)));
-      } catch {
-        // Local persistence is best-effort only.
-      }
-      return next;
-    });
-
-    if (selectedModelId === jobId) {
-      setSelectedModelId(trainedModels[0]?.id ?? null);
-    }
-    if (generationJobId === jobId) {
-      resetGeneration();
-    }
+    void deleteJob(jobId);
   }
 
   function handleToastAction(toast: JobToastItem) {
@@ -1451,7 +1433,7 @@ export function HeadshotsApp({
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
-  const visibleFailedTrainingJobs = failedTrainingJobs.filter(job => !dismissedFailedJobIds.has(job.id));
+  const visibleFailedTrainingJobs = failedTrainingJobs;
   const selectedModel = trainedModels.find(m => m.id === selectedModelId) ?? null;
   const selectedTrainingFailedJob = visibleFailedTrainingJobs.find(m => m.id === selectedModelId) ?? null;
 
@@ -1462,8 +1444,8 @@ export function HeadshotsApp({
         return loraUrl && modelLora && loraUrl === modelLora;
       })
     : [];
-  const visibleModelGenerateJobs = modelGenerateJobs.filter(job => job.status !== "failed" || !dismissedFailedJobIds.has(job.id));
-  const visibleEditJobs = editJobs.filter(job => job.status !== "failed" || !dismissedFailedJobIds.has(job.id));
+  const visibleModelGenerateJobs = modelGenerateJobs;
+  const visibleEditJobs = editJobs;
 
   const localActiveGenerationJob: ActiveGenerationJob | null =
     generationJobId && !signedUrls && generationStatus !== "failed"
@@ -1572,7 +1554,7 @@ export function HeadshotsApp({
             uploading={quickUploading}
             message={quickMessage}
             editJobs={visibleEditJobs}
-            onDeleteEdit={deleteEditJob}
+            onDeleteEdit={deleteJob}
             onDismissFailedJob={dismissFailedJob}
             generationJobId={generationJobKind === "edit" ? generationJobId : null}
             generationStatus={generationJobKind === "edit" ? generationStatus : null}
@@ -1683,6 +1665,24 @@ export function HeadshotsApp({
                       View subscription plans
                     </Link>
                   )}
+                </div>
+              </div>
+
+              <div className="rounded-[18px] border border-line bg-white/80 px-4 py-4 text-left text-ink">
+                <div className="flex items-center gap-2">
+                  <Info className="size-4 shrink-0 text-navy" />
+                  <h3 className="text-sm font-semibold">Support</h3>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-muted">
+                  Need help with credits, billing, or a failed generation?
+                </p>
+                <div className="mt-4">
+                  <a
+                    href={supportMailto()}
+                    className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted"
+                  >
+                    Contact support
+                  </a>
                 </div>
               </div>
 
@@ -2171,7 +2171,7 @@ function QuickEditPanel({
               </Button>
               {currentFailure.cta === "contact" ? (
                 <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-                  <Link href={`mailto:${SUPPORT_EMAIL}`}>Contactar soporte</Link>
+                  <Link href={supportMailto(generationJobId)}>Contactar soporte</Link>
                 </Button>
               ) : null}
               {generationJobId ? (
@@ -2183,7 +2183,7 @@ function QuickEditPanel({
                   className="border-red-200 text-red-700 hover:bg-red-50"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Ocultar
+                  Borrar
                 </Button>
               ) : null}
             </div>
@@ -3070,8 +3070,8 @@ function FailedHistoryRow({
                 type="button"
                 onClick={onDismiss}
                 className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
-                aria-label="Ocultar fallo"
-                title="Ocultar"
+                aria-label="Borrar fallo"
+                title="Borrar"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -3084,7 +3084,7 @@ function FailedHistoryRow({
             ) : null}
             {message.cta === "contact" ? (
               <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-                <Link href={`mailto:${SUPPORT_EMAIL}`}>Soporte</Link>
+                <Link href={supportMailto(job.id)}>Soporte</Link>
               </Button>
             ) : null}
           </div>

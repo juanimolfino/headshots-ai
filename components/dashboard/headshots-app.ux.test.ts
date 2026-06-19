@@ -53,15 +53,14 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain('data.status === "done" || data.status === "failed"');
   });
 
-  it("lets users hide persistent failed jobs from the visible history", () => {
-    expect(appSource).toContain("dismissedFailedJobIds");
+  it("lets users permanently delete failed jobs from history", () => {
     expect(appSource).toContain("dismissFailedJob");
-    expect(appSource).toContain("window.localStorage.setItem(dismissedFailedStorageKey");
+    expect(appSource).toContain('fetch(`/api/jobs/${jobId}`, { method: "DELETE" })');
     expect(appSource).toContain("visibleFailedTrainingJobs");
     expect(appSource).toContain("visibleModelGenerateJobs");
     expect(appSource).toContain("visibleEditJobs");
     expect(dashboardSource).toContain("onDismissFailedJob");
-    expect(dashboardSource).toContain("Ocultar");
+    expect(dashboardSource).toContain("Borrar");
   });
 
   it("requires explicit consent before uploading photos for training or quick edit", () => {
@@ -85,6 +84,8 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("View subscription plans");
     expect(appSource).toContain("Will cancel at period end");
     expect(appSource).toContain("No active subscription");
+    expect(appSource).toContain("Contact support");
+    expect(appSource).toContain("supportMailto()");
     expect(appSource).toContain("deleteConfirmChecked");
     expect(appSource).toContain("deleteConfirmText !== \"DELETE\"");
     expect(appSource).toContain("e.target.value.toUpperCase()");
