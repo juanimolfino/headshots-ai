@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { siteConfig } from "@/lib/seo";
+import { absoluteUrl, siteConfig } from "@/lib/seo";
 
 export const size = {
   width: 1200,
@@ -25,7 +25,13 @@ export default function OpenGraphImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <div style={{ width: 24, height: 24, borderRadius: 999, background: "#1b2440" }} />
+          <img
+            src={absoluteUrl("/picyourai_icon_512_white.png")}
+            alt=""
+            width={56}
+            height={56}
+            style={{ borderRadius: 14 }}
+          />
           <div style={{ fontSize: 42, fontWeight: 700, letterSpacing: -1 }}>{siteConfig.name}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>

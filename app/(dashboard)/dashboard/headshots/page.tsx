@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { HeadshotsApp } from "@/components/dashboard/headshots-app";
+import { siteConfig } from "@/lib/seo";
 import { ensureUserProfile, getDashboard } from "@/lib/db/queries";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Headshots AI" };
+export const metadata = { title: `${siteConfig.name} Dashboard` };
 
 export default async function HeadshotsPage() {
   const supabase = await createSupabaseServerClient();

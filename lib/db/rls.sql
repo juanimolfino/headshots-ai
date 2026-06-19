@@ -1,4 +1,4 @@
--- Row Level Security for headshots-ai
+-- Row Level Security for Pic Your AI
 -- Run this in the Supabase SQL editor. Safe to re-run — uses DROP IF EXISTS before each CREATE.
 -- The app always uses SUPABASE_SERVICE_ROLE_KEY server-side, which bypasses RLS.
 -- These policies protect direct Supabase API calls (e.g. anyone who gets the anon key).
