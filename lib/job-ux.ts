@@ -63,22 +63,22 @@ export function getTimedProgress(input: {
 }
 
 export function getJobStage(type: JobUxType | "training" | "generate" | "edit", status: JobUxStatus | null, finalizing = false) {
-  if (finalizing) return "Finalizando";
-  if (status === "failed") return "Falló";
-  if (status === "done") return "Listo";
-  if (status === "pending") return "En cola";
-  if (type === "headshot-training" || type === "training") return "Entrenando";
-  if (type === "headshot-edit" || type === "edit") return "Editando";
-  return "Generando";
+  if (finalizing) return "Finalizing";
+  if (status === "failed") return "Failed";
+  if (status === "done") return "Ready";
+  if (status === "pending") return "Queued";
+  if (type === "headshot-training" || type === "training") return "Training";
+  if (type === "headshot-edit" || type === "edit") return "Editing";
+  return "Generating";
 }
 
 export function formatLastUpdated(lastUpdatedAt: string | Date | null | undefined, now: Date = new Date()) {
   if (!lastUpdatedAt) return null;
   const elapsed = getElapsedSeconds(lastUpdatedAt, now);
-  if (elapsed < 5) return "Ultima actualizacion: recien";
-  if (elapsed < 60) return `Ultima actualizacion: hace ${elapsed}s`;
+  if (elapsed < 5) return "Last updated: just now";
+  if (elapsed < 60) return `Last updated: ${elapsed}s ago`;
   const minutes = Math.floor(elapsed / 60);
-  return `Ultima actualizacion: hace ${minutes}m`;
+  return `Last updated: ${minutes}m ago`;
 }
 
 export function getJobProgressInfo(input: {
@@ -101,8 +101,8 @@ export function getJobProgressInfo(input: {
     lastUpdatedLabel: formatLastUpdated(input.lastUpdatedAt, now),
     isOverEta,
     statusText: isOverEta
-      ? "Tardando mas de lo normal, segui esperando."
-      : `Tiempo estimado: ${formatDuration(etaSeconds)}`
+      ? "Taking longer than usual. You can keep waiting."
+      : `Estimated time: ${formatDuration(etaSeconds)}`
   };
 }
 
@@ -110,9 +110,9 @@ export function getRefundCopy(credits: number | null | undefined, kind: CreditKi
   const amount = Math.max(0, Math.trunc(credits ?? 0));
   const safeAmount = amount || 1;
   if (kind === "gold") {
-    return `Te devolvimos ${safeAmount} ${safeAmount === 1 ? "credito dorado" : "creditos dorados"}.`;
+    return `We refunded ${safeAmount} golden ${safeAmount === 1 ? "credit" : "credits"}.`;
   }
-  return `Te devolvimos ${safeAmount} ${safeAmount === 1 ? "credito azul" : "creditos azules"}.`;
+  return `We refunded ${safeAmount} blue ${safeAmount === 1 ? "credit" : "credits"}.`;
 }
 
 export function hasEnoughCredits(available: number, cost: number) {
@@ -124,11 +124,10 @@ export function getInsufficientCreditsMessage(input: {
   required: number;
   available: number;
 }) {
-  const label = input.kind === "gold" ? "dorados" : "azules";
-  const singular = input.kind === "gold" ? "dorado" : "azul";
+  const label = input.kind === "gold" ? "golden" : "blue";
   const required = Math.max(1, Math.trunc(input.required));
   const available = Math.max(0, Math.trunc(input.available));
-  return `Necesitas ${required} ${required === 1 ? `credito ${singular}` : `creditos ${label}`} y tenes ${available}.`;
+  return `You need ${required} ${label} ${required === 1 ? "credit" : "credits"} and you have ${available}.`;
 }
 
 function normalizeErrorText(error: string | null | undefined) {
@@ -146,8 +145,8 @@ export function getUserFacingJobError(error: string | null | undefined): JobUser
   if (lower.includes("insufficient_credits") || lower.includes("not enough credit") || lower.includes("saldo insuficiente")) {
     return {
       category: "insufficient_credits",
-      title: "No hay creditos suficientes",
-      description: "Necesitas comprar creditos para iniciar este trabajo.",
+      title: "Not enough credits",
+      description: "You need to buy credits before starting this job.",
       cta: "buy"
     };
   }
@@ -155,8 +154,8 @@ export function getUserFacingJobError(error: string | null | undefined): JobUser
   if (lower.includes("timed out") || lower.includes("timeout") || lower.includes("tardo mas")) {
     return {
       category: "timeout",
-      title: "El trabajo tardo mas de lo esperado",
-      description: "Lo detuvimos de forma segura. Podes reintentarlo cuando quieras.",
+      title: "This job took longer than expected",
+      description: "We stopped it safely. You can try again whenever you want.",
       cta: "retry"
     };
   }
@@ -172,8 +171,8 @@ export function getUserFacingJobError(error: string | null | undefined): JobUser
   ) {
     return {
       category: "invalid_image",
-      title: "No pudimos usar una de las fotos",
-      description: "Revisa que las imagenes sean claras, validas y aptas para procesar. Despues reintentalo.",
+      title: "We could not use one of the photos",
+      description: "Make sure the images are clear, valid, and suitable for processing. Then try again.",
       cta: "retry"
     };
   }
@@ -188,16 +187,16 @@ export function getUserFacingJobError(error: string | null | undefined): JobUser
   ) {
     return {
       category: "provider",
-      title: "No pudimos procesar este trabajo",
-      description: "El proveedor de IA fallo o no devolvio una imagen valida. Reintenta en unos minutos.",
+      title: "We could not process this job",
+      description: "The AI provider failed or did not return a valid image. Try again in a few minutes.",
       cta: "retry"
     };
   }
 
   return {
     category: "generic",
-    title: "No pudimos completar este trabajo",
-    description: normalized || "Reintentalo. Si vuelve a pasar, contacta soporte.",
+    title: "We could not complete this job",
+    description: normalized || "Try again. If it keeps happening, contact support.",
     cta: "contact"
   };
 }

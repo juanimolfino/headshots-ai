@@ -34,9 +34,9 @@ type HeadshotJob = {
 type SelectedPhoto = { id: string; file: File; previewUrl: string };
 
 const STYLE_OPTIONS: { label: string; value: StyleValue; description: string }[] = [
-  { label: "Profesional", value: "professional", description: "Fondo neutro, iluminación de estudio. Ideal para LinkedIn y CV." },
-  { label: "Cinematográfico", value: "cinematic", description: "Estilo editorial con mayor contraste. Para perfiles creativos." },
-  { label: "Natural", value: "natural", description: "Sin filtros adicionales. El resultado más cercano a tus fotos originales." }
+  { label: "Professional", value: "professional", description: "Neutral background, studio lighting. Ideal for LinkedIn and resumes." },
+  { label: "Cinematic", value: "cinematic", description: "Editorial style with higher contrast. For creative profiles." },
+  { label: "Natural", value: "natural", description: "No extra filters. The result closest to your original photos." }
 ];
 
 const IMAGE_COUNTS = [1, 2, 4] as const;
@@ -44,7 +44,7 @@ const IMAGE_COUNTS = [1, 2, 4] as const;
 function getModelName(job: HeadshotJob): string {
   const name = job.input?.name;
   if (typeof name === "string" && name.trim()) return name.trim();
-  return `Modelo ${new Date(job.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}`;
+  return `Model ${new Date(job.createdAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}`;
 }
 
 function formatElapsed(seconds: number) {
@@ -245,7 +245,7 @@ export function HeadshotFlow() {
     const accepted: SelectedPhoto[] = [];
     for (const file of Array.from(fileList)) {
       if (!ALLOWED_TYPES.has(file.type)) continue;
-      if (file.size > MAX_FILE_SIZE_BYTES) { errors.push(`${file.name} supera 10MB.`); continue; }
+      if (file.size > MAX_FILE_SIZE_BYTES) { errors.push(`${file.name} is over 10 MB.`); continue; }
       accepted.push({ id: `${file.name}-${file.size}-${crypto.randomUUID()}`, file, previewUrl: URL.createObjectURL(file) });
     }
     const slots = MAX_PHOTOS - photos.length;
@@ -253,7 +253,7 @@ export function HeadshotFlow() {
     for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
     const skipped = accepted.length - toAdd.length;
     setPhotos(prev => [...prev, ...toAdd]);
-    if (skipped > 0) setFormMessage(`Solo podés subir hasta ${MAX_PHOTOS} fotos.`);
+    if (skipped > 0) setFormMessage(`You can upload up to ${MAX_PHOTOS} photos.`);
     else if (errors[0]) setFormMessage(errors[0]);
   }
 
@@ -268,13 +268,13 @@ export function HeadshotFlow() {
   // ── Upload photos ──────────────────────────────────────────────────────────
 
   async function uploadPhotos() {
-    if (photos.length < MIN_PHOTOS) { setFormMessage(`Subí al menos ${MIN_PHOTOS} fotos.`); return; }
+    if (photos.length < MIN_PHOTOS) { setFormMessage(`Upload at least ${MIN_PHOTOS} photos.`); return; }
     setUploading(true);
     setFormMessage(null);
     try {
       const urls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
-        setFormMessage(`Subiendo foto ${i + 1} de ${photos.length}...`);
+        setFormMessage(`Uploading photo ${i + 1} of ${photos.length}...`);
         const file = await compressImage(photos[i].file);
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
@@ -283,16 +283,16 @@ export function HeadshotFlow() {
         });
         const initData = await readJsonOrText(initRes) as { uploadUrl?: string; fileUrl?: string; error?: string } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
-          throw new Error(initData?.error ?? `No pudimos preparar la subida de ${photos[i].file.name}.`);
+          throw new Error(initData?.error ?? `Could not prepare upload for ${photos[i].file.name}.`);
         }
         const upRes = await fetch(initData.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-        if (!upRes.ok) throw new Error(`No pudimos subir ${photos[i].file.name}.`);
+        if (!upRes.ok) throw new Error(`Could not upload ${photos[i].file.name}.`);
         urls.push(initData.fileUrl);
       }
       setUploadedUrls(urls);
       setFormMessage(null);
     } catch (err) {
-      setFormMessage(err instanceof Error ? err.message : "No pudimos subir las fotos. Probá de nuevo.");
+      setFormMessage(err instanceof Error ? err.message : "Could not upload photos. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -302,7 +302,7 @@ export function HeadshotFlow() {
 
   async function startTraining() {
     if (!uploadedUrls) return;
-    if (!modelName.trim()) { setFormMessage("Dale un nombre a tu modelo."); return; }
+    if (!modelName.trim()) { setFormMessage("Give your model a name."); return; }
     setTrainingCreating(true);
     setFormMessage(null);
     try {
@@ -315,8 +315,8 @@ export function HeadshotFlow() {
         })
       });
       const data = await res.json() as { jobId?: string; error?: string };
-      if (res.status === 402) throw new Error("No tenés créditos suficientes.");
-      if (!res.ok) throw new Error(data.error ?? "No pudimos iniciar el entrenamiento.");
+      if (res.status === 402) throw new Error("You do not have enough credits.");
+      if (!res.ok) throw new Error(data.error ?? "Could not start training.");
       // Reset form
       for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
       setPhotos([]);
@@ -326,7 +326,7 @@ export function HeadshotFlow() {
       trainingStartRef.current = Date.now();
       await loadModels();
     } catch (err) {
-      setFormMessage(err instanceof Error ? err.message : "No pudimos iniciar el entrenamiento.");
+      setFormMessage(err instanceof Error ? err.message : "Could not start training.");
     } finally {
       setTrainingCreating(false);
     }
@@ -350,8 +350,8 @@ export function HeadshotFlow() {
       })
     });
     const data = await res.json() as { jobId?: string; error?: string };
-    if (res.status === 402) { setGenerationMessage("No tenés créditos suficientes."); return; }
-    if (!res.ok) { setGenerationMessage(data.error ?? "No pudimos iniciar la generación."); return; }
+    if (res.status === 402) { setGenerationMessage("You do not have enough credits."); return; }
+    if (!res.ok) { setGenerationMessage(data.error ?? "Could not start generation."); return; }
     generationStartRef.current = Date.now();
     setGenerationJobId(data.jobId!);
     setGenerationStatus("pending");
@@ -376,28 +376,28 @@ export function HeadshotFlow() {
 
   return (
     <div className="space-y-6">
-      {/* STAGE 1 — Tus modelos */}
+      {/* STAGE 1 — Models */}
       <section className="rounded-lg border bg-card p-5">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Tus modelos</h1>
+            <h1 className="text-2xl font-semibold">Your models</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Cada modelo se entrena con tus fotos y podés reutilizarlo para generar headshots cuantas veces quieras.
+              Each model is trained on your photos and can be reused to generate headshots whenever you want.
             </p>
           </div>
           <Button type="button" onClick={() => { setShowNewModelForm(v => !v); setFormMessage(null); }} variant="outline" size="sm">
             <Plus className="h-4 w-4" />
-            Entrenar nuevo modelo
+            Train new model
           </Button>
         </div>
 
         {loadingModels ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Cargando modelos...
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading models...
           </div>
         ) : trainedModels.length === 0 && !activeTrainingJob ? (
           <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
-            Todavía no tenés modelos entrenados. Hacé click en <strong>Entrenar nuevo modelo</strong> para empezar.
+            You do not have any trained models yet. Click <strong>Train new model</strong> to get started.
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -422,17 +422,17 @@ export function HeadshotFlow() {
               <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">
-                  Entrenando &quot;{getModelName(activeTrainingJob)}&quot;...
+                  Training &quot;{getModelName(activeTrainingJob)}&quot;...
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Estado: {activeTrainingJob.status} · Tiempo: {formatElapsed(trainingElapsed)} · Puede tardar 15–30 min
+                  Status: {activeTrainingJob.status} · Time: {formatElapsed(trainingElapsed)} · Usually ready in 4-9 minutes
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => { setActiveTrainingJob(null); trainingStartRef.current = null; }}
                 className="ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-muted"
-                aria-label="Descartar"
+                aria-label="Dismiss"
               >
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -441,22 +441,22 @@ export function HeadshotFlow() {
         ) : null}
       </section>
 
-      {/* STAGE 1 — Entrenar nuevo modelo (form) */}
+      {/* STAGE 1 — Train new model form */}
       {showNewModelForm ? (
         <section className="rounded-lg border bg-card p-5">
-          <h2 className="mb-4 text-xl font-semibold">Entrenar nuevo modelo</h2>
+          <h2 className="mb-4 text-xl font-semibold">Train new model</h2>
 
           {/* Model name */}
           <div className="mb-5">
             <label className="mb-1.5 block text-sm font-medium" htmlFor="model-name">
-              Nombre del modelo
+              Model name
             </label>
             <input
               id="model-name"
               type="text"
               value={modelName}
               onChange={e => setModelName(e.target.value)}
-              placeholder="Ej: Juan, Pedro para LinkedIn, etc."
+              placeholder="e.g. Alex, LinkedIn profile, etc."
               maxLength={60}
               disabled={uploading || !!uploadedUrls || trainingCreating}
               className="w-full max-w-sm rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
@@ -467,7 +467,7 @@ export function HeadshotFlow() {
           {!uploadedUrls ? (
             <>
               <div className="mb-4 flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">Subí entre {MIN_PHOTOS} y {MAX_PHOTOS} fotos tuyas. Distintos ángulos, buena luz, sin anteojos de sol.</p>
+                <p className="text-sm text-muted-foreground">Upload {MIN_PHOTOS} to {MAX_PHOTOS} photos of yourself. Use different angles, good lighting, and no sunglasses.</p>
                 <span className="rounded-md border px-3 py-1 text-sm font-medium">{photos.length} / {MAX_PHOTOS}</span>
               </div>
 
@@ -480,8 +480,8 @@ export function HeadshotFlow() {
                 className="flex min-h-36 w-full flex-col items-center justify-center rounded-lg border border-dashed bg-background px-6 py-6 text-center transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="mb-2 h-7 w-7 text-muted-foreground" />
-                <span className="text-sm font-medium">Arrastrá o hacé click para elegir fotos</span>
-                <span className="mt-1 text-xs text-muted-foreground">JPG o PNG · Máx 10 MB por foto</span>
+                <span className="text-sm font-medium">Drag or click to choose photos</span>
+                <span className="mt-1 text-xs text-muted-foreground">JPG or PNG · Max 10 MB per photo</span>
               </button>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple className="hidden"
                 onChange={e => { if (e.target.files) addFiles(e.target.files); e.currentTarget.value = ""; }} />
@@ -504,13 +504,13 @@ export function HeadshotFlow() {
                 {photos.length >= MIN_PHOTOS ? (
                   <Button type="button" onClick={uploadPhotos} disabled={uploading}>
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                    {uploading ? formMessage ?? "Subiendo..." : "Confirmar fotos"}
+                    {uploading ? formMessage ?? "Uploading..." : "Confirm photos"}
                   </Button>
                 ) : null}
                 {!uploading ? (
                   <p className={cn("text-sm", formMessage ? "text-destructive" : "text-muted-foreground")}>
-                    {formMessage ?? (photos.length === 0 ? "Todavía no seleccionaste fotos." :
-                      photos.length < MIN_PHOTOS ? `Agregá ${MIN_PHOTOS - photos.length} foto${MIN_PHOTOS - photos.length === 1 ? "" : "s"} más.` : "Listo para subir.")}
+                    {formMessage ?? (photos.length === 0 ? "You have not selected photos yet." :
+                      photos.length < MIN_PHOTOS ? `Add ${MIN_PHOTOS - photos.length} more photo${MIN_PHOTOS - photos.length === 1 ? "" : "s"}.` : "Ready to upload.")}
                   </p>
                 ) : null}
               </div>
@@ -520,15 +520,15 @@ export function HeadshotFlow() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <Check className="h-4 w-4" />
-                {uploadedUrls.length} fotos subidas correctamente.
+                {uploadedUrls.length} photos uploaded successfully.
               </div>
               <div className="flex items-center gap-3">
                 <Button type="button" onClick={startTraining} disabled={trainingCreating || !modelName.trim()}>
                   {trainingCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {trainingCreating ? "Iniciando..." : "Entrenar modelo"}
+                  {trainingCreating ? "Starting..." : "Train model"}
                 </Button>
                 {formMessage ? <p className="text-sm text-destructive">{formMessage}</p> : (
-                  <p className="text-sm text-muted-foreground">El entrenamiento tarda entre 15 y 30 minutos.</p>
+                  <p className="text-sm text-muted-foreground">Training usually takes 4-9 minutes.</p>
                 )}
               </div>
             </div>
@@ -536,7 +536,7 @@ export function HeadshotFlow() {
         </section>
       ) : null}
 
-      {/* STAGE 2 — Generar con el modelo seleccionado */}
+      {/* STAGE 2 — Generate with the selected model */}
       {selectedModel && !signedUrls ? (
         <section className="rounded-lg border bg-card p-5">
           {generationJobId && generationStatus !== "failed" ? (
@@ -546,12 +546,12 @@ export function HeadshotFlow() {
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Generando tus headshots...</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Modelo: <strong>{getModelName(selectedModel)}</strong></p>
+                <h2 className="text-xl font-semibold">Generating your headshots...</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Model: <strong>{getModelName(selectedModel)}</strong></p>
               </div>
               <div className="rounded-md border bg-background p-3 text-sm space-y-1">
-                <div><span className="text-muted-foreground">Estado: </span>{generationStatus ?? "pending"}</div>
-                <div><span className="text-muted-foreground">Tiempo: </span>{formatElapsed(generationElapsed)}</div>
+                <div><span className="text-muted-foreground">Status: </span>{generationStatus ?? "pending"}</div>
+                <div><span className="text-muted-foreground">Time: </span>{formatElapsed(generationElapsed)}</div>
               </div>
               {generationError ? <p className="text-sm text-destructive">{generationError}</p> : null}
             </div>
@@ -562,19 +562,19 @@ export function HeadshotFlow() {
                 <X className="h-6 w-6" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">No pudimos generar los headshots.</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{generationError ?? "Te devolvimos los créditos si correspondía."}</p>
+                <h2 className="text-xl font-semibold">We could not generate the headshots.</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{generationError ?? "We refunded credits if applicable."}</p>
               </div>
               <Button type="button" onClick={resetGeneration} className="w-fit" variant="outline">
-                <RefreshCw className="h-4 w-4" /> Intentar de nuevo
+                <RefreshCw className="h-4 w-4" /> Try again
               </Button>
             </div>
           ) : (
             /* Style / count picker */
             <>
               <div className="mb-5">
-                <h2 className="text-xl font-semibold">Generar con &quot;{getModelName(selectedModel)}&quot;</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Tu modelo ya está entrenado. Elegí el estilo y la cantidad.</p>
+                <h2 className="text-xl font-semibold">Generate with &quot;{getModelName(selectedModel)}&quot;</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Your model is trained. Choose the style and count.</p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
@@ -592,11 +592,11 @@ export function HeadshotFlow() {
               </div>
 
               <div className="mt-5">
-                <h3 className="text-sm font-medium">Cantidad</h3>
+                <h3 className="text-sm font-medium">Count</h3>
                 <div className="mt-2 inline-flex rounded-md border bg-background p-1">
                   {IMAGE_COUNTS.map(count => (
                     <Button key={count} type="button" size="sm" variant={numImages === count ? "default" : "ghost"} onClick={() => setNumImages(count)}>
-                      {count} {count === 1 ? "foto" : "fotos"}
+                      {count} {count === 1 ? "photo" : "photos"}
                     </Button>
                   ))}
                 </div>
@@ -604,13 +604,13 @@ export function HeadshotFlow() {
 
               <div className="mt-5 flex items-center gap-3">
                 <Button type="button" onClick={startGeneration}>
-                  Generar mis headshots
+                  Generate my headshots
                 </Button>
                 {generationMessage ? (
-                  generationMessage.includes("créditos") ? (
+                  generationMessage.toLowerCase().includes("credit") ? (
                     <div className="flex items-center gap-2 text-sm text-destructive">
                       <span>{generationMessage}</span>
-                      <Button asChild size="sm" variant="outline"><Link href="/pricing">Comprar créditos</Link></Button>
+                      <Button asChild size="sm" variant="outline"><Link href="/pricing">Buy credits</Link></Button>
                     </div>
                   ) : <p className="text-sm text-destructive">{generationMessage}</p>
                 ) : null}
@@ -632,7 +632,7 @@ export function HeadshotFlow() {
         />
       ) : null}
 
-      {/* Historial de headshots */}
+      {/* Headshot history */}
       <HeadshotHistorySection
         generateJobs={generateJobs}
         trainedModels={trainedModels}
@@ -644,7 +644,7 @@ export function HeadshotFlow() {
 
 function ModelCard({ model, isSelected, onSelect }: { model: HeadshotJob; isSelected: boolean; onSelect: () => void }) {
   const name = getModelName(model);
-  const date = new Date(model.completedAt ?? model.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+  const date = new Date(model.completedAt ?? model.createdAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
   return (
     <button type="button" onClick={onSelect}
       className={cn("rounded-lg border bg-background p-4 text-left transition-colors hover:bg-muted w-full",
@@ -653,9 +653,9 @@ function ModelCard({ model, isSelected, onSelect }: { model: HeadshotJob; isSele
         <span className="font-semibold leading-tight">{name}</span>
         {isSelected ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : null}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">Entrenado el {date}</p>
+      <p className="mt-1 text-xs text-muted-foreground">Trained on {date}</p>
       <p className={cn("mt-2 text-xs font-medium", isSelected ? "text-primary" : "text-muted-foreground")}>
-        {isSelected ? "Seleccionado — elegí el estilo abajo" : "Hacer click para generar"}
+        {isSelected ? "Selected - choose the style below" : "Click to generate"}
       </p>
     </button>
   );
@@ -673,15 +673,15 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
     <section className="rounded-lg border bg-card p-5">
       <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-start">
         <div>
-          <h2 className="text-xl font-semibold">¡Tus headshots están listos!</h2>
-          {modelName ? <p className="mt-1 text-sm text-muted-foreground">Modelo: {modelName}</p> : null}
+          <h2 className="text-xl font-semibold">Your headshots are ready</h2>
+          {modelName ? <p className="mt-1 text-sm text-muted-foreground">Model: {modelName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={() => { void downloadAll(urls); }}>
-            <Download className="h-4 w-4" /> Descargar todas
+            <Download className="h-4 w-4" /> Download all
           </Button>
           <Button type="button" variant="outline" onClick={onReset}>
-            <RefreshCw className="h-4 w-4" /> Generar otra sesión
+            <RefreshCw className="h-4 w-4" /> Generate another session
           </Button>
         </div>
       </div>
@@ -695,10 +695,10 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
             <div className="flex items-center justify-between gap-2 p-3">
               <span className="text-sm font-medium">Headshot {i + 1}</span>
               <div className="flex gap-1">
-                <Button type="button" size="sm" variant="ghost" onClick={() => onSelectImage(url)} aria-label="Ver en grande">
+                <Button type="button" size="sm" variant="ghost" onClick={() => onSelectImage(url)} aria-label="View larger">
                   <ExternalLink className="h-4 w-4" />
                 </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }} aria-label="Descargar">
+                <Button type="button" size="sm" variant="ghost" onClick={() => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }} aria-label="Download">
                   <Download className="h-4 w-4" />
                 </Button>
               </div>
@@ -714,10 +714,10 @@ function HeadshotGallery({ urls, modelName, selectedImageUrl, onSelectImage, onC
           <div className="relative max-h-[90vh] max-w-5xl" onClick={e => e.stopPropagation()}>
             <button type="button" onClick={onCloseImage}
               className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/90 shadow-sm hover:bg-background"
-              aria-label="Cerrar imagen">
+              aria-label="Close image">
               <X className="h-4 w-4" />
             </button>
-            <img src={selectedImageUrl} alt="Headshot seleccionado" className="max-h-[90vh] rounded-lg object-contain" />
+            <img src={selectedImageUrl} alt="Selected headshot" className="max-h-[90vh] rounded-lg object-contain" />
           </div>
         </div>
       ) : null}
@@ -734,7 +734,7 @@ function resolveModelName(job: HeadshotJob, trainedModels: HeadshotJob[]): strin
     });
     if (match) return getModelName(match);
   }
-  return "Modelo desconocido";
+  return "Unknown model";
 }
 
 function HeadshotHistorySection({
@@ -776,14 +776,14 @@ function HeadshotHistorySection({
 
   return (
     <section className="rounded-lg border bg-card p-5">
-      <h2 className="mb-4 text-xl font-semibold">Tus headshots</h2>
+      <h2 className="mb-4 text-xl font-semibold">Your headshots</h2>
       <div className="space-y-3">
         {doneJobs.map(job => {
           const isExpanded = expandedJobId === job.id;
           const thumbnailUrls = Array.isArray(job.result) ? (job.result as string[]).slice(0, 4) : [];
           const style = (job.input as { style?: string } | null)?.style ?? "professional";
           const styleLabel = STYLE_OPTIONS.find(s => s.value === style)?.label ?? style;
-          const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" });
+          const date = new Date(job.completedAt ?? job.createdAt).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
           const modelName = resolveModelName(job, trainedModels);
 
           return (
@@ -809,7 +809,7 @@ function HeadshotHistorySection({
                   <p className="mt-0.5 text-xs text-muted-foreground">{styleLabel} · {date}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1 text-xs text-primary">
-                  <span>{isExpanded ? "Ocultar" : "Ver fotos"}</span>
+                  <span>{isExpanded ? "Hide" : "View photos"}</span>
                   <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", isExpanded && "rotate-180")} />
                 </div>
               </button>
@@ -818,13 +818,13 @@ function HeadshotHistorySection({
                 <div className="border-t p-4">
                   {expandedLoading ? (
                     <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando fotos...
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading photos...
                     </div>
                   ) : expandedSignedUrls?.length ? (
                     <>
                       <div className="mb-3 flex justify-end">
                         <Button type="button" variant="outline" size="sm" onClick={() => { void downloadAll(expandedSignedUrls); }}>
-                          <Download className="h-4 w-4" /> Descargar todas
+                          <Download className="h-4 w-4" /> Download all
                         </Button>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -838,7 +838,7 @@ function HeadshotHistorySection({
                               <span className="text-xs font-medium">Headshot {i + 1}</span>
                               <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
                                 onClick={() => { void downloadUrl(url, `headshot-${i + 1}.jpg`); }}
-                                aria-label="Descargar">
+                                aria-label="Download">
                                 <Download className="h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -847,7 +847,7 @@ function HeadshotHistorySection({
                       </div>
                     </>
                   ) : (
-                    <p className="py-2 text-sm text-muted-foreground">No se pudieron cargar las fotos.</p>
+                    <p className="py-2 text-sm text-muted-foreground">Could not load photos.</p>
                   )}
                 </div>
               )}
@@ -863,10 +863,10 @@ function HeadshotHistorySection({
           <div className="relative max-h-[90vh] max-w-5xl" onClick={e => e.stopPropagation()}>
             <button type="button" onClick={() => setSelectedImage(null)}
               className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/90 shadow-sm hover:bg-background"
-              aria-label="Cerrar imagen">
+              aria-label="Close image">
               <X className="h-4 w-4" />
             </button>
-            <img src={selectedImage} alt="Headshot seleccionado" className="max-h-[90vh] rounded-lg object-contain" />
+            <img src={selectedImage} alt="Selected headshot" className="max-h-[90vh] rounded-lg object-contain" />
           </div>
         </div>
       )}

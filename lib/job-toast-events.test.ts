@@ -10,7 +10,7 @@ describe("job toast events", () => {
     })[0];
     expect(trainingEvent).toMatchObject({
       kind: "success",
-      title: "Tu modelo esta listo"
+      title: "Your model is ready"
     });
     expect(trainingEvent).not.toHaveProperty("actionLabel");
 
@@ -21,7 +21,7 @@ describe("job toast events", () => {
     })[0];
     expect(generateEvent).toMatchObject({
       kind: "success",
-      title: "Tus fotos estan listas"
+      title: "Your photos are ready"
     });
     expect(generateEvent).not.toHaveProperty("actionLabel");
 
@@ -32,7 +32,7 @@ describe("job toast events", () => {
     })[0];
     expect(editEvent).toMatchObject({
       kind: "success",
-      title: "Tu edicion esta lista"
+      title: "Your edit is ready"
     });
     expect(editEvent).not.toHaveProperty("actionLabel");
   });
@@ -51,14 +51,14 @@ describe("job toast events", () => {
     expect(events[0]).toMatchObject({
       key: "job_1:failure",
       kind: "failure",
-      title: "No pudimos procesar este trabajo"
+      title: "We could not process this job"
     });
     expect(events[0].description).not.toContain("{");
     expect(events[1]).toMatchObject({
       key: "job_1:refund",
       kind: "refund",
-      title: "Credito reembolsado",
-      description: "Te devolvimos 2 creditos azules."
+      title: "Credit refunded",
+      description: "We refunded 2 blue credits."
     });
   });
 

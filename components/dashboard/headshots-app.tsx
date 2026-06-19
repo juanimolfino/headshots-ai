@@ -73,7 +73,7 @@ const UPLOAD_JPEG_QUALITY = 0.88;
 const ACTIVE_JOB_STATUSES = new Set<JobStatus>(["pending", "processing"]);
 
 function supportMailto(jobId?: string | null) {
-  const subject = jobId ? `Pic Your AI support - job ${jobId}` : "Pic Your AI support";
+  const subject = jobId ? `${legalCompanyInfo.brandName} support - job ${jobId}` : `${legalCompanyInfo.brandName} support`;
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
 }
 
@@ -1048,7 +1048,7 @@ export function HeadshotsApp({
 
   async function uploadPhotos() {
     if (!photoConsentAccepted) {
-      setFormMessage("Aceptá el procesamiento de tus fotos para entrenar el modelo.");
+      setFormMessage("Accept photo processing before training your model.");
       return;
     }
     if (!hasEnoughCredits(credits.gold, TRAINING_GOLD_CREDITS)) {
@@ -1071,7 +1071,7 @@ export function HeadshotsApp({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ legal: true, photoProcessing: true })
       });
-      if (!consentRes.ok) throw new Error("No pudimos registrar el consentimiento. Probá de nuevo.");
+      if (!consentRes.ok) throw new Error("We could not save your consent. Please try again.");
 
       const urls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
@@ -1286,7 +1286,7 @@ export function HeadshotsApp({
   async function startQuickEdit() {
     const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages);
     if (!quickLegalAccepted) {
-      setQuickMessage("Aceptá los términos y la política de privacidad para subir fotos.");
+      setQuickMessage("Accept the terms and privacy policy before uploading photos.");
       return;
     }
     if (!hasEnoughCredits(credits.blue, quickCost)) {
@@ -1314,7 +1314,7 @@ export function HeadshotsApp({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ legal: true })
       });
-      if (!consentRes.ok) throw new Error("No pudimos registrar el consentimiento. Probá de nuevo.");
+      if (!consentRes.ok) throw new Error("We could not save your consent. Please try again.");
 
       const urls: string[] = [];
       for (let i = 0; i < quickPhotos.length; i++) {
@@ -1993,13 +1993,13 @@ function NewModelPanel({
                 className="mt-0.5 h-4 w-4 accent-navy disabled:opacity-60"
               />
               <span>
-                Acepto los{" "}
-                <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>,
-                {" "}la{" "}
-                <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
-                {" "}y la{" "}
-                <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Cookies</Link>
-                {" "}y el procesamiento de mis fotos y datos faciales para entrenar un modelo personal.
+                I accept the{" "}
+                <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms of Service</Link>,
+                {" "}the{" "}
+                <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>,
+                {" "}and the{" "}
+                <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Cookie Policy</Link>
+                {" "}and consent to processing my photos and facial data to train a personal model.
               </span>
             </label>
 
@@ -2040,7 +2040,7 @@ function NewModelPanel({
                 <div className="flex flex-wrap items-center gap-2 text-sm text-red-600">
                   <span>{getInsufficientCreditsMessage({ kind: "gold", required: TRAINING_GOLD_CREDITS, available: credits.gold })}</span>
                   <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-                    <Link href="/pricing">Comprar creditos</Link>
+                    <Link href="/pricing">Buy credits</Link>
                   </Button>
                 </div>
               ) : photos.length >= MIN_PHOTOS ? (
@@ -2089,7 +2089,7 @@ function NewModelPanel({
                   <span>{formMessage}</span>
                   {formMessage.toLowerCase().includes("credit") ? (
                     <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-                      <Link href="/pricing">Comprar creditos</Link>
+                      <Link href="/pricing">Buy credits</Link>
                     </Button>
                   ) : null}
                 </div>
@@ -2264,9 +2264,9 @@ function QuickEditPanel({
                 <Loader2 className="h-5 w-5 animate-spin text-ink-soft" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-ink">{currentProgress?.stage ?? "Generando"} with {selectedEngineLabel}...</p>
+                <p className="font-medium text-ink">{currentProgress?.stage ?? "Generating"} with {selectedEngineLabel}...</p>
                 <p className="mt-0.5 text-sm text-ink-muted">
-                  {formatElapsed(generationElapsed)} · {currentProgress?.statusText ?? "Tiempo estimado: 3m 00s"}
+                  {formatElapsed(generationElapsed)} · {currentProgress?.statusText ?? "Estimated time: 3m 00s"}
                 </p>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-2">
                   <span className="block h-full rounded-full bg-navy" style={{ width: `${currentProgress?.progress ?? 8}%` }} />
@@ -2293,11 +2293,11 @@ function QuickEditPanel({
                 className="border-red-200 text-red-700 hover:bg-red-50"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Reintentar
+                Try again
               </Button>
               {currentFailure.cta === "contact" ? (
                 <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-                  <Link href={supportMailto(generationJobId)}>Contactar soporte</Link>
+                  <Link href={supportMailto(generationJobId)}>Contact support</Link>
                 </Button>
               ) : null}
               {generationJobId ? (
@@ -2309,7 +2309,7 @@ function QuickEditPanel({
                   className="border-red-200 text-red-700 hover:bg-red-50"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Borrar
+                  Delete
                 </Button>
               ) : null}
             </div>
@@ -2452,7 +2452,7 @@ function QuickEditPanel({
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-red-600">
                   <span>{getInsufficientCreditsMessage({ kind: "blue", required: blueCost, available: credits.blue })}</span>
                   <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-                    <Link href="/pricing">Comprar creditos</Link>
+                    <Link href="/pricing">Buy credits</Link>
                   </Button>
                 </div>
               ) : null}
@@ -2465,13 +2465,13 @@ function QuickEditPanel({
                   className="mt-0.5 h-4 w-4 accent-navy disabled:opacity-60"
                 />
                 <span>
-                  Acepto los{" "}
-                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Términos</Link>
-                  {", la "}
-                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Privacidad</Link>
-                  {" y la "}
-                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Política de Cookies</Link>
-                  {" "}antes de subir fotos de referencia.
+                  I accept the{" "}
+                  <Link href="/terms" className="font-semibold text-navy underline-offset-2 hover:underline">Terms of Service</Link>
+                  {", the "}
+                  <Link href="/privacy" className="font-semibold text-navy underline-offset-2 hover:underline">Privacy Policy</Link>
+                  {" and the "}
+                  <Link href="/cookies" className="font-semibold text-navy underline-offset-2 hover:underline">Cookie Policy</Link>
+                  {" "}before uploading reference photos.
                 </span>
               </label>
               <input
@@ -2623,7 +2623,7 @@ function QuickEditPanel({
                   <div className="flex items-center gap-2 text-sm text-red-600">
                     <span>{message}</span>
                     <Button asChild size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
-	                      <Link href="/pricing">Comprar creditos</Link>
+	                      <Link href="/pricing">Buy credits</Link>
                     </Button>
                   </div>
                 ) : (
@@ -3211,7 +3211,7 @@ function FailedHistoryRow({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-red-900">
-            {label} · {count} {count === 1 ? "photo" : "photos"} fallaron
+            {label} · {count} {count === 1 ? "photo" : "photos"} failed
           </p>
           <p className="mt-1 text-xs text-red-700">{message.description}</p>
           <p className="mt-1 text-xs font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
@@ -3223,8 +3223,8 @@ function FailedHistoryRow({
                 type="button"
                 onClick={onDismiss}
                 className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
-                aria-label="Borrar fallo"
-                title="Borrar"
+                aria-label="Delete failed job"
+                title="Delete"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -3232,12 +3232,12 @@ function FailedHistoryRow({
             {onRetry ? (
               <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
                 <RefreshCw className="h-3.5 w-3.5" />
-                Reintentar
+                Try again
               </Button>
             ) : null}
             {message.cta === "contact" ? (
               <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-                <Link href={supportMailto(job.id)}>Soporte</Link>
+                <Link href={supportMailto(job.id)}>Support</Link>
               </Button>
             ) : null}
           </div>

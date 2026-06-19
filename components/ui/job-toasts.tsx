@@ -72,7 +72,7 @@ export function JobToasts({
                 type="button"
                 onClick={() => onDismiss(toast.id)}
                 className="rounded-md p-1 text-ink-muted transition hover:bg-black/5 hover:text-ink"
-                aria-label="Cerrar notificacion"
+                aria-label="Close notification"
               >
                 <X className="size-4" />
               </button>

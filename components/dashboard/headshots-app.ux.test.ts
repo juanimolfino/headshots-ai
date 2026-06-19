@@ -60,7 +60,7 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain("visibleModelGenerateJobs");
     expect(appSource).toContain("visibleEditJobs");
     expect(dashboardSource).toContain("onDismissFailedJob");
-    expect(dashboardSource).toContain("Borrar");
+    expect(dashboardSource).toContain("Delete");
   });
 
   it("requires explicit consent before uploading photos for training or quick edit", () => {
@@ -69,7 +69,7 @@ describe("headshots dashboard UX safeguards", () => {
     expect(appSource).toContain('/api/consent');
     expect(appSource).toContain('purpose: "training-source"');
     expect(appSource).toContain('purpose: "quick-edit-reference"');
-    expect(appSource).toContain("procesamiento de mis fotos y datos faciales");
+    expect(appSource).toContain("processing my photos and facial data");
   });
 
   it("keeps the training model name editable after upload finishes", () => {

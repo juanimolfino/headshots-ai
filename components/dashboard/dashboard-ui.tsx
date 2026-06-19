@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 const SUPPORT_EMAIL = legalCompanyInfo.supportEmail;
 
 function supportMailto(jobId?: string | null) {
-  const subject = jobId ? `Pic Your AI support - job ${jobId}` : "Pic Your AI support";
+  const subject = jobId ? `${legalCompanyInfo.brandName} support - job ${jobId}` : `${legalCompanyInfo.brandName} support`;
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
 }
 
@@ -334,11 +334,15 @@ function DashboardSidebar({
   return (
     <aside className="sticky top-0 flex h-screen w-[266px] shrink-0 flex-col bg-navy-sidebar px-3.5 pb-3.5 pt-5 text-[#cfd3e0] max-[860px]:hidden">
       <div className="flex items-center gap-[11px] px-2 pb-5 pt-1">
-        <span className="flex size-[34px] items-center justify-center rounded-[10px] bg-sage-side text-navy-sidebar">
-          <Sparkles className="size-[18px]" />
-        </span>
+        <img
+          src="/picyourai_icon_512_white.png"
+          alt=""
+          width={34}
+          height={34}
+          className="size-[34px] rounded-[10px] bg-white object-contain"
+        />
         <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          headshotly<span className="font-medium text-[#7e87a6]">.pro</span>
+          {legalCompanyInfo.brandName}
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-[3px]" aria-label="Models">
@@ -627,7 +631,7 @@ function FailedGenerationRow({
           <AlertCircle className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[14.5px] font-bold text-red-900">{styleLabel(style)} · {count} {count === 1 ? "photo" : "photos"} fallaron</p>
+          <p className="text-[14.5px] font-bold text-red-900">{styleLabel(style)} · {count} {count === 1 ? "photo" : "photos"} failed</p>
           <p className="mt-1 text-sm text-red-700">{message.description}</p>
           <p className="mt-1 text-sm font-semibold text-red-800">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
         </div>
@@ -636,18 +640,18 @@ function FailedGenerationRow({
             type="button"
             onClick={onDismiss}
             className="self-end rounded-md p-1 text-red-500 transition hover:bg-red-100 hover:text-red-700"
-            aria-label="Borrar fallo"
-            title="Borrar"
+            aria-label="Delete failed job"
+            title="Delete"
           >
             <X className="size-4" />
           </button>
           <Button type="button" variant="outline" size="sm" onClick={onRetry} className="border-red-200 text-red-700 hover:bg-red-50">
             <RefreshCw className="size-3.5" />
-            Reintentar
+            Try again
           </Button>
           {message.cta === "contact" ? (
             <Button asChild variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50">
-              <Link href={supportMailto(job.id)}>Soporte</Link>
+              <Link href={supportMailto(job.id)}>Support</Link>
             </Button>
           ) : null}
         </div>
@@ -957,10 +961,10 @@ function TrainingOnlyState({
       <div className="mt-5 w-full max-w-sm">
         <ProgressBar value={progress?.progress ?? 8} className="h-2 w-full" />
         <p className="mt-3 text-sm font-semibold text-sage-deep">
-          {progress?.stage ?? "Entrenando"} · {formatElapsed(elapsed)}
+          {progress?.stage ?? "Training"} · {formatElapsed(elapsed)}
         </p>
         <p className="mt-1 text-xs text-ink-muted">
-          {progress?.statusText ?? "Tiempo estimado: 9m 00s"}{progress?.lastUpdatedLabel ? ` · ${progress.lastUpdatedLabel}` : ""}
+          {progress?.statusText ?? "Estimated time: 9m 00s"}{progress?.lastUpdatedLabel ? ` · ${progress.lastUpdatedLabel}` : ""}
         </p>
       </div>
     </div>
@@ -983,29 +987,29 @@ function TrainingFailedState({
         type="button"
         onClick={onDismiss}
         className="absolute right-8 top-8 rounded-lg p-2 text-ink-muted transition hover:bg-bg-2 hover:text-ink"
-        aria-label="Borrar fallo"
-        title="Borrar"
+        aria-label="Delete failed job"
+        title="Delete"
       >
         <X className="size-5" />
       </button>
       <div className="mb-5 flex size-16 items-center justify-center rounded-2xl bg-red-50 text-red-600">
         <AlertCircle className="size-7" />
       </div>
-      <h2 className="text-xl font-bold text-ink">No pudimos entrenar {getModelName(job)}</h2>
+      <h2 className="text-xl font-bold text-ink">We could not train {getModelName(job)}</h2>
       <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-soft">{message.description}</p>
       <p className="mt-3 text-sm font-semibold text-red-700">{getRefundCopy(job.creditsUsed, job.creditKind)}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button type="button" variant="sage" onClick={onRetry} className="h-auto rounded-xl px-[26px] py-3.5">
           <RefreshCw className="size-4" />
-          Reintentar
+          Try again
         </Button>
         <Button type="button" variant="outline" onClick={onDismiss} className="h-auto rounded-xl px-[22px] py-3.5">
           <X className="size-4" />
-          Borrar
+          Delete
         </Button>
         {message.cta === "contact" ? (
           <Button asChild variant="outline" className="h-auto rounded-xl px-[22px] py-3.5">
-            <Link href={supportMailto(job.id)}>Contactar soporte</Link>
+            <Link href={supportMailto(job.id)}>Contact support</Link>
           </Button>
         ) : null}
       </div>
@@ -1053,7 +1057,7 @@ function ModelButton({
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[14.5px] font-semibold text-[#eef0f6]">{name}</span>
         <span className="block truncate text-[11.5px] text-[#7e87a6]">
-          {failed ? "Fallo · credito devuelto" : training ? `Training · ${trainingElapsed ? formatElapsed(trainingElapsed) : "4-9 min"}` : `Ready · ${photoCount} photos`}
+          {failed ? "Failed · credit refunded" : training ? `Training · ${trainingElapsed ? formatElapsed(trainingElapsed) : "4-9 min"}` : `Ready · ${photoCount} photos`}
         </span>
       </span>
       {failed ? <AlertCircle className="size-[15px] shrink-0 text-red-300" aria-label="Failed" /> : training ? <Loader2 className="dsh-ring size-[15px] shrink-0 text-sage-side" aria-label="Training" /> : <span className="size-[7px] shrink-0 rounded-full bg-ready" />}

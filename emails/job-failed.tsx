@@ -5,7 +5,7 @@ export function JobFailedEmail({
   body,
   refund,
   actionUrl,
-  actionLabel = "Reintentar"
+  actionLabel = "Try again"
 }: {
   heading: string;
   body: string;

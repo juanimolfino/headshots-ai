@@ -15,7 +15,7 @@ describe("job UX helpers", () => {
 
     expect(message).toMatchObject({
       category: "provider",
-      title: "No pudimos procesar este trabajo",
+      title: "We could not process this job",
       cta: "retry"
     });
     expect(message.description).not.toContain("{");
@@ -38,20 +38,20 @@ describe("job UX helpers", () => {
   });
 
   it("formats explicit refund copy by credit kind", () => {
-    expect(getRefundCopy(1, "blue")).toBe("Te devolvimos 1 credito azul.");
-    expect(getRefundCopy(3, "blue")).toBe("Te devolvimos 3 creditos azules.");
-    expect(getRefundCopy(1, "gold")).toBe("Te devolvimos 1 credito dorado.");
-    expect(getRefundCopy(2, "gold")).toBe("Te devolvimos 2 creditos dorados.");
+    expect(getRefundCopy(1, "blue")).toBe("We refunded 1 blue credit.");
+    expect(getRefundCopy(3, "blue")).toBe("We refunded 3 blue credits.");
+    expect(getRefundCopy(1, "gold")).toBe("We refunded 1 golden credit.");
+    expect(getRefundCopy(2, "gold")).toBe("We refunded 2 golden credits.");
   });
 
   it("checks credit preconditions and returns type-specific copy", () => {
     expect(hasEnoughCredits(2, 2)).toBe(true);
     expect(hasEnoughCredits(1, 2)).toBe(false);
     expect(getInsufficientCreditsMessage({ kind: "gold", required: 1, available: 0 })).toBe(
-      "Necesitas 1 credito dorado y tenes 0."
+      "You need 1 golden credit and you have 0."
     );
     expect(getInsufficientCreditsMessage({ kind: "blue", required: 4, available: 1 })).toBe(
-      "Necesitas 4 creditos azules y tenes 1."
+      "You need 4 blue credits and you have 1."
     );
   });
 
@@ -67,11 +67,11 @@ describe("job UX helpers", () => {
       lastUpdatedAt: new Date("2026-06-14T12:09:56.000Z"),
       now
     })).toMatchObject({
-      stage: "Entrenando",
+      stage: "Training",
       progress: 95,
       isOverEta: true,
-      statusText: "Tardando mas de lo normal, segui esperando.",
-      lastUpdatedLabel: "Ultima actualizacion: recien"
+      statusText: "Taking longer than usual. You can keep waiting.",
+      lastUpdatedLabel: "Last updated: just now"
     });
   });
 

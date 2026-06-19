@@ -39,7 +39,7 @@ export function buildFluxLoraTrainerInput(input: HeadshotTrainingInput) {
 export function getFluxLoraUrl(resultData: FluxLoraTrainerOutput | undefined) {
   const loraUrl = resultData?.diffusers_lora_file?.url;
   if (!loraUrl) {
-    throw new Error(`fal.ai no devolvió URL del LoRA. Output: ${JSON.stringify(resultData)}`);
+    throw new Error(`fal.ai did not return a LoRA URL. Output: ${JSON.stringify(resultData)}`);
   }
 
   return loraUrl;

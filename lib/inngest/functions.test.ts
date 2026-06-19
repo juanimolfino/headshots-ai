@@ -37,8 +37,8 @@ describe("Inngest AI job safeguards", () => {
     expect(source).toContain('import { sendJobFailedEmail, sendJobReadyEmail } from "@/lib/email/send"');
     expect(source).toContain("sendJobReadyEmail(user.email");
     expect(source).toContain("/dashboard/headshots");
-    expect(source).toContain("Ver modelo");
-    expect(source).toContain("Ver resultados");
+    expect(source).toContain("View model");
+    expect(source).toContain("View results");
   });
 
   it("sends failure/refund email only when a new refund was applied", () => {

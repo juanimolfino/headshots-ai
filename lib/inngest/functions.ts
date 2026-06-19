@@ -148,16 +148,16 @@ function parseJsonObject(value: unknown, label: string, allowEmpty = false) {
       });
       return {} as Record<string, unknown>;
     }
-    throw new Error(`${label} es null/undefined`);
+    throw new Error(`${label} is null/undefined`);
   }
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`${label} inválido (tipo: ${typeof parsed}): ${String(value)}`);
+      throw new Error(`${label} is invalid (type: ${typeof parsed}): ${String(value)}`);
     }
     return parsed as Record<string, unknown>;
   } catch (error) {
-    throw new Error(`No se pudo parsear ${label}: ${error}`);
+    throw new Error(`Could not parse ${label}: ${error}`);
   }
 }
 
@@ -166,10 +166,10 @@ function parseImageUrls(raw: unknown) {
   try {
     urls = typeof raw === "string" ? JSON.parse(raw) : (raw as string[]);
     if (!Array.isArray(urls) || urls.length === 0 || urls.some((url) => typeof url !== "string" || url.length === 0)) {
-      throw new Error(`archive_url inválido: ${String(raw)}`);
+      throw new Error(`archive_url is invalid: ${String(raw)}`);
     }
   } catch (error) {
-    throw new Error(`No se pudo parsear archive_url: ${error}`);
+    throw new Error(`Could not parse archive_url: ${error}`);
   }
 
   return urls;
@@ -288,12 +288,12 @@ async function sendUserFailureEmail(job: { userId: string; creditsUsed: number; 
   const failure = getUserFacingJobError(reason);
   if (user?.email) {
     await sendJobFailedEmail(user.email, {
-      subject: "No pudimos completar tu trabajo",
+      subject: "We could not complete your job",
       heading: failure.title,
       body: failure.description,
       refund: getRefundCopy(job.creditsUsed, job.creditKind),
       actionUrl: getDashboardUrl(),
-      actionLabel: "Reintentar"
+      actionLabel: "Try again"
     });
   }
 }
@@ -554,9 +554,9 @@ export const runAiJob = inngest.createFunction(
         await step.run("send ready email", async () =>
           sendUserEmail(
             job.userId,
-            "Tu modelo personal está listo",
-            "Tu modelo personal está listo. Entrá a tu dashboard para generar tus headshots.",
-            "Ver modelo"
+            "Your personal model is ready",
+            "Your personal model is ready. Open your dashboard to generate your headshots.",
+            "View model"
           )
         );
         return { result };
@@ -568,9 +568,9 @@ export const runAiJob = inngest.createFunction(
         await step.run("send ready email", async () =>
           sendUserEmail(
             job.userId,
-            "Tus headshots están listos",
-            "Tus headshots están listos. Entrá a tu dashboard para verlos y descargarlos.",
-            "Ver resultados"
+            "Your headshots are ready",
+            "Your headshots are ready. Open your dashboard to view and download them.",
+            "View results"
           )
         );
         return { result: resultUrls };
@@ -582,9 +582,9 @@ export const runAiJob = inngest.createFunction(
         await step.run("send ready email", async () =>
           sendUserEmail(
             job.userId,
-            "Tus fotos están listas",
-            "Tus fotos editadas están listas. Entrá a tu dashboard para verlas y descargarlas.",
-            "Ver resultados"
+            "Your photos are ready",
+            "Your edited photos are ready. Open your dashboard to view and download them.",
+            "View results"
           )
         );
         return { result: resultUrls };

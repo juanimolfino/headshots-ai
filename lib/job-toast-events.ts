@@ -22,15 +22,15 @@ export type JobToastEvent = {
 };
 
 function successTitle(type: JobUxType) {
-  if (type === "headshot-training") return "Tu modelo esta listo";
-  if (type === "headshot-edit") return "Tu edicion esta lista";
-  return "Tus fotos estan listas";
+  if (type === "headshot-training") return "Your model is ready";
+  if (type === "headshot-edit") return "Your edit is ready";
+  return "Your photos are ready";
 }
 
 function successDescription(type: JobUxType) {
-  if (type === "headshot-training") return "Ya podes generar headshots con tu modelo personal.";
-  if (type === "headshot-edit") return "Tu edicion termino y ya esta disponible en el historial.";
-  return "Tus headshots terminaron y ya estan disponibles en el historial.";
+  if (type === "headshot-training") return "You can now generate headshots with your personal model.";
+  if (type === "headshot-edit") return "Your edit is finished and available in your history.";
+  return "Your headshots are finished and available in your history.";
 }
 
 export function getJobToastEvents(job: ToastJob): JobToastEvent[] {
@@ -55,16 +55,16 @@ export function getJobToastEvents(job: ToastJob): JobToastEvent[] {
         jobType: job.type,
         title: failure.title,
         description: failure.description,
-        actionLabel: "Ver detalle"
+        actionLabel: "View details"
       },
       {
         key: `${job.id}:refund`,
         kind: "refund",
         jobId: job.id,
         jobType: job.type,
-        title: "Credito reembolsado",
+        title: "Credit refunded",
         description: getRefundCopy(job.creditsUsed, job.creditKind),
-        actionLabel: "Ver detalle"
+        actionLabel: "View details"
       }
     ];
   }
