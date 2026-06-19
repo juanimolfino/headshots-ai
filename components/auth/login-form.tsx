@@ -44,7 +44,7 @@ export function LoginForm({ appUrl, initialMessage }: { appUrl: string; initialM
           onChange={e => setEmail(e.target.value)}
           className="w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-muted focus:border-navy focus:outline-none focus:ring-2 focus:ring-navy/20"
         />
-        <Button type="submit" variant="pill" size="pill" disabled={loading} className="w-full">
+        <Button type="submit" variant="pill" size="pill" disabled={loading || !legalAccepted} className="w-full">
           {loading ? "Sending..." : "Continue with email"}
         </Button>
       </form>

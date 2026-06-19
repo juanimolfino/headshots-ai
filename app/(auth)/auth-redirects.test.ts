@@ -12,6 +12,7 @@ describe("auth redirects", () => {
     const loginForm = read("components/auth/login-form.tsx");
     const googleRoute = read("app/(auth)/login/google/route.ts");
     const callbackRoute = read("app/(auth)/callback/route.ts");
+    const logoutRoute = read("app/(auth)/logout/route.ts");
 
     expect(loginPage).toContain("getAppUrl()");
     expect(loginPage).toContain("appUrl={getAppUrl()}");
@@ -22,5 +23,22 @@ describe("auth redirects", () => {
     expect(callbackRoute).toContain("getAppUrl(requestUrl.origin)");
     expect(callbackRoute).toContain('new URL("/dashboard", appUrl)');
     expect(callbackRoute).not.toContain('new URL("/dashboard", request.url)');
+    expect(logoutRoute).toContain('new URL("/", request.url)');
+    expect(logoutRoute).not.toContain('new URL("/login", request.url)');
+  });
+
+  it("requires legal consent before auth and records accepted versions in the callback", () => {
+    const loginForm = read("components/auth/login-form.tsx");
+    const callbackRoute = read("app/(auth)/callback/route.ts");
+    const queries = read("lib/db/queries.ts");
+
+    expect(loginForm).toContain("disabled={loading || !legalAccepted}");
+    expect(loginForm).toContain("disabled={!legalAccepted}");
+    expect(loginForm).toContain('redirectUrl.searchParams.set("legal_consent", "1")');
+    expect(callbackRoute).toContain("recordUserConsent(profile.id, { legal: true })");
+    expect(queries).toContain("patch.acceptedTermsAt = now");
+    expect(queries).toContain("patch.acceptedPrivacyAt = now");
+    expect(queries).toContain("patch.legalTermsVersion = LEGAL_TERMS_VERSION");
+    expect(queries).toContain("patch.legalPrivacyVersion = LEGAL_PRIVACY_VERSION");
   });
 });
