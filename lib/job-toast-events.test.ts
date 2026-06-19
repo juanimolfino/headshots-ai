@@ -3,35 +3,38 @@ import { collectNewJobToastEvents, getJobToastEvents, markJobToastEventsSeen } f
 
 describe("job toast events", () => {
   it("creates success notifications by job type", () => {
-    expect(getJobToastEvents({
+    const trainingEvent = getJobToastEvents({
       id: "train_1",
       type: "headshot-training",
       status: "done"
-    })[0]).toMatchObject({
+    })[0];
+    expect(trainingEvent).toMatchObject({
       kind: "success",
-      title: "Tu modelo esta listo",
-      actionLabel: "Ver modelo"
+      title: "Tu modelo esta listo"
     });
+    expect(trainingEvent).not.toHaveProperty("actionLabel");
 
-    expect(getJobToastEvents({
+    const generateEvent = getJobToastEvents({
       id: "generate_1",
       type: "headshot-generate",
       status: "done"
-    })[0]).toMatchObject({
+    })[0];
+    expect(generateEvent).toMatchObject({
       kind: "success",
-      title: "Tus fotos estan listas",
-      actionLabel: "Ver resultado"
+      title: "Tus fotos estan listas"
     });
+    expect(generateEvent).not.toHaveProperty("actionLabel");
 
-    expect(getJobToastEvents({
+    const editEvent = getJobToastEvents({
       id: "edit_1",
       type: "headshot-edit",
       status: "done"
-    })[0]).toMatchObject({
+    })[0];
+    expect(editEvent).toMatchObject({
       kind: "success",
-      title: "Tu edicion esta lista",
-      actionLabel: "Ver resultado"
+      title: "Tu edicion esta lista"
     });
+    expect(editEvent).not.toHaveProperty("actionLabel");
   });
 
   it("creates failure and refund notifications from the shared human error mapper", () => {

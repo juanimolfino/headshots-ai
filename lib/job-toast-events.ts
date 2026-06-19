@@ -33,11 +33,6 @@ function successDescription(type: JobUxType) {
   return "Tus headshots terminaron y ya estan disponibles en el historial.";
 }
 
-function successActionLabel(type: JobUxType) {
-  if (type === "headshot-training") return "Ver modelo";
-  return "Ver resultado";
-}
-
 export function getJobToastEvents(job: ToastJob): JobToastEvent[] {
   if (job.status === "done") {
     return [{
@@ -46,8 +41,7 @@ export function getJobToastEvents(job: ToastJob): JobToastEvent[] {
       jobId: job.id,
       jobType: job.type,
       title: successTitle(job.type),
-      description: successDescription(job.type),
-      actionLabel: successActionLabel(job.type)
+      description: successDescription(job.type)
     }];
   }
 
