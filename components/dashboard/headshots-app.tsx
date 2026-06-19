@@ -225,6 +225,13 @@ type DashboardCredits = {
   subscriptionStatus?: string;
 };
 
+type DashboardSubscription = {
+  plan: string;
+  status: string;
+  currentPeriodEnd: Date | string | null;
+  cancelAtPeriodEnd: boolean;
+} | null;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getModelName(job: TrainingJob): string {
@@ -241,6 +248,43 @@ function formatElapsed(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m === 0 ? `${s}s` : `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+function formatShortDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function normalizeSubscriptionPlan(plan: string | null | undefined) {
+  if (!plan) return "No subscription";
+  if (plan === "lite") return "Lite";
+  if (plan === "pro") return "Pro";
+  if (plan === "studio") return "Studio";
+  if (plan === "free") return "No subscription";
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+function isSubscriptionActive(subscription: DashboardSubscription) {
+  if (!subscription) return false;
+  if (subscription.plan === "free") return false;
+  return subscription.status === "active" || subscription.status === "trialing";
+}
+
+function subscriptionStatusLabel(subscription: DashboardSubscription) {
+  if (!subscription || subscription.plan === "free") return "No active subscription";
+  if (isSubscriptionActive(subscription) && subscription.cancelAtPeriodEnd) return "Active until period end";
+  if (isSubscriptionActive(subscription)) return "Active";
+  if (subscription.status === "past_due") return "Past due";
+  if (subscription.status === "canceled") return "Canceled";
+  return subscription.status.charAt(0).toUpperCase() + subscription.status.slice(1);
+}
+
+function subscriptionCancellationLabel(subscription: DashboardSubscription) {
+  if (!subscription || subscription.plan === "free") return "Not applicable";
+  return subscription.cancelAtPeriodEnd ? "Will cancel at period end" : "Keeps renewing";
 }
 
 function isActiveJob(job: GenerateJob) {
@@ -461,12 +505,15 @@ function readDismissedFailedJobIds(storageKey: string) {
 
 export function HeadshotsApp({
   userEmail,
-  initialCredits
+  initialCredits,
+  initialSubscription
 }: {
   userEmail: string;
   initialCredits: DashboardCredits;
+  initialSubscription: DashboardSubscription;
 }) {
   const [credits, setCredits] = useState<DashboardCredits>(initialCredits);
+  const [subscription, setSubscription] = useState<DashboardSubscription>(initialSubscription);
   const dismissedFailedStorageKey = `headshots:dismissed-failed-jobs:${userEmail}`;
   const [toasts, setToasts] = useState<JobToastItem[]>([]);
   const [dismissedFailedJobIds, setDismissedFailedJobIds] = useState<Set<string>>(
@@ -601,8 +648,12 @@ export function HeadshotsApp({
   const loadCredits = useCallback(async () => {
     const res = await fetch("/api/credits", { cache: "no-store" });
     if (!res.ok) return;
-    const data = (await res.json()) as { credits?: DashboardCredits };
+    const data = (await res.json()) as {
+      credits?: DashboardCredits;
+      subscription?: DashboardSubscription;
+    };
     if (data.credits) setCredits(data.credits);
+    if ("subscription" in data) setSubscription(data.subscription ?? null);
   }, []);
 
   const refreshCreditsForNewFailures = useCallback((jobs: Array<{ id: string; status: JobStatus }>) => {
@@ -1604,56 +1655,90 @@ export function HeadshotsApp({
               </button>
             </div>
 
-            <div className="mt-6 flex flex-col items-center rounded-[18px] border border-red-300/40 bg-red-50 px-4 py-4 text-center text-red-950">
-              <div className="flex items-center gap-2">
-                <Trash2 className="size-4 shrink-0" />
-                <h3 className="text-sm font-semibold">Delete account and data</h3>
+            <div className="mt-6 space-y-4">
+              <div className="rounded-[18px] border border-line bg-white/80 px-4 py-4 text-left text-ink">
+                <div className="flex items-center gap-2">
+                  <Wallet className="size-4 shrink-0 text-navy" />
+                  <h3 className="text-sm font-semibold">Subscription</h3>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm leading-6 text-muted">
+                  <p><span className="font-medium text-ink">Plan:</span> {normalizeSubscriptionPlan(subscription?.plan)}</p>
+                  <p><span className="font-medium text-ink">Status:</span> {subscriptionStatusLabel(subscription)}</p>
+                  <p><span className="font-medium text-ink">Next renewal:</span> {subscription?.currentPeriodEnd ? formatShortDate(subscription.currentPeriodEnd) : "Not scheduled"}</p>
+                  <p><span className="font-medium text-ink">Cancellation:</span> {subscriptionCancellationLabel(subscription)}</p>
+                </div>
+                <div className="mt-4">
+                  {isSubscriptionActive(subscription) ? (
+                    <form action="/api/stripe/portal" method="post">
+                      <button
+                        type="submit"
+                        className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted"
+                      >
+                        Manage billing
+                      </button>
+                    </form>
+                  ) : (
+                    <Link
+                      href="/pricing"
+                      className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted"
+                    >
+                      View subscription plans
+                    </Link>
+                  )}
+                </div>
               </div>
-              <p className="mt-2 text-sm leading-6 text-red-900">
-                This permanently removes your account and the data covered by the deletion flow. It cannot be undone.
-              </p>
-              <label className="mt-4 flex w-full max-w-[520px] items-start gap-3 text-left text-sm leading-6 text-red-950">
-                <input
-                  type="checkbox"
-                  checked={deleteConfirmChecked}
-                  onChange={e => setDeleteConfirmChecked(e.target.checked)}
-                  className="mt-1 size-4 rounded border-red-300 text-red-700 focus:ring-red-500"
-                />
-                <span>I understand this action is permanent and want to continue.</span>
-              </label>
-              <label className="mt-4 block w-full max-w-[520px] text-left text-sm font-medium text-red-950">
-                Type <span className="font-semibold">DELETE</span> to confirm
-                <input
-                  type="text"
-                  value={deleteConfirmText}
-                  onChange={e => setDeleteConfirmText(e.target.value.toUpperCase())}
-                  placeholder="DELETE"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="mt-2 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-red-400"
-                />
-              </label>
-              {accountDeletionMessage ? (
-                <p className="mt-4 w-full max-w-[520px] text-left text-sm leading-6 text-red-900">{accountDeletionMessage}</p>
-              ) : null}
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={confirmDeleteFromSettings}
-                  disabled={accountDeleting || !deleteConfirmChecked || deleteConfirmText !== "DELETE"}
-                  className="dsh-focus inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Trash2 className="size-4" />
-                  {accountDeleting ? "Deleting..." : "Delete my data"}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeSettingsPanel}
-                  disabled={accountDeleting}
-                  className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted disabled:opacity-60"
-                >
-                  Cancel
-                </button>
+
+              <div className="flex flex-col items-center rounded-[18px] border border-red-300/40 bg-red-50 px-4 py-4 text-center text-red-950">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="size-4 shrink-0" />
+                  <h3 className="text-sm font-semibold">Delete account and data</h3>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-red-900">
+                  This permanently removes your account and the data covered by the deletion flow. It cannot be undone.
+                </p>
+                <label className="mt-4 flex w-full max-w-[520px] items-start gap-3 text-left text-sm leading-6 text-red-950">
+                  <input
+                    type="checkbox"
+                    checked={deleteConfirmChecked}
+                    onChange={e => setDeleteConfirmChecked(e.target.checked)}
+                    className="mt-1 size-4 rounded border-red-300 text-red-700 focus:ring-red-500"
+                  />
+                  <span>I understand this action is permanent and want to continue.</span>
+                </label>
+                <label className="mt-4 block w-full max-w-[520px] text-left text-sm font-medium text-red-950">
+                  Type <span className="font-semibold">DELETE</span> to confirm
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value.toUpperCase())}
+                    placeholder="DELETE"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="mt-2 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-red-400"
+                  />
+                </label>
+                {accountDeletionMessage ? (
+                  <p className="mt-4 w-full max-w-[520px] text-left text-sm leading-6 text-red-900">{accountDeletionMessage}</p>
+                ) : null}
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={confirmDeleteFromSettings}
+                    disabled={accountDeleting || !deleteConfirmChecked || deleteConfirmText !== "DELETE"}
+                    className="dsh-focus inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Trash2 className="size-4" />
+                    {accountDeleting ? "Deleting..." : "Delete my data"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeSettingsPanel}
+                    disabled={accountDeleting}
+                    className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>

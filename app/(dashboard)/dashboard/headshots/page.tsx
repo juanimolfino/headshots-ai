@@ -14,12 +14,18 @@ export default async function HeadshotsPage() {
   if (!user) redirect("/login");
 
   const profile = await ensureUserProfile(user);
-  const { credits } = await getDashboard(profile.id);
+  const { credits, subscription } = await getDashboard(profile.id);
 
   return (
     <HeadshotsApp
       userEmail={profile.email}
       initialCredits={credits}
+      initialSubscription={subscription ? {
+        plan: subscription.plan,
+        status: subscription.status,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancelAtPeriodEnd
+      } : null}
     />
   );
 }

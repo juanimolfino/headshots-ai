@@ -11,7 +11,15 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const profile = await ensureUserProfile(user);
-  const { credits } = await getDashboard(profile.id);
+  const { credits, subscription } = await getDashboard(profile.id);
 
-  return NextResponse.json({ credits });
+  return NextResponse.json({
+    credits,
+    subscription: subscription ? {
+      plan: subscription.plan,
+      status: subscription.status,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd
+    } : null
+  });
 }

@@ -81,6 +81,10 @@ describe("headshots dashboard UX safeguards", () => {
   it("hides account deletion behind a settings panel with double confirmation", () => {
     expect(appSource).toContain('/api/account/delete');
     expect(appSource).toContain("showSettingsPanel");
+    expect(appSource).toContain("Manage billing");
+    expect(appSource).toContain("View subscription plans");
+    expect(appSource).toContain("Will cancel at period end");
+    expect(appSource).toContain("No active subscription");
     expect(appSource).toContain("deleteConfirmChecked");
     expect(appSource).toContain("deleteConfirmText !== \"DELETE\"");
     expect(appSource).toContain("e.target.value.toUpperCase()");
