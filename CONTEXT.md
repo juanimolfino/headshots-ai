@@ -88,6 +88,9 @@ Updated on 2026-06-19:
 - Failed job rows are now permanently deleted from the database when the user clicks the X/delete action. The route reuses `DELETE /api/jobs/[id]`, loads the job through `getJobForUser(id, profile.id)`, and deletes with `id + userId` so users can only delete their own failed jobs. Quick edit deletion still removes Supabase Storage outputs before deleting the row.
 - Job failure support links and the account settings support entry use `legalCompanyInfo.supportEmail` (`support@picyourai.com`) and include the job id in the mail subject when available.
 - Success toasts are informational only and intentionally have no action button. Failure and refund toasts keep their detail action.
+- Quick edit reference uploads are cached in memory for the current browser session. Re-running quick edit with the same selected photos reuses the existing Fal URL while it is fresh, instead of uploading the same file again.
+- The quick edit `Clear` action revokes selected previews, resets prompt/preset state, and discards the in-memory Fal/signed URL cache so the next run uploads from scratch.
+- Users can re-edit generated results with `Edit this result`. The app loads the result's signed URL into quick edit as a reference and creates a new `headshot-edit` job, so normal blue-credit charging/refund behavior stays unchanged. If a signed result URL has expired before submission, the client refreshes it from `/api/jobs/[id]/signed-urls`; local Fal upload URLs are treated as expired before Fal's 48-hour TTL and re-uploaded from the original file when needed.
 
 ## Phase 3 Legal, Privacy, And Data Handling
 

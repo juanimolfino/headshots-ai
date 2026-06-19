@@ -65,6 +65,8 @@ const QUICK_UPLOAD_JPEG_QUALITY = 0.92;
 const POLL_INTERVAL_MS = 8000;
 const SUPPORT_EMAIL = legalCompanyInfo.supportEmail;
 const FALLBACK_CREATED_AT = "1970-01-01T00:00:00.000Z";
+const FAL_REFERENCE_URL_TTL_MS = 47 * 60 * 60 * 1000;
+const SIGNED_RESULT_URL_TTL_MS = 55 * 60 * 1000;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAX_UPLOAD_DIMENSION = 1024;
 const UPLOAD_JPEG_QUALITY = 0.88;
@@ -73,6 +75,18 @@ const ACTIVE_JOB_STATUSES = new Set<JobStatus>(["pending", "processing"]);
 function supportMailto(jobId?: string | null) {
   const subject = jobId ? `Pic Your AI support - job ${jobId}` : "Pic Your AI support";
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
+}
+
+function isReusableUrl(photo: SelectedPhoto, now = Date.now()) {
+  return Boolean(photo.cachedUrl && photo.cachedUrlExpiresAt && photo.cachedUrlExpiresAt > now);
+}
+
+function revokePhotoPreview(photo: SelectedPhoto) {
+  if (photo.previewUrl.startsWith("blob:")) URL.revokeObjectURL(photo.previewUrl);
+}
+
+function defaultQuickPrompt() {
+  return QUICK_PRESET_OPTIONS[0].prompt;
 }
 
 const STYLE_OPTIONS = [
@@ -219,7 +233,15 @@ type GenerateJob = {
   completedAt: string | null;
 };
 
-type SelectedPhoto = { id: string; file: File; previewUrl: string };
+type SelectedPhoto = {
+  id: string;
+  file?: File;
+  previewUrl: string;
+  cachedUrl?: string;
+  cachedUrlExpiresAt?: number;
+  sourceJobId?: string;
+  sourceIndex?: number;
+};
 type DashboardCredits = {
   blue: number;
   gold: number;
@@ -602,8 +624,8 @@ export function HeadshotsApp({
   }, [quickPhotos]);
   useEffect(() => {
     return () => {
-      for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
-      for (const p of quickPhotosRef.current) URL.revokeObjectURL(p.previewUrl);
+      for (const p of photosRef.current) revokePhotoPreview(p);
+      for (const p of quickPhotosRef.current) revokePhotoPreview(p);
     };
   }, []);
 
@@ -851,6 +873,54 @@ export function HeadshotsApp({
     setShowQuickEditForm(true);
   }
 
+  function clearQuickEditSession() {
+    for (const photo of quickPhotosRef.current) revokePhotoPreview(photo);
+    setQuickPhotos([]);
+    setQuickPreset("professional");
+    setQuickPrompt(defaultQuickPrompt());
+    setQuickMessage(null);
+    if (generationJobKind === "edit") {
+      setGenerationJobId(null);
+      setGenerationJobKind(null);
+      setGenerationStatus(null);
+      setGenerationError(null);
+      setSignedUrls(null);
+      setSignedUrlsKind(null);
+      setGenerationElapsed(0);
+      setGenerationCreatedAt(null);
+      generationStartRef.current = null;
+    }
+  }
+
+  function useResultAsQuickEditBase(url: string, sourceJobId?: string, sourceIndex?: number) {
+    for (const photo of quickPhotosRef.current) revokePhotoPreview(photo);
+    setQuickPhotos([{
+      id: `result-${sourceJobId ?? "current"}-${sourceIndex ?? 0}-${crypto.randomUUID()}`,
+      previewUrl: url,
+      cachedUrl: url,
+      cachedUrlExpiresAt: Date.now() + SIGNED_RESULT_URL_TTL_MS,
+      sourceJobId,
+      sourceIndex
+    }]);
+    setQuickPreset("free");
+    setQuickPrompt("");
+    setQuickMessage(null);
+    setSelectedModelId(null);
+    setShowNewModelForm(false);
+    setShowQuickEditForm(true);
+    if (generationJobKind === "edit") {
+      setGenerationJobId(null);
+      setGenerationJobKind(null);
+      setGenerationStatus(null);
+      setGenerationError(null);
+      setSignedUrls(null);
+      setSignedUrlsKind(null);
+      setGenerationElapsed(0);
+      setGenerationCreatedAt(null);
+      generationStartRef.current = null;
+    }
+  }
+
   function handleQuickPresetChange(nextPreset: QuickEditPreset) {
     setQuickPreset(nextPreset);
     const preset = QUICK_PRESET_OPTIONS.find(option => option.value === nextPreset);
@@ -928,7 +998,7 @@ export function HeadshotsApp({
     }
     const slots = MAX_PHOTOS - photos.length;
     const toAdd = accepted.slice(0, Math.max(slots, 0));
-    for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
+    for (const p of accepted.slice(toAdd.length)) revokePhotoPreview(p);
     const skipped = accepted.length - toAdd.length;
     setPhotos(prev => [...prev, ...toAdd]);
     if (skipped > 0) setFormMessage(`You can upload up to ${MAX_PHOTOS} photos.`);
@@ -953,7 +1023,7 @@ export function HeadshotsApp({
     }
     const slots = QUICK_MAX_PHOTOS - quickPhotos.length;
     const toAdd = accepted.slice(0, Math.max(slots, 0));
-    for (const p of accepted.slice(toAdd.length)) URL.revokeObjectURL(p.previewUrl);
+    for (const p of accepted.slice(toAdd.length)) revokePhotoPreview(p);
     const skipped = accepted.length - toAdd.length;
     setQuickPhotos(prev => [...prev, ...toAdd]);
     if (skipped > 0) setQuickMessage(`You can upload up to ${QUICK_MAX_PHOTOS} reference photos.`);
@@ -963,7 +1033,7 @@ export function HeadshotsApp({
   function removePhoto(id: string) {
     setPhotos(prev => {
       const p = prev.find(x => x.id === id);
-      if (p) URL.revokeObjectURL(p.previewUrl);
+      if (p) revokePhotoPreview(p);
       return prev.filter(x => x.id !== id);
     });
   }
@@ -971,7 +1041,7 @@ export function HeadshotsApp({
   function removeQuickPhoto(id: string) {
     setQuickPhotos(prev => {
       const p = prev.find(x => x.id === id);
-      if (p) URL.revokeObjectURL(p.previewUrl);
+      if (p) revokePhotoPreview(p);
       return prev.filter(x => x.id !== id);
     });
   }
@@ -1006,7 +1076,9 @@ export function HeadshotsApp({
       const urls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
         setFormMessage(`Uploading photo ${i + 1} of ${photos.length}...`);
-        const file = await compressImage(photos[i].file);
+        const sourceFile = photos[i].file;
+        if (!sourceFile) throw new Error(`Missing file for photo ${i + 1}.`);
+        const file = await compressImage(sourceFile);
         const initRes = await fetch("/api/upload/initiate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1024,7 +1096,7 @@ export function HeadshotsApp({
         } | null;
         if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
           throw new Error(
-            initData?.error ?? `Could not prepare upload for ${photos[i].file.name}.`
+            initData?.error ?? `Could not prepare upload for ${sourceFile.name}.`
           );
         }
         const upRes = await fetch(initData.uploadUrl, {
@@ -1032,7 +1104,7 @@ export function HeadshotsApp({
           headers: { "Content-Type": file.type },
           body: file
         });
-        if (!upRes.ok) throw new Error(`Could not upload ${photos[i].file.name}.`);
+        if (!upRes.ok) throw new Error(`Could not upload ${sourceFile.name}.`);
         urls.push(initData.fileUrl);
       }
       setUploadedUrls(urls);
@@ -1078,7 +1150,7 @@ export function HeadshotsApp({
         available: credits.gold
       }));
       if (!res.ok) throw new Error(getUserFacingJobError(data.error).description);
-      for (const p of photosRef.current) URL.revokeObjectURL(p.previewUrl);
+      for (const p of photosRef.current) revokePhotoPreview(p);
       setPhotos([]);
       setUploadedUrls(null);
       setModelName("");
@@ -1151,6 +1223,66 @@ export function HeadshotsApp({
     void loadCredits();
   }
 
+  async function refreshSignedResultUrl(photo: SelectedPhoto) {
+    if (!photo.sourceJobId || photo.sourceIndex === undefined) return null;
+    const res = await fetch(`/api/jobs/${photo.sourceJobId}/signed-urls`, { method: "POST" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { signedUrls?: string[] };
+    return data.signedUrls?.[photo.sourceIndex] ?? null;
+  }
+
+  async function uploadQuickReferencePhoto(photo: SelectedPhoto, index: number, total: number) {
+    if (isReusableUrl(photo)) return photo.cachedUrl!;
+
+    const refreshedSignedUrl = await refreshSignedResultUrl(photo);
+    if (refreshedSignedUrl) {
+      const expiresAt = Date.now() + SIGNED_RESULT_URL_TTL_MS;
+      setQuickPhotos(prev => prev.map(item =>
+        item.id === photo.id
+          ? { ...item, cachedUrl: refreshedSignedUrl, cachedUrlExpiresAt: expiresAt, previewUrl: refreshedSignedUrl }
+          : item
+      ));
+      return refreshedSignedUrl;
+    }
+
+    if (!photo.file) {
+      throw new Error("This reference image expired. Add it again and retry.");
+    }
+
+    setQuickMessage(`Uploading photo ${index + 1} of ${total}...`);
+    const file = await optimizeQuickEditImage(photo.file);
+    const initRes = await fetch("/api/upload/initiate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        contentType: file.type,
+        size: file.size,
+        purpose: "quick-edit-reference"
+      })
+    });
+    const initData = (await readJsonOrText(initRes)) as {
+      uploadUrl?: string;
+      fileUrl?: string;
+      error?: string;
+    } | null;
+    if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
+      throw new Error(initData?.error ?? `Could not prepare upload for ${photo.file.name}.`);
+    }
+    const upRes = await fetch(initData.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file
+    });
+    if (!upRes.ok) throw new Error(`Could not upload ${photo.file.name}.`);
+
+    const expiresAt = Date.now() + FAL_REFERENCE_URL_TTL_MS;
+    setQuickPhotos(prev => prev.map(item =>
+      item.id === photo.id ? { ...item, cachedUrl: initData.fileUrl, cachedUrlExpiresAt: expiresAt } : item
+    ));
+    return initData.fileUrl;
+  }
+
   async function startQuickEdit() {
     const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages);
     if (!quickLegalAccepted) {
@@ -1186,33 +1318,7 @@ export function HeadshotsApp({
 
       const urls: string[] = [];
       for (let i = 0; i < quickPhotos.length; i++) {
-        setQuickMessage(`Uploading photo ${i + 1} of ${quickPhotos.length}...`);
-        const file = await optimizeQuickEditImage(quickPhotos[i].file);
-        const initRes = await fetch("/api/upload/initiate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-            size: file.size,
-            purpose: "quick-edit-reference"
-          })
-        });
-        const initData = (await readJsonOrText(initRes)) as {
-          uploadUrl?: string;
-          fileUrl?: string;
-          error?: string;
-        } | null;
-        if (!initRes.ok || !initData?.uploadUrl || !initData.fileUrl) {
-          throw new Error(initData?.error ?? `Could not prepare upload for ${quickPhotos[i].file.name}.`);
-        }
-        const upRes = await fetch(initData.uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": file.type },
-          body: file
-        });
-        if (!upRes.ok) throw new Error(`Could not upload ${quickPhotos[i].file.name}.`);
-        urls.push(initData.fileUrl);
+        urls.push(await uploadQuickReferencePhoto(quickPhotos[i], i, quickPhotos.length));
       }
 
       setQuickMessage("Starting generation...");
@@ -1577,9 +1683,11 @@ export function HeadshotsApp({
             onAddFiles={addQuickFiles}
             onRemovePhoto={removeQuickPhoto}
             onGenerate={() => void startQuickEdit()}
+            onClear={clearQuickEditSession}
             onReset={resetGeneration}
             onRetryJob={job => void startRetriedHeadshotJob(job, "edit")}
             onSelectImage={setSelectedImageUrl}
+            onEditResult={useResultAsQuickEditBase}
             onCloseImage={() => setSelectedImageUrl(null)}
             onCancel={() => {
               if (generationJobKind === "edit" && (signedUrlsKind === "edit" || generationStatus === "failed")) {
@@ -1602,6 +1710,7 @@ export function HeadshotsApp({
         onBackgroundChange={setBackground}
         onAttireChange={v => { setAttireType(v); setAttireColor(null); }}
         onGenerate={() => void startGeneration()}
+        onEditResult={useResultAsQuickEditBase}
         onOpenImage={setSelectedImageUrl}
         onOpenSettings={openSettingsPanel}
         onDeleteAccount={() => void handleDeleteAccount()}
@@ -2035,9 +2144,11 @@ function QuickEditPanel({
   onAddFiles,
   onRemovePhoto,
   onGenerate,
+  onClear,
   onReset,
   onRetryJob,
   onSelectImage,
+  onEditResult,
   onCloseImage,
   onCancel
 }: {
@@ -2076,9 +2187,11 @@ function QuickEditPanel({
   onAddFiles: (files: FileList | File[]) => void;
   onRemovePhoto: (id: string) => void;
   onGenerate: () => void;
+  onClear: () => void;
   onReset: () => void;
   onRetryJob: (job: GenerateJob) => void;
   onSelectImage: (url: string) => void;
+  onEditResult: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
   onCloseImage: () => void;
   onCancel: () => void;
 }) {
@@ -2116,6 +2229,7 @@ function QuickEditPanel({
           <span className="text-line-strong">/</span>
           <p className="font-semibold text-ink">Quick edit</p>
         </div>
+        <div className="flex items-center gap-2">
         {signedUrls?.length ? (
           <Button
             type="button"
@@ -2128,6 +2242,18 @@ function QuickEditPanel({
             Generate again
           </Button>
         ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onClear}
+            disabled={uploading || isGenerating}
+            className="border-line text-ink-soft hover:bg-bg"
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-8">
@@ -2217,16 +2343,25 @@ function QuickEditPanel({
                       className={cn("h-full w-full transition-opacity hover:opacity-90", imageSize === "auto" ? "object-contain" : "object-cover")}
                     />
                   </button>
-                  <div className="flex items-center justify-between p-2.5">
+                  <div className="flex items-center justify-between gap-2 p-2.5">
                     <span className="text-xs font-medium text-ink-soft">#{i + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => void downloadUrl(url, `gpt-headshot-${i + 1}.jpg`)}
-                      className="text-ink-muted transition-colors hover:text-ink-soft"
-                      aria-label="Download"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditResult(url, generationJobId ?? undefined, i)}
+                        className="text-xs font-semibold text-navy transition-colors hover:text-ink"
+                      >
+                        Edit this result
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void downloadUrl(url, `gpt-headshot-${i + 1}.jpg`)}
+                        className="text-ink-muted transition-colors hover:text-ink-soft"
+                        aria-label="Download"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2473,6 +2608,16 @@ function QuickEditPanel({
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {uploading ? (message ?? "Uploading...") : `Generate with ${engine === "gpt-image-2" ? "GPT Image 2" : "Nano Banana Pro"}`}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="pill"
+                onClick={onClear}
+                disabled={uploading || (photos.length === 0 && prompt === defaultQuickPrompt())}
+                className="border-line text-ink-soft hover:bg-bg"
+              >
+                Clear
+              </Button>
               {message &&
                 (message.toLowerCase().includes("credit") ? (
                   <div className="flex items-center gap-2 text-sm text-red-600">
@@ -2497,6 +2642,7 @@ function QuickEditPanel({
 	              onDelete={onDeleteEdit}
 	              onRetry={onRetryJob}
 	              onDismissFailed={onDismissFailedJob}
+	              onEditResult={onEditResult}
 	              lastUpdatedAt={generationLastUpdatedAt}
 	            />
 	          </div>
@@ -2856,7 +3002,11 @@ function ModelWorkspace({
 
         {/* Past generates for this model */}
         {modelGenerateJobs.length > 0 && (
-          <ResultsHistory jobs={modelGenerateJobs} onRetry={job => void onGenerate()} lastUpdatedAt={null} />
+          <ResultsHistory
+            jobs={modelGenerateJobs}
+            onRetry={job => void onGenerate()}
+            lastUpdatedAt={null}
+          />
         )}
       </div>
 
@@ -2902,6 +3052,7 @@ function ResultsHistory({
   onDelete,
   onRetry,
   onDismissFailed,
+  onEditResult,
   lastUpdatedAt
 }: {
   jobs: GenerateJob[];
@@ -2909,6 +3060,7 @@ function ResultsHistory({
   onDelete?: (id: string) => void;
   onRetry?: (job: GenerateJob) => void;
   onDismissFailed?: (id: string) => void;
+  onEditResult?: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
   lastUpdatedAt?: string | null;
 }) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
@@ -2944,6 +3096,7 @@ function ResultsHistory({
             kind={kind}
             onOpenImage={setSelectedImage}
             onDelete={onDelete}
+            onEditResult={onEditResult}
           />
         ))}
       </div>
@@ -3098,12 +3251,14 @@ function HistoryRow({
   job,
   kind = "generate",
   onOpenImage,
-  onDelete
+  onDelete,
+  onEditResult
 }: {
   job: GenerateJob;
   kind?: "generate" | "edit";
   onOpenImage: (url: string) => void;
   onDelete?: (id: string) => void;
+  onEditResult?: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
@@ -3223,16 +3378,27 @@ function HistoryRow({
                         className="h-full w-full object-cover transition-opacity hover:opacity-90"
                       />
                     </button>
-                    <div className="flex items-center justify-between p-2">
+                    <div className="flex items-center justify-between gap-2 p-2">
                       <span className="text-xs text-ink-muted">#{i + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                        className="text-ink-muted transition-colors hover:text-ink-soft"
-                        aria-label="Download"
-                      >
-                        <Download className="h-3 w-3" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {onEditResult ? (
+                          <button
+                            type="button"
+                            onClick={() => onEditResult(url, job.id, i)}
+                            className="text-xs font-semibold text-navy transition-colors hover:text-ink"
+                          >
+                            Edit this result
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
+                          className="text-ink-muted transition-colors hover:text-ink-soft"
+                          aria-label="Download"
+                        >
+                          <Download className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

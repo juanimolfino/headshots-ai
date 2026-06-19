@@ -133,6 +133,7 @@ export type DashboardWorkspaceProps = {
   onBackgroundChange: (value: BackgroundValue) => void;
   onAttireChange: (value: AttireValue) => void;
   onGenerate: () => void;
+  onEditResult: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
   onOpenImage: (url: string) => void;
   onOpenSettings: () => void;
   onDeleteAccount: () => void;
@@ -574,7 +575,7 @@ function GenerationCard(props: DashboardWorkspaceProps) {
   );
 }
 
-function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration, onDismissFailedJob }: DashboardWorkspaceProps) {
+function RecentList({ activeGenerationJob, jobs, onOpenImage, onEditResult, onRetryGeneration, onDismissFailedJob }: DashboardWorkspaceProps) {
   const { failedJobs, doneJobs } = splitJobsByStatus(jobs);
   const visibleDoneJobs = doneJobs.slice(0, 3);
   return (
@@ -599,6 +600,7 @@ function RecentList({ activeGenerationJob, jobs, onOpenImage, onRetryGeneration,
           key={job.id}
           job={job}
           onOpenImage={onOpenImage}
+          onEditResult={onEditResult}
         />
       ))}
     </section>
@@ -678,10 +680,12 @@ function RunningGenerationRow({ job }: { job: ActiveGenerationJob }) {
 
 function GenerationHistoryRow({
   job,
-  onOpenImage
+  onOpenImage,
+  onEditResult
 }: {
   job: GenerateJobLike;
   onOpenImage: (url: string) => void;
+  onEditResult: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [signedUrls, setSignedUrls] = useState<string[] | null>(null);
@@ -776,16 +780,25 @@ function GenerationHistoryRow({
                         className="size-full object-cover transition-opacity hover:opacity-90"
                       />
                     </button>
-                    <div className="flex items-center justify-between p-2">
+                    <div className="flex items-center justify-between gap-2 p-2">
                       <span className="text-xs text-ink-muted">#{i + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
-                        className="text-ink-muted transition-colors hover:text-ink-soft"
-                        aria-label="Download"
-                      >
-                        <Download className="size-3" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onEditResult(url, job.id, i)}
+                          className="text-xs font-semibold text-navy transition-colors hover:text-ink"
+                        >
+                          Edit this result
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void downloadUrl(url, `headshot-${i + 1}.jpg`)}
+                          className="text-ink-muted transition-colors hover:text-ink-soft"
+                          aria-label="Download"
+                        >
+                          <Download className="size-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

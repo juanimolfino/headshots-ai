@@ -94,4 +94,28 @@ describe("headshots dashboard UX safeguards", () => {
     expect(dashboardSource).toContain("onOpenSettings");
     expect(dashboardSource).not.toContain("Delete my data");
   });
+
+  it("reuses quick edit reference URLs and can clear the session cache", () => {
+    expect(appSource).toContain("cachedUrl");
+    expect(appSource).toContain("cachedUrlExpiresAt");
+    expect(appSource).toContain("isReusableUrl(photo)");
+    expect(appSource).toContain("uploadQuickReferencePhoto");
+    expect(appSource).toContain("FAL_REFERENCE_URL_TTL_MS");
+    expect(appSource).toContain("setQuickPhotos([])");
+    expect(appSource).toContain("setQuickPrompt(defaultQuickPrompt())");
+    expect(appSource).toContain("onClear={clearQuickEditSession}");
+    expect(appSource).toContain("Clear");
+  });
+
+  it("lets users re-edit a signed result through quick edit and keeps normal credit charging", () => {
+    expect(appSource).toContain("useResultAsQuickEditBase");
+    expect(appSource).toContain("sourceJobId");
+    expect(appSource).toContain("sourceIndex");
+    expect(appSource).toContain("refreshSignedResultUrl");
+    expect(appSource).toContain("SIGNED_RESULT_URL_TTL_MS");
+    expect(appSource).toContain('type: "headshot-edit"');
+    expect(appSource).toContain("const quickCost = getQuickEditBlueCost(quickQuality, quickNumImages)");
+    expect(appSource).toContain("onEditResult={useResultAsQuickEditBase}");
+    expect(dashboardSource).toContain("Edit this result");
+  });
 });
