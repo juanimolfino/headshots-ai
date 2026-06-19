@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button, ButtonArrow } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Reveal } from "@/components/marketing/reveal";
 import { Logo } from "@/components/marketing/logo";
 import { CheckIcon, WhyIcon } from "@/components/marketing/icons";
 import { StructuredData } from "@/components/marketing/structured-data";
-import { HERO_SHOTS, STEPS, STYLES, WHY, PLANS, ADDONS, FAQ } from "@/lib/landing-content";
+import { HERO_SHOTS, STEPS, STYLES, WHY, PLANS, ADDONS, FAQ, TRANSFORMATION_DEMO } from "@/lib/landing-content";
 import { publicPageMetadata, siteConfig } from "@/lib/seo";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -129,6 +130,47 @@ export default async function LandingPage() {
                       className="hero-shot-image"
                     />
                     <span className="hero-shot-label">{s.label}</span>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ================ TRANSFORMATION DEMO ================ */}
+        <section className="lp-section transform-section" aria-labelledby="transform-h2">
+          <div className="wrap">
+            <Reveal className="sec-head center">
+              <Eyebrow>Before and after</Eyebrow>
+              <h2 id="transform-h2">Common photos in. Professional headshots out.</h2>
+              <p>
+                Start with everyday reference photos and generate polished portraits
+                for work profiles, resumes, and personal brands.
+              </p>
+            </Reveal>
+            <Reveal className="transformation-demo">
+              <div className="transformation-copy">
+                <span>Everyday photos</span>
+                <strong>AI model</strong>
+                <span>Professional results</span>
+              </div>
+              <div className="transformation-grid" aria-label="Animated before and after AI headshot examples">
+                {TRANSFORMATION_DEMO.map((item, index) => (
+                  <div className="transformation-tile" key={item.after.src} style={{ "--tile-delay": `${index * 0.7}s` } as CSSProperties}>
+                    <Image
+                      src={item.before.src}
+                      alt={item.before.alt}
+                      fill
+                      sizes="(max-width: 900px) 44vw, 18vw"
+                      className="transformation-image transformation-before"
+                    />
+                    <Image
+                      src={item.after.src}
+                      alt={item.after.alt}
+                      fill
+                      sizes="(max-width: 900px) 44vw, 18vw"
+                      className="transformation-image transformation-after"
+                    />
                   </div>
                 ))}
               </div>

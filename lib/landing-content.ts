@@ -105,6 +105,49 @@ export const HERO_SHOTS = [
   },
 ];
 
+export const TRANSFORMATION_DEMO = [
+  {
+    before: {
+      src: "/steps/1-step.png",
+      alt: "Everyday upload photo placeholder for the AI headshot transformation demo"
+    },
+    after: {
+      src: "/images-landing-page/professional-image-example.jpg",
+      alt: "Professional AI headshot result after transformation"
+    }
+  },
+  {
+    before: {
+      src: "/images-landing-page/free-image-example.jpg",
+      alt: "Casual source photo placeholder for the AI headshot transformation demo"
+    },
+    after: {
+      src: "/images-landing-page/cinematic-image-example.jpg",
+      alt: "Cinematic AI headshot result after transformation"
+    }
+  },
+  {
+    before: {
+      src: "/examples-images/casual.png",
+      alt: "Natural everyday portrait placeholder for the AI headshot transformation demo"
+    },
+    after: {
+      src: "/examples-images/profesional.png",
+      alt: "Professional portrait result after AI headshot generation"
+    }
+  },
+  {
+    before: {
+      src: "/images-landing-page/natural-image-example.jpg",
+      alt: "Simple everyday portrait placeholder for the AI headshot transformation demo"
+    },
+    after: {
+      src: "/examples-images/cinematic.png",
+      alt: "Polished cinematic portrait result after AI headshot generation"
+    }
+  }
+] as const;
+
 export const PLANS = {
   starter: {
     name: "Lite",
