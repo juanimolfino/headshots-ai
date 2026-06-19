@@ -1634,14 +1634,14 @@ export function HeadshotsApp({
           onClick={closeSettingsPanel}
         >
           <div
-            className="w-full max-w-[640px] rounded-[24px] border border-line bg-bg p-6 shadow-2xl"
+            className="max-h-[90vh] w-full max-w-[640px] overflow-y-auto rounded-[24px] border border-line bg-bg p-6 shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[12px] font-semibold uppercase tracking-[.18em] text-muted">Settings</p>
+                <p className="text-[12px] font-semibold uppercase tracking-[.18em] text-ink-muted">Settings</p>
                 <h2 className="mt-2 text-2xl font-bold tracking-[-.02em] text-ink">Account settings</h2>
-                <p className="mt-2 max-w-[52ch] text-sm leading-6 text-muted">
+                <p className="mt-2 max-w-[52ch] text-sm leading-6 text-ink-muted">
                   This is where account-level controls will live. Today the only destructive action is account deletion, and it requires a double confirmation before anything is sent.
                 </p>
               </div>
@@ -1661,7 +1661,7 @@ export function HeadshotsApp({
                   <Wallet className="size-4 shrink-0 text-navy" />
                   <h3 className="text-sm font-semibold">Subscription</h3>
                 </div>
-                <div className="mt-3 grid gap-2 text-sm leading-6 text-muted">
+                <div className="mt-3 grid gap-2 text-sm leading-6 text-ink-soft">
                   <p><span className="font-medium text-ink">Plan:</span> {normalizeSubscriptionPlan(subscription?.plan)}</p>
                   <p><span className="font-medium text-ink">Status:</span> {subscriptionStatusLabel(subscription)}</p>
                   <p><span className="font-medium text-ink">Next renewal:</span> {subscription?.currentPeriodEnd ? formatShortDate(subscription.currentPeriodEnd) : "Not scheduled"}</p>
