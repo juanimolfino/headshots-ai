@@ -1669,14 +1669,12 @@ export function HeadshotsApp({
                 </div>
                 <div className="mt-4">
                   {isSubscriptionActive(subscription) ? (
-                    <form action="/api/stripe/portal" method="post">
-                      <button
-                        type="submit"
-                        className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted"
-                      >
-                        Manage billing
-                      </button>
-                    </form>
+                    <a
+                      href="/api/stripe/portal"
+                      className="dsh-focus inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition hover:bg-muted"
+                    >
+                      Manage billing
+                    </a>
                   ) : (
                     <Link
                       href="/pricing"

@@ -80,6 +80,8 @@ Handled events are `checkout.session.completed`, `invoice.paid`, `customer.subsc
 
 Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe events do not increment balances twice or reset spent subscription credits. Subscription lifecycle events are also order-protected per Stripe subscription using the last applied event ID and event timestamp.
 
+`invoice.paid` also runs a post-accreditation integrity check for subscriptions: after replacing subscription balances, it verifies the persisted subscription blue/gold balances match the grant metadata on the Stripe price. Mismatches or missing-user attribution raise an operational `reportError()` / Telegram alert without blocking the webhook.
+
 ## Job Watchdog And Retention
 
 Inngest registers three functions through `/api/inngest`: `runAiJob`, the cron `reap-stale-ai-jobs`, and the daily cleanup cron `cleanup-expired-ai-jobs`.

@@ -146,8 +146,12 @@ As of 2026-06-19, subscription visibility and Stripe attribution are tightened:
 - Active subscribers manage billing through the existing Stripe Billing Portal route `POST /api/stripe/portal`; users without an active paid subscription see a CTA back to `/pricing`.
 - `GET /api/credits` now returns both balances and the current subscription summary so the client can refresh settings state after polling or billing changes.
 - Stripe checkout and billing portal flows now reuse `users.stripeCustomerId` when present and only create a Stripe customer when the user does not already have one. Customer creation/update is centralized in `lib/stripe/customer.ts`.
+- If `users.stripeCustomerId` is missing for an existing subscriber, the billing portal flow recovers the customer id from the latest stored Stripe subscription before opening the portal. The portal route supports `GET` and `POST`, and the dashboard settings button uses direct navigation to `GET /api/stripe/portal`.
 - `invoice.paid` no longer depends solely on subscription metadata for `userId`. It resolves the user by subscription metadata first, then by `subscriptions.stripeSubscriptionId`, and finally by `users.stripeCustomerId`.
 - Telegram billing notifications now distinguish one-time pack purchases from subscription events. New subscription and renewal alerts include the customer label, plan, amount, and the exact blue/gold credits granted in that operation.
+- Subscription grants now have a post-accreditation integrity check in `lib/stripe/subscription-grant-integrity.ts`. After `replaceSubscriptionCredits()` succeeds, the webhook reads the stored subscription balances and verifies they match the Stripe price grant metadata.
+- Integrity mismatches do not block the payment flow, but they do trigger a throttled operational `reportError()` / Telegram `🚨` alert with the user, plan, Stripe event, subscription, invoice, expected credits, and actual credited balances.
+- A paid `invoice.paid` event that still cannot be mapped to a user is treated as an integrity incident and alerts the same way, so silent “payment entered but no user was credited” cases are no longer only visible through warning logs.
 
 ## Generation Details
 

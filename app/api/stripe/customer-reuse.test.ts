@@ -14,7 +14,8 @@ describe("Stripe customer reuse in billing flows", () => {
 
     expect(checkout).toContain("ensureStripeCustomerForUser(profile)");
     expect(checkout).toContain("customer: customerId");
-    expect(portal).toContain("ensureStripeCustomerForUser(profile)");
+    expect(portal).toContain("ensureStripeCustomerForUser(profile, { allowCreate: false })");
+    expect(portal).toContain("export async function GET");
     expect(portal).toContain("customer: customerId");
     expect(helper).toContain("if (profile.stripeCustomerId) return profile.stripeCustomerId");
   });

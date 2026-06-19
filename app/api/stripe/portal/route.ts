@@ -3,10 +3,11 @@ import { ensureUserProfile } from "@/lib/db/queries";
 import { getAppUrl } from "@/lib/app-url";
 import { ensureStripeCustomerForUser } from "@/lib/stripe/customer";
 import { getStripe } from "@/lib/stripe/client";
+import { reportError } from "@/lib/observability/report-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { checkBillingPortalRateLimit } from "@/lib/redis/rate-limit";
 
-export async function POST(request: Request) {
+async function createBillingPortalSession(request: Request) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user }
@@ -27,12 +28,32 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
   const appUrl = getAppUrl(new URL(request.url).origin);
-  const customerId = await ensureStripeCustomerForUser(profile);
 
-  const portal = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${appUrl}/dashboard`
-  });
+  try {
+    const customerId = await ensureStripeCustomerForUser(profile, { allowCreate: false });
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${appUrl}/dashboard`
+    });
 
-  return NextResponse.redirect(portal.url, 303);
+    return NextResponse.redirect(portal.url, 303);
+  } catch (error) {
+    await reportError(error, {
+      area: "stripe.billing-portal",
+      userId: profile.id,
+      route: "/api/stripe/portal",
+      throttleKey: `stripe.billing-portal:${profile.id}`,
+      stripeCustomerId: profile.stripeCustomerId
+    });
+
+    return NextResponse.redirect(`${appUrl}/dashboard?billing=portal_unavailable`, 303);
+  }
+}
+
+export async function GET(request: Request) {
+  return createBillingPortalSession(request);
+}
+
+export async function POST(request: Request) {
+  return createBillingPortalSession(request);
 }

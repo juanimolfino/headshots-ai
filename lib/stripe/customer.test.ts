@@ -38,8 +38,12 @@ describe("Stripe customer reuse", () => {
     const updateSet = vi.fn(() => ({ where: updateWhere }));
     const updateUsers = vi.fn(() => ({ set: updateSet }));
     const create = vi.fn(async () => ({ id: "cus_new" }));
+    const findSubscription = vi.fn(async () => null);
 
-    mocks.getDb.mockReturnValue({ update: updateUsers });
+    mocks.getDb.mockReturnValue({
+      query: { subscriptions: { findFirst: findSubscription } },
+      update: updateUsers
+    });
     mocks.getStripe.mockReturnValue({ customers: { create } });
 
     const customerId = await ensureStripeCustomerForUser({
@@ -56,6 +60,34 @@ describe("Stripe customer reuse", () => {
     expect(updateUsers).toHaveBeenCalled();
     expect(updateSet).toHaveBeenCalledWith({ stripeCustomerId: "cus_new" });
     expect(updateWhere).toHaveBeenCalled();
+  });
+
+  it("recovers and stores the customer id from an existing subscription before creating a new customer", async () => {
+    const updateWhere = vi.fn(async () => undefined);
+    const updateSet = vi.fn(() => ({ where: updateWhere }));
+    const updateUsers = vi.fn(() => ({ set: updateSet }));
+    const retrieve = vi.fn(async () => ({ customer: "cus_from_subscription" }));
+    const create = vi.fn();
+
+    mocks.getDb.mockReturnValue({
+      query: { subscriptions: { findFirst: vi.fn(async () => ({ stripeSubscriptionId: "sub_123" })) } },
+      update: updateUsers
+    });
+    mocks.getStripe.mockReturnValue({
+      subscriptions: { retrieve },
+      customers: { create }
+    });
+
+    const customerId = await ensureStripeCustomerForUser({
+      id: "user_1",
+      email: "user@example.com",
+      stripeCustomerId: null
+    });
+
+    expect(customerId).toBe("cus_from_subscription");
+    expect(retrieve).toHaveBeenCalledWith("sub_123");
+    expect(create).not.toHaveBeenCalled();
+    expect(updateSet).toHaveBeenCalledWith({ stripeCustomerId: "cus_from_subscription" });
   });
 });
 
