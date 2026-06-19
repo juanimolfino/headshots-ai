@@ -4,11 +4,12 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { addPackCredits, applySubscriptionLifecycleEvent, replaceSubscriptionCredits } from "@/lib/db/queries";
 import { subscriptions, users } from "@/lib/db/schema";
-import { sendTelegramPaymentNotification } from "@/lib/notifications/telegram";
+import { sendTelegramPaymentNotification, sendTelegramSubscriptionNotification } from "@/lib/notifications/telegram";
 import { logInfo, logWarn } from "@/lib/observability/logger";
 import { reportError } from "@/lib/observability/report-error";
 import { getStripe } from "@/lib/stripe/client";
 import { getCreditPackByStripePriceId, getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
+import { resolveStripeSubscriptionUserId } from "@/lib/stripe/subscription-user";
 
 async function getCheckoutSessionPrice(sessionId: string) {
   const lineItems = await getStripe().checkout.sessions.listLineItems(sessionId, {
@@ -29,6 +30,7 @@ type SubscriptionWithPeriods = Stripe.Subscription & {
 };
 
 type InvoiceWithSubscriptionDetails = Stripe.Invoice & {
+  billing_reason?: string | null;
   subscription?: string | Stripe.Subscription | null;
   parent?: {
     subscription_details?: {
@@ -50,6 +52,10 @@ type InvoiceWithSubscriptionDetails = Stripe.Invoice & {
     } | null;
   }>;
 };
+
+function isSubscriptionSignupInvoice(invoice: InvoiceWithSubscriptionDetails) {
+  return invoice.billing_reason === "subscription_create";
+}
 
 type InvoiceLineItemWithPrice = NonNullable<InvoiceWithSubscriptionDetails["lines"]>["data"][number];
 
@@ -147,11 +153,12 @@ async function resolveInvoicePrice(invoice: InvoiceWithSubscriptionDetails, subs
 }
 
 async function getSubscriptionUserId(subscription: Stripe.Subscription) {
-  if (subscription.metadata.userId) return subscription.metadata.userId;
-  const row = await getDb().query.subscriptions.findFirst({
-    where: eq(subscriptions.stripeSubscriptionId, subscription.id)
+  const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+  return resolveStripeSubscriptionUserId({
+    metadataUserId: subscription.metadata.userId,
+    subscriptionId: subscription.id,
+    customerId
   });
-  return row?.userId ?? null;
 }
 
 async function getUserPaymentLabel(userId: string) {
@@ -161,6 +168,15 @@ async function getUserPaymentLabel(userId: string) {
       fullName: true
     },
     where: eq(users.id, userId)
+  });
+}
+
+async function getInvoiceUserId(subscription: Stripe.Subscription, invoice: InvoiceWithSubscriptionDetails) {
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+  return resolveStripeSubscriptionUserId({
+    metadataUserId: subscription.metadata.userId,
+    subscriptionId: subscription.id,
+    customerId
   });
 }
 
@@ -267,7 +283,7 @@ export async function POST(request: Request) {
       const subscriptionId = getInvoiceSubscriptionId(invoice);
       if (subscriptionId) {
         const subscription = await getSubscriptionWithPrice(subscriptionId);
-        const userId = subscription.metadata.userId;
+        const userId = await getInvoiceUserId(subscription, invoice);
         if (userId) {
           const price = await resolveInvoicePrice(invoice, subscription);
           const grant = parseStripeCreditGrant(price?.metadata ?? {});
@@ -309,11 +325,11 @@ export async function POST(request: Request) {
           });
           if (applied) {
             const customer = await getUserPaymentLabel(userId);
-            await sendTelegramPaymentNotification({
+            await sendTelegramSubscriptionNotification({
               customerName: customer?.fullName,
               customerEmail: customer?.email,
+              subscriptionType: isSubscriptionSignupInvoice(invoice) ? "New subscription" : "Subscription renewal",
               itemName: plan?.name ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "Subscription",
-              paymentType: "Subscription",
               amountCents: invoice.amount_paid,
               currency: invoice.currency ?? price?.currency,
               credits: { blue: grant.blue, gold: grant.gold }

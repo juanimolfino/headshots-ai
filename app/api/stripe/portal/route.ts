@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db";
 import { ensureUserProfile } from "@/lib/db/queries";
 import { getAppUrl } from "@/lib/app-url";
-import { users } from "@/lib/db/schema";
+import { ensureStripeCustomerForUser } from "@/lib/stripe/customer";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { checkBillingPortalRateLimit } from "@/lib/redis/rate-limit";
@@ -29,13 +27,7 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
   const appUrl = getAppUrl(new URL(request.url).origin);
-  let customerId = profile.stripeCustomerId;
-
-  if (!customerId) {
-    const customer = await stripe.customers.create({ email: profile.email, metadata: { userId: profile.id } });
-    customerId = customer.id;
-    await getDb().update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, profile.id));
-  }
+  const customerId = await ensureStripeCustomerForUser(profile);
 
   const portal = await stripe.billingPortal.sessions.create({
     customer: customerId,

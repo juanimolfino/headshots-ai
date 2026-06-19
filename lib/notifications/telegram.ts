@@ -11,6 +11,19 @@ type TelegramPaymentNotification = {
   };
 };
 
+type TelegramSubscriptionNotification = {
+  customerName?: string | null;
+  customerEmail?: string | null;
+  subscriptionType: "New subscription" | "Subscription renewal";
+  itemName: string;
+  amountCents: number;
+  currency?: string | null;
+  credits: {
+    blue: number;
+    gold: number;
+  };
+};
+
 type TelegramErrorAlert = {
   area: string;
   message: string;
@@ -45,6 +58,16 @@ function buildPaymentMessage(input: TelegramPaymentNotification) {
     `Type: ${input.paymentType}`,
     `Plan/pack: ${input.itemName}`,
     `Amount: ${formatMoney(input.amountCents, input.currency ?? "usd")}${credits}`
+  ].join("\n");
+}
+
+export function buildSubscriptionMessage(input: TelegramSubscriptionNotification) {
+  return [
+    input.subscriptionType === "New subscription" ? "New Stripe subscription" : "Stripe subscription renewed",
+    `Customer: ${input.customerName || input.customerEmail || "Unknown customer"}`,
+    `Plan: ${input.itemName}`,
+    `Amount: ${formatMoney(input.amountCents, input.currency ?? "usd")}`,
+    `Credits applied: ${input.credits.blue} blue, ${input.credits.gold} gold`
   ].join("\n");
 }
 
@@ -107,6 +130,10 @@ async function sendTelegramMessage(text: string, label: string) {
 
 export async function sendTelegramPaymentNotification(input: TelegramPaymentNotification) {
   return sendTelegramMessage(buildPaymentMessage(input), "payment");
+}
+
+export async function sendTelegramSubscriptionNotification(input: TelegramSubscriptionNotification) {
+  return sendTelegramMessage(buildSubscriptionMessage(input), "subscription");
 }
 
 export async function sendTelegramErrorAlert(input: TelegramErrorAlert) {

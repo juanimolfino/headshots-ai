@@ -18,6 +18,7 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain("getInvoiceSubscriptionId(invoice)");
     expect(source).toContain("resolveInvoicePrice(invoice, subscription)");
     expect(source).toContain("replaceSubscriptionCredits");
+    expect(source).toContain("resolveStripeSubscriptionUserId");
     expect(queries).toContain("subscriptionBlueBalance: blue");
     expect(queries).toContain("subscriptionGoldBalance: gold");
   });
@@ -53,9 +54,10 @@ describe("Stripe webhook credit buckets", () => {
 
   it("sends Telegram payment alerts only after a credit grant is applied", () => {
     expect(source).toContain("sendTelegramPaymentNotification");
+    expect(source).toContain("sendTelegramSubscriptionNotification");
     expect(source).toContain("if (applied)");
     expect(source).toContain('paymentType: "Pack"');
-    expect(source).toContain('paymentType: "Subscription"');
+    expect(source).toContain('subscriptionType: isSubscriptionSignupInvoice(invoice) ? "New subscription" : "Subscription renewal"');
   });
 
   it("reports processing failures for valid Stripe events", () => {

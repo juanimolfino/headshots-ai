@@ -36,7 +36,7 @@ Production AI SaaS for professional headshots. Users upload photos, train a pers
 | Jobs | Inngest + Upstash Redis concurrency slots |
 | Payments | Stripe checkout, portal, webhooks |
 | Email | Resend |
-| Deploy | Vercel Pro, `https://headshots-ai-delta-pink.vercel.app` |
+| Deploy | Vercel Pro, `https://picyourai.com` |
 
 ## Headshot Flow
 
@@ -59,7 +59,7 @@ As of 2026-06-14, Phase 1 is complete and deployed with green production runs:
 - Stripe subscription lifecycle events are order-protected. `customer.subscription.updated`, `customer.subscription.deleted`, and `invoice.payment_failed` flow through `applySubscriptionLifecycleEvent()`, which stores `last_stripe_event_id` and `last_stripe_event_created_at` on `subscriptions` and discards replays or older out-of-order events.
 - AI jobs have explicit timeouts and a stale-job reaper. `headshot-generate` and `headshot-edit` wrap fal.ai calls in 10 minute timeouts. The Inngest cron `reap-stale-ai-jobs` runs every 10 minutes and fails/refunds active jobs older than their type threshold.
 - Reaper thresholds are intentionally above normal job duration and above the explicit generate/edit timeout: `headshot-generate` 15 minutes, `headshot-edit` 15 minutes, `headshot-training` 50 minutes. Training's webhook wait remains 45 minutes.
-- Inngest is registered through `app/api/inngest/route.ts` with both `runAiJob` and `reapStaleAiJobs`.
+- Inngest is registered through `app/api/inngest/route.ts` with `runAiJob`, `reapStaleAiJobs`, and the daily retention cron `cleanupExpiredAiJobs`.
 
 Additional robustness completed on 2026-06-14:
 
@@ -112,6 +112,42 @@ As of 2026-06-15, Phase 4A/4B adds the critical observability layer without Sent
 - Stripe checkout and billing portal session creation are rate-limited per user through Upstash.
 - Structured JSON logging is centralized in `lib/observability/logger.ts`. Stripe webhook logs event receipt, credit grant application, idempotent skips, lifecycle changes, missing-user skips, signature rejection, and processing duration.
 - `/api/health` now returns integration-level `ok` / `missing` / `error` statuses for Supabase, DB, Stripe, Fal, R2, Inngest, Upstash, Resend, OpenAI, Gemini, Telegram, and app env. It remains protected by `HEALTHCHECK_SECRET` in production.
+
+## Phase 5 Runtime And Landing Updates
+
+As of 2026-06-19, the latest runtime and marketing changes are:
+
+- Runtime canonical URLs now depend on `NEXT_PUBLIC_APP_URL`. Auth redirects, Stripe success/cancel/return URLs, Fal training webhook submission, and job email CTA links all use this env and should resolve to `https://picyourai.com` in production.
+- Public SEO/legal URLs still come from `lib/legal/company-info.ts`, which now points `websiteUrl` to `https://picyourai.com/`. That feeds canonical tags, sitemap, robots sitemap URL, `llms.txt`, and OG/Twitter metadata.
+- Next.js image optimization is intentionally disabled globally in `next.config.ts` with `images.unoptimized = true` to avoid Vercel `/_next/image` usage, `INVALID_IMAGE_OPTIMIZE_REQUEST` noise, and image optimization billing.
+- Public marketing assets must live under the repo root `public/` directory. Landing hero images are served from `public/images-landing-page`, style examples from `public/examples-images`, and how-it-works step visuals from `public/steps`.
+- The landing hero, `Three steps to a studio-quality headshot`, and `Choose your look` sections now render real bitmap assets through `next/image` without Vercel optimization.
+
+## Phase 6 Database Hygiene
+
+As of 2026-06-19, DB hygiene adds retention-aware indexing and cleanup:
+
+- Migration `drizzle/0012_jobs_retention_indexes.sql` adds:
+  - `jobs_user_id_created_at_idx` on `(user_id, created_at DESC)` for dashboard listings
+  - `jobs_active_status_created_at_idx` partial index for `pending` / `processing` jobs used by the reaper
+  - `jobs_user_id_type_idx` on `(user_id, type)`
+- A new daily Inngest cron `cleanup-expired-ai-jobs` runs at `0 5 * * *`.
+- Retention thresholds are defined in `lib/db/queries.ts`:
+  - failed jobs older than 90 days are deleted
+  - done gallery jobs (`headshot-generate`, `headshot-edit`, `tts`) older than 180 days are deleted after their Supabase Storage objects are removed
+- `headshot-training` jobs are never touched by retention cleanup because they preserve LoRA references still needed by the user.
+- If storage deletion fails during retention cleanup, the job row is kept for retry on the next cron run, and a structured warning plus throttled operational alert are emitted.
+
+## Phase 7 Subscription Lifecycle UX
+
+As of 2026-06-19, subscription visibility and Stripe attribution are tightened:
+
+- Dashboard settings now include a subscription panel showing the current plan, effective status, next renewal date, and whether the subscription is set to cancel at period end.
+- Active subscribers manage billing through the existing Stripe Billing Portal route `POST /api/stripe/portal`; users without an active paid subscription see a CTA back to `/pricing`.
+- `GET /api/credits` now returns both balances and the current subscription summary so the client can refresh settings state after polling or billing changes.
+- Stripe checkout and billing portal flows now reuse `users.stripeCustomerId` when present and only create a Stripe customer when the user does not already have one. Customer creation/update is centralized in `lib/stripe/customer.ts`.
+- `invoice.paid` no longer depends solely on subscription metadata for `userId`. It resolves the user by subscription metadata first, then by `subscriptions.stripeSubscriptionId`, and finally by `users.stripeCustomerId`.
+- Telegram billing notifications now distinguish one-time pack purchases from subscription events. New subscription and renewal alerts include the customer label, plan, amount, and the exact blue/gold credits granted in that operation.
 
 ## Generation Details
 
@@ -177,6 +213,8 @@ Subscription lifecycle ordering requires migration `drizzle/0009_subscription_ev
 
 Non-negative credit balance constraints require migration `drizzle/0010_non_negative_credit_balances.sql`. If that migration fails with `credits table contains negative balances`, inspect/fix those rows before rerunning it.
 
+Job retention indexes require migration `drizzle/0012_jobs_retention_indexes.sql`.
+
 ## Environment
 
 Required production variables:
@@ -233,7 +271,7 @@ FAL_MOCK_TRAINING=true
 INNGEST_BASE_URL=http://localhost:8288
 ```
 
-`RESEND_FROM_EMAIL` must be a verified sender/domain. `FAL_WEBHOOK_SECRET` is required in production and the worker appends it to the fal webhook URL. Telegram env vars are optional, but without them operational alerts only remain in logs.
+`RESEND_FROM_EMAIL` must be a verified sender/domain. `FAL_WEBHOOK_SECRET` is required in production and the worker appends it to the fal webhook URL. `NEXT_PUBLIC_APP_URL` must match the canonical production domain because auth redirects, Stripe return URLs, Fal webhook submission, and job email CTA links all use it. Telegram env vars are optional, but without them operational alerts only remain in logs.
 
 ## Local Commands
 
@@ -251,6 +289,7 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 - Vercel Pro function timeout is 300 s, so LoRA training must stay webhook-driven.
 - Training webhook wait timeout is 45 minutes; stale `headshot-training` jobs are reaped after 50 minutes.
 - Generate/edit fal.ai calls time out after 10 minutes; the stale-job reaper fails active generate/edit jobs after 15 minutes.
+- Failed jobs older than 90 days and done gallery jobs older than 180 days are deleted by the daily retention cron. Training jobs are preserved.
 - R2 signed URLs are method-specific; GET-signed URLs fail on HEAD.
 - Supabase free tier has a 50 MB per-file limit; LoRAs are about 125 MB, so LoRAs live in R2.
 - Legacy LoRA URLs from fal.storage may expire and fail generation.
@@ -265,6 +304,7 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 - AI crawlers are intentionally allowed in `app/robots.ts`; this includes GPTBot, ClaudeBot, PerplexityBot, Google-Extended, and other known AI/search crawlers.
 - The OG/Twitter placeholder image is generated by `app/opengraph-image.tsx` and reused by `app/twitter-image.tsx`; replace that file when final brand art is ready.
 - Marketing reveal animations are progressive enhancement only. Public copy must remain visible in server-rendered HTML without JavaScript.
+- Landing public assets are expected under root `public/`, not `app/public/`.
 
 ## Useful Next Work
 

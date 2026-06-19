@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ensureUserProfile } from "@/lib/db/queries";
 import { getAppUrl } from "@/lib/app-url";
+import { ensureStripeCustomerForUser } from "@/lib/stripe/customer";
 import { getCreditPack, getSubscriptionPlan } from "@/lib/stripe/pricing";
 import { getStripe } from "@/lib/stripe/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -40,9 +41,10 @@ export async function POST(request: Request) {
     if (!plan) return NextResponse.json({ error: "Invalid subscription plan" }, { status: 400 });
     const price = process.env[plan.stripePriceEnv];
     if (!price) throw new Error(`${plan.stripePriceEnv} is required`);
+    const customerId = await ensureStripeCustomerForUser(profile);
     const session = await getStripe().checkout.sessions.create({
       mode: "subscription",
-      customer_email: profile.email,
+      customer: customerId,
       line_items: [{ price, quantity: 1 }],
       success_url: `${appUrl}/dashboard?checkout=success`,
       cancel_url: `${appUrl}/pricing`,
@@ -61,10 +63,11 @@ export async function POST(request: Request) {
   if (!pack) return NextResponse.json({ error: "Invalid credit pack" }, { status: 400 });
   const price = process.env[pack.stripePriceEnv];
   if (!price) throw new Error(`${pack.stripePriceEnv} is required`);
+  const customerId = await ensureStripeCustomerForUser(profile);
 
   const session = await getStripe().checkout.sessions.create({
     mode: "payment",
-    customer_email: profile.email,
+    customer: customerId,
     line_items: [{ price, quantity: 1 }],
     success_url: `${appUrl}/dashboard?checkout=success`,
     cancel_url: `${appUrl}/pricing`,

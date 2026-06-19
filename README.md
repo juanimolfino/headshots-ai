@@ -80,14 +80,17 @@ Handled events are `checkout.session.completed`, `invoice.paid`, `customer.subsc
 
 Webhook credit grants are idempotent by `stripeEventId`, so replayed Stripe events do not increment balances twice or reset spent subscription credits. Subscription lifecycle events are also order-protected per Stripe subscription using the last applied event ID and event timestamp.
 
-## Job Watchdog
+## Job Watchdog And Retention
 
-Inngest registers two functions through `/api/inngest`: `runAiJob` and the cron `reap-stale-ai-jobs`.
+Inngest registers three functions through `/api/inngest`: `runAiJob`, the cron `reap-stale-ai-jobs`, and the daily cleanup cron `cleanup-expired-ai-jobs`.
 
 - `headshot-generate` and `headshot-edit` fal.ai calls time out after 10 minutes.
 - The stale-job reaper runs every 10 minutes.
 - Reaper thresholds: generate/edit 15 minutes, training 50 minutes.
 - Refunds use the original credit bucket recorded on the job and are idempotent.
+- Failed jobs older than 90 days are deleted.
+- Done gallery jobs (`headshot-generate`, `headshot-edit`, `tts`) older than 180 days are deleted after their Supabase Storage objects are removed.
+- `headshot-training` jobs are preserved because they keep the LoRA reference users still need.
 
 Legacy jobs without `metadata.creditDebits` still refund through the pack fallback, but `refundJobCredits()` emits a structured `console.warn` with code `REFUND_FALLBACK_NO_CREDIT_DEBITS` so those cases are searchable in production logs.
 
@@ -107,8 +110,9 @@ Legacy jobs without `metadata.creditDebits` still refund through the pack fallba
 3. Add every variable from [.env.example](./.env.example).
 4. Configure Supabase auth redirect URLs for your Vercel domain.
 5. Configure Stripe webhook signing secret for `https://your-domain.com/api/stripe/webhook`.
-6. Set `HEALTHCHECK_SECRET` in production if you want to use `/api/health`.
-7. Deploy.
+6. Set `NEXT_PUBLIC_APP_URL` to the canonical production domain, for example `https://picyourai.com`.
+7. Set `HEALTHCHECK_SECRET` in production if you want to use `/api/health`.
+8. Deploy.
 
 ## Main Routes
 
@@ -120,3 +124,11 @@ Legacy jobs without `metadata.creditDebits` still refund through the pack fallba
 - `/api/jobs/result/[id]` authenticated signed result URL redirect.
 - `/api/jobs/status/[id]` job polling endpoint.
 - `/api/inngest` Inngest function endpoint.
+
+## Landing Assets
+
+- Marketing images are served from the root `public/` directory.
+- Hero examples: `public/images-landing-page`
+- Style examples: `public/examples-images`
+- How-it-works step visuals: `public/steps`
+- Next.js image optimization is disabled globally on purpose to avoid Vercel `/_next/image` usage and related billing/error noise.
