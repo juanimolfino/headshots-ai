@@ -55,6 +55,7 @@ describe("Stripe webhook credit buckets", () => {
   it("sends Telegram payment alerts only after a credit grant is applied", () => {
     expect(source).toContain("sendTelegramPaymentNotification");
     expect(source).toContain("sendTelegramSubscriptionNotification");
+    expect(source).toContain("verifySubscriptionGrantIntegrity");
     expect(source).toContain("if (applied)");
     expect(source).toContain('paymentType: "Pack"');
     expect(source).toContain('subscriptionType: isSubscriptionSignupInvoice(invoice) ? "New subscription" : "Subscription renewal"');

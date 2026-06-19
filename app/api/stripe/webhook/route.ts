@@ -3,11 +3,12 @@ import Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { addPackCredits, applySubscriptionLifecycleEvent, replaceSubscriptionCredits } from "@/lib/db/queries";
-import { subscriptions, users } from "@/lib/db/schema";
+import { credits, subscriptions, users } from "@/lib/db/schema";
 import { sendTelegramPaymentNotification, sendTelegramSubscriptionNotification } from "@/lib/notifications/telegram";
 import { logInfo, logWarn } from "@/lib/observability/logger";
 import { reportError } from "@/lib/observability/report-error";
 import { getStripe } from "@/lib/stripe/client";
+import { verifySubscriptionGrantIntegrity } from "@/lib/stripe/subscription-grant-integrity";
 import { getCreditPackByStripePriceId, getPlanByStripePriceId, parseStripeCreditGrant } from "@/lib/stripe/pricing";
 import { resolveStripeSubscriptionUserId } from "@/lib/stripe/subscription-user";
 
@@ -171,6 +172,16 @@ async function getUserPaymentLabel(userId: string) {
   });
 }
 
+async function getUserSubscriptionBalances(userId: string) {
+  return getDb().query.credits.findFirst({
+    columns: {
+      subscriptionBlueBalance: true,
+      subscriptionGoldBalance: true
+    },
+    where: eq(credits.userId, userId)
+  });
+}
+
 async function getInvoiceUserId(subscription: Stripe.Subscription, invoice: InvoiceWithSubscriptionDetails) {
   const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
   return resolveStripeSubscriptionUserId({
@@ -283,10 +294,11 @@ export async function POST(request: Request) {
       const subscriptionId = getInvoiceSubscriptionId(invoice);
       if (subscriptionId) {
         const subscription = await getSubscriptionWithPrice(subscriptionId);
+        const price = await resolveInvoicePrice(invoice, subscription);
+        const grant = parseStripeCreditGrant(price?.metadata ?? {});
+        const plan = getPlanByStripePriceId(price?.id);
         const userId = await getInvoiceUserId(subscription, invoice);
         if (userId) {
-          const price = await resolveInvoicePrice(invoice, subscription);
-          const grant = parseStripeCreditGrant(price?.metadata ?? {});
           if (!grant || grant.kind !== "subscription") {
             logWarn("stripe_invoice_paid_skipped_no_subscription_grant", {
               area: "stripe.webhook",
@@ -325,6 +337,22 @@ export async function POST(request: Request) {
           });
           if (applied) {
             const customer = await getUserPaymentLabel(userId);
+            const subscriptionBalances = await getUserSubscriptionBalances(userId);
+            await verifySubscriptionGrantIntegrity({
+              userId,
+              userLabel: customer?.email ?? customer?.fullName ?? null,
+              plan: plan?.id ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "unknown",
+              stripeEventId: event.id,
+              stripeEventType: event.type,
+              subscriptionId,
+              invoiceId: invoice.id,
+              priceId: price?.id,
+              expectedCredits: { blue: grant.blue, gold: grant.gold },
+              actualCredits: subscriptionBalances ? {
+                blue: subscriptionBalances.subscriptionBlueBalance,
+                gold: subscriptionBalances.subscriptionGoldBalance
+              } : null
+            });
             await sendTelegramSubscriptionNotification({
               customerName: customer?.fullName,
               customerEmail: customer?.email,
@@ -342,6 +370,19 @@ export async function POST(request: Request) {
             invoice
           });
         } else {
+          await verifySubscriptionGrantIntegrity({
+            userId: null,
+            plan: plan?.id ?? subscription.metadata.plan ?? price?.nickname ?? price?.id ?? "unknown",
+            stripeEventId: event.id,
+            stripeEventType: event.type,
+            subscriptionId,
+            invoiceId: invoice.id,
+            priceId: price?.id,
+            expectedCredits: grant && grant.kind === "subscription"
+              ? { blue: grant.blue, gold: grant.gold }
+              : { blue: 0, gold: 0 },
+            actualCredits: null
+          });
           logWarn("stripe_invoice_paid_skipped_missing_user", {
             area: "stripe.webhook",
             stripeEventId: event.id,
