@@ -324,7 +324,7 @@ node scripts/simulate-fal-webhook.mjs <jobId> [loraUrl]
 - `lib/legal/company-info.ts` remains the source of truth for the brand name (`Pic Your AI`) and company/contact details.
 - The visible product UI should stay English-only. Legal documents are already English and should not be machine-translated in code.
 - Logo assets live in `public/`: `picyourai_icon_512_white.png` is the main logo mark, `picyourai-favicon.png` is the favicon source, and `/icon.png` plus `/apple-icon.png` are public aliases used by metadata/manifest.
-- The landing transformation demo uses placeholder before/after images from `public/steps`, `public/images-landing-page`, and `public/examples-images`. Replace the entries in `TRANSFORMATION_DEMO` inside `lib/landing-content.ts` when real before/after examples are ready.
+- The landing hero visual uses `components/marketing/hero-transform.tsx`, ported from `docs/animation-landing-page/design_handoff_hero_animation 2`. Its images live in `public/hero/sel-*.jpg`; replace those files to change the hero animation without touching the component.
 
 ## Useful Next Work
 

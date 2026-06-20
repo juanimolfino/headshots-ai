@@ -1,3 +1,10 @@
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 
-export default nextCoreWebVitals;
+const eslintConfig = [
+  ...nextCoreWebVitals,
+  {
+    ignores: ["docs/animation-landing-page/**"]
+  }
+];
+
+export default eslintConfig;
