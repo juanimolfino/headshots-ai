@@ -13,10 +13,10 @@ const INPUT = [
 ] as const;
 
 const OUTPUT = [
-  { src: "/hero/sel-1.jpg", style: "pro", cap: "Professional", pos: "50% 20%" },
-  { src: "/hero/sel-8.jpg", style: "cine", cap: "Cinematic", pos: "70% 30%" },
-  { src: "/hero/sel-3.jpg", style: "nat", cap: "Natural", pos: "50% 34%" },
-  { src: "/hero/sel-7.jpg", style: "pro", cap: "Professional", pos: "33% 30%" }
+  { src: "/images-landing-page/result/professional-image-example.jpg", style: "pro", cap: "Professional", pos: "50% 20%" },
+  { src: "/images-landing-page/result/natural-image-example.jpg", style: "nat", cap: "Natural", pos: "50% 34%" },
+  { src: "/images-landing-page/result/free-image-example.jpg", style: "free", cap: "Free", pos: "40% 28%" },
+  { src: "/images-landing-page/result/cinematic-image-example.jpg", style: "cine", cap: "Cinematic", pos: "70% 30%" }
 ] as const;
 
 const PHASES = [

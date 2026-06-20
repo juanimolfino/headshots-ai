@@ -410,6 +410,8 @@ body {
   .hsx-shot[data-style="cine"]::after { background: radial-gradient(125% 80% at 50% 32%, transparent 38%, rgba(18, 13, 8, .52)), linear-gradient(180deg, rgba(206, 142, 58, .20), transparent); }
   .hsx-shot[data-style="nat"] img { filter: saturate(1.06) contrast(1.02) brightness(1.04); }
   .hsx-shot[data-style="nat"]::after { background: linear-gradient(180deg, rgba(255, 222, 184, .20), transparent 60%); }
+  .hsx-shot[data-style="free"] img { filter: saturate(1.02) contrast(1.03) brightness(1.02); }
+  .hsx-shot[data-style="free"]::after { background: linear-gradient(180deg, rgba(255, 255, 255, .10), transparent 50%); }
   .hsx-cap {
     position: absolute;
     left: 0;
