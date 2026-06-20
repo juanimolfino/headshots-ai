@@ -1,0 +1,66 @@
+/* ============================================================
+   Hero Animation — selfies → AI headshots
+   Drop into a global stylesheet or import as a CSS module.
+   Uses existing tokens: --ease --radius --line --bg-2 --surface
+   --ink --muted --blue --gold --mono  (no new tokens needed)
+   ============================================================ */
+
+/* Hero transform animation (selfies -> headshots) */
+.hsx{position:relative;max-width:480px;margin-inline:auto;width:100%}
+.hsx-stage{position:relative;width:100%;aspect-ratio:1/1.16}
+
+/* INPUT — messy selfie collage */
+.hsx-input{position:absolute;inset:0;opacity:1;transition:opacity .55s var(--ease)}
+.hsx.is-output .hsx-input{opacity:0}
+.hsx-card{position:absolute;width:45%;aspect-ratio:4/5;border-radius:14px;overflow:hidden;
+  border:3px solid #fff;box-shadow:0 14px 30px -14px rgba(28,26,23,.45);
+  transform:rotate(var(--r));transform-origin:center;
+  transition:transform .9s var(--ease),opacity .7s var(--ease)}
+.hsx-card img{width:100%;height:100%;object-fit:cover;display:block}
+/* in any phase that isn't input, the cards collapse to the center and fade */
+.hsx:not(.is-input) .hsx-card{transform:scale(.34) rotate(0deg);opacity:0}
+
+/* OUTPUT — the four results */
+.hsx-output{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px}
+.hsx-shot{position:relative;margin:0;border-radius:var(--radius);overflow:hidden;
+  border:1px solid var(--line);background:var(--bg-2);
+  opacity:0;transform:scale(.9) translateY(10px);
+  transition:opacity .6s var(--ease),transform .6s var(--ease)}
+.hsx-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.hsx-shot::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:soft-light}
+/* the three "style looks" are just CSS filters over the same photos */
+.hsx-shot[data-style="pro"] img{filter:saturate(.92) contrast(1.05) brightness(1.06)}
+.hsx-shot[data-style="pro"]::after{background:linear-gradient(180deg,rgba(180,200,232,.30),rgba(255,255,255,.04))}
+.hsx-shot[data-style="cine"] img{filter:saturate(1.16) contrast(1.16) brightness(.95)}
+.hsx-shot[data-style="cine"]::after{background:radial-gradient(125% 80% at 50% 32%,transparent 38%,rgba(18,13,8,.52)),linear-gradient(180deg,rgba(206,142,58,.20),transparent)}
+.hsx-shot[data-style="nat"] img{filter:saturate(1.06) contrast(1.02) brightness(1.04)}
+.hsx-shot[data-style="nat"]::after{background:linear-gradient(180deg,rgba(255,222,184,.20),transparent 60%)}
+.hsx-cap{position:absolute;left:0;bottom:0;z-index:2;margin:10px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--ink);
+  background:color-mix(in srgb,var(--surface) 90%,transparent);
+  padding:5px 9px;border-radius:7px;border:1px solid var(--line);backdrop-filter:blur(2px)}
+.hsx.is-output .hsx-shot{opacity:1;transform:none}
+/* staggered reveal order: top-left, bottom-right, top-right, bottom-left */
+.hsx.is-output .hsx-shot:nth-child(1){transition-delay:.04s}
+.hsx.is-output .hsx-shot:nth-child(4){transition-delay:.14s}
+.hsx.is-output .hsx-shot:nth-child(2){transition-delay:.24s}
+.hsx.is-output .hsx-shot:nth-child(3){transition-delay:.34s}
+
+/* SCAN sweep during processing */
+.hsx-scan{position:absolute;inset:0;border-radius:var(--radius);overflow:hidden;pointer-events:none;opacity:0;transition:opacity .3s;z-index:3}
+.hsx-scan::before{content:"";position:absolute;top:-6%;bottom:-6%;left:-34%;width:34%;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--gold) 60%,#fff),transparent);filter:blur(3px)}
+.hsx.is-processing .hsx-scan{opacity:1}
+.hsx.is-processing .hsx-scan::before{animation:hsxscan 1.25s var(--ease)}
+@keyframes hsxscan{from{left:-34%}to{left:112%}}
+
+/* STATUS pill */
+.hsx-status{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:18px;min-height:20px;
+  font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.hsx-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);transition:background .3s;flex:none}
+.hsx[data-phase="is-processing"] .hsx-dot{background:var(--gold);animation:hsxpulse 1s ease-in-out infinite}
+.hsx[data-phase="is-output"] .hsx-dot{background:#46a274}
+@keyframes hsxpulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* accessibility: no motion -> the controller jumps straight to the output state */
+@media (prefers-reduced-motion:reduce){.hsx-scan{display:none}.hsx-card,.hsx-shot{transition:none}}

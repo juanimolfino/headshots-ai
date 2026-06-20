@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hero Animation — standalone demo</title>
+<!--
+  STANDALONE DEMO of the hero animation. Open this file directly in a browser
+  (no build needed) to see the loop: selfies collage -> processing -> 4 headshots.
+  The real code to ship is in code/HeroTransform.tsx + code/hero-transform.css.
+  This file just inlines the same CSS/HTML/JS plus the tokens it depends on.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* --- tokens this animation depends on (already in your globals.css) --- */
+  :root{
+    --bg:#f5f3ef; --bg-2:#edeae3; --surface:#fffefb;
+    --ink:#1c1a17; --muted:#807a70; --line:#e4ddd0;
+    --blue:#3f6dd6; --gold:#c79a3e; --radius:18px;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,monospace;
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:"Hanken Grotesk",sans-serif;
+    min-height:100vh;display:grid;place-items:center;padding:40px}
+
+  /* ===== hero-transform.css (verbatim) ===== */
+  .hsx{position:relative;max-width:480px;margin-inline:auto;width:100%}
+  .hsx-stage{position:relative;width:100%;aspect-ratio:1/1.16}
+  .hsx-input{position:absolute;inset:0;opacity:1;transition:opacity .55s var(--ease)}
+  .hsx.is-output .hsx-input{opacity:0}
+  .hsx-card{position:absolute;width:45%;aspect-ratio:4/5;border-radius:14px;overflow:hidden;
+    border:3px solid #fff;box-shadow:0 14px 30px -14px rgba(28,26,23,.45);
+    transform:rotate(var(--r));transform-origin:center;
+    transition:transform .9s var(--ease),opacity .7s var(--ease)}
+  .hsx-card img{width:100%;height:100%;object-fit:cover;display:block}
+  .hsx:not(.is-input) .hsx-card{transform:scale(.34) rotate(0deg);opacity:0}
+  .hsx-output{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px}
+  .hsx-shot{position:relative;margin:0;border-radius:var(--radius);overflow:hidden;
+    border:1px solid var(--line);background:var(--bg-2);
+    opacity:0;transform:scale(.9) translateY(10px);
+    transition:opacity .6s var(--ease),transform .6s var(--ease)}
+  .hsx-shot img{width:100%;height:100%;object-fit:cover;display:block}
+  .hsx-shot::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:soft-light}
+  .hsx-shot[data-style="pro"] img{filter:saturate(.92) contrast(1.05) brightness(1.06)}
+  .hsx-shot[data-style="pro"]::after{background:linear-gradient(180deg,rgba(180,200,232,.30),rgba(255,255,255,.04))}
+  .hsx-shot[data-style="cine"] img{filter:saturate(1.16) contrast(1.16) brightness(.95)}
+  .hsx-shot[data-style="cine"]::after{background:radial-gradient(125% 80% at 50% 32%,transparent 38%,rgba(18,13,8,.52)),linear-gradient(180deg,rgba(206,142,58,.20),transparent)}
+  .hsx-shot[data-style="nat"] img{filter:saturate(1.06) contrast(1.02) brightness(1.04)}
+  .hsx-shot[data-style="nat"]::after{background:linear-gradient(180deg,rgba(255,222,184,.20),transparent 60%)}
+  .hsx-cap{position:absolute;left:0;bottom:0;z-index:2;margin:10px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--ink);
+    background:color-mix(in srgb,var(--surface) 90%,transparent);
+    padding:5px 9px;border-radius:7px;border:1px solid var(--line);backdrop-filter:blur(2px)}
+  .hsx.is-output .hsx-shot{opacity:1;transform:none}
+  .hsx.is-output .hsx-shot:nth-child(1){transition-delay:.04s}
+  .hsx.is-output .hsx-shot:nth-child(4){transition-delay:.14s}
+  .hsx.is-output .hsx-shot:nth-child(2){transition-delay:.24s}
+  .hsx.is-output .hsx-shot:nth-child(3){transition-delay:.34s}
+  .hsx-scan{position:absolute;inset:0;border-radius:var(--radius);overflow:hidden;pointer-events:none;opacity:0;transition:opacity .3s;z-index:3}
+  .hsx-scan::before{content:"";position:absolute;top:-6%;bottom:-6%;left:-34%;width:34%;
+    background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--gold) 60%,#fff),transparent);filter:blur(3px)}
+  .hsx.is-processing .hsx-scan{opacity:1}
+  .hsx.is-processing .hsx-scan::before{animation:hsxscan 1.25s var(--ease)}
+  @keyframes hsxscan{from{left:-34%}to{left:112%}}
+  .hsx-status{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:18px;min-height:20px;
+    font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  .hsx-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);transition:background .3s;flex:none}
+  .hsx[data-phase="is-processing"] .hsx-dot{background:var(--gold);animation:hsxpulse 1s ease-in-out infinite}
+  .hsx[data-phase="is-output"] .hsx-dot{background:#46a274}
+  @keyframes hsxpulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @media (prefers-reduced-motion:reduce){.hsx-scan{display:none}.hsx-card,.hsx-shot{transition:none}}
+</style>
+</head>
+<body>
+
+<!-- ===== markup ===== -->
+<div class="hsx is-input" id="hsx" data-phase="is-input" role="group"
+     aria-label="Animation: from your everyday selfies to studio-quality AI headshots">
+  <div class="hsx-stage">
+    <div class="hsx-input" aria-hidden="true">
+      <div class="hsx-card" style="left:2%;top:4%;--r:-8deg"><img src="../images/sel-4.jpg" alt="" /></div>
+      <div class="hsx-card" style="left:43%;top:0%;--r:6deg"><img src="../images/sel-5.jpg" alt="" /></div>
+      <div class="hsx-card" style="left:6%;top:39%;--r:5deg"><img src="../images/sel-6.jpg" alt="" /></div>
+      <div class="hsx-card" style="left:47%;top:43%;--r:-6deg"><img src="../images/sel-9.jpg" alt="" /></div>
+      <div class="hsx-card" style="left:25%;top:20%;--r:-2deg"><img src="../images/sel-2.jpg" alt="" /></div>
+      <div class="hsx-card" style="left:30%;top:50%;--r:9deg"><img src="../images/sel-10.jpg" alt="" /></div>
+    </div>
+    <div class="hsx-output" aria-hidden="true">
+      <figure class="hsx-shot" data-style="pro"><img src="../images/sel-1.jpg" alt="Professional AI headshot" style="object-position:50% 20%" /><figcaption class="hsx-cap">Professional</figcaption></figure>
+      <figure class="hsx-shot" data-style="cine"><img src="../images/sel-8.jpg" alt="Cinematic AI headshot" style="object-position:70% 30%" /><figcaption class="hsx-cap">Cinematic</figcaption></figure>
+      <figure class="hsx-shot" data-style="nat"><img src="../images/sel-3.jpg" alt="Natural AI headshot" style="object-position:50% 34%" /><figcaption class="hsx-cap">Natural</figcaption></figure>
+      <figure class="hsx-shot" data-style="pro"><img src="../images/sel-7.jpg" alt="Professional AI headshot" style="object-position:33% 30%" /><figcaption class="hsx-cap">Professional</figcaption></figure>
+    </div>
+    <div class="hsx-scan" aria-hidden="true"></div>
+  </div>
+  <div class="hsx-status"><span class="hsx-dot"></span><span class="hsx-status-txt">12 selfies uploaded</span></div>
+</div>
+
+<!-- ===== controller (vanilla state machine) ===== -->
+<script>
+(function(){
+  var hsx=document.getElementById('hsx'); if(!hsx) return;
+  var txt=hsx.querySelector('.hsx-status-txt');
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var phases=[
+    {cls:'is-input',      t:2600, txt:'12 selfies uploaded'},
+    {cls:'is-processing', t:1700, txt:'Training your model\u2026'},
+    {cls:'is-output',     t:3900, txt:'Your headshots are ready'}
+  ];
+  if(reduce){
+    hsx.classList.remove('is-input'); hsx.classList.add('is-output');
+    hsx.setAttribute('data-phase','is-output');
+    if(txt) txt.textContent='Your headshots are ready';
+    return;
+  }
+  var i=0, timer=null;
+  function run(){
+    var p=phases[i];
+    hsx.classList.remove('is-input','is-processing','is-output');
+    hsx.classList.add(p.cls);
+    hsx.setAttribute('data-phase',p.cls);
+    if(txt) txt.textContent=p.txt;
+    timer=setTimeout(function(){ i=(i+1)%phases.length; run(); }, p.t);
+  }
+  run();
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ clearTimeout(timer); } else { clearTimeout(timer); run(); }
+  });
+})();
+</script>
+</body>
+</html>
