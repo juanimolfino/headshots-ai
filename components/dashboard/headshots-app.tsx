@@ -1782,7 +1782,7 @@ export function HeadshotsApp({
                   <Info className="size-4 shrink-0 text-navy" />
                   <h3 className="text-sm font-semibold">Support</h3>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-muted">
+                <p className="mt-2 text-sm leading-6 text-ink">
                   Need help with credits, billing, or a failed generation?
                 </p>
                 <div className="mt-4">
@@ -2610,11 +2610,11 @@ function QuickEditPanel({
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="pillGhost"
                 size="pill"
                 onClick={onClear}
                 disabled={uploading || (photos.length === 0 && prompt === defaultQuickPrompt())}
-                className="border-line text-ink-soft hover:bg-bg"
+                className="border-line-strong text-ink-soft hover:bg-bg"
               >
                 Clear
               </Button>
@@ -2636,15 +2636,16 @@ function QuickEditPanel({
         {/* Saved quick edits */}
 	        {editJobs.length > 0 && (
 	          <div className="mt-8">
-	            <ResultsHistory
-	              jobs={editJobs}
-	              kind="edit"
-	              onDelete={onDeleteEdit}
-	              onRetry={onRetryJob}
-	              onDismissFailed={onDismissFailedJob}
-	              onEditResult={onEditResult}
-	              lastUpdatedAt={generationLastUpdatedAt}
-	            />
+            <ResultsHistory
+              jobs={editJobs}
+              kind="edit"
+              onDelete={onDeleteEdit}
+              onRetry={onRetryJob}
+              onDismissFailed={onDismissFailedJob}
+              onEditResult={onEditResult}
+              lastUpdatedAt={generationLastUpdatedAt}
+              hideActiveJobs={isGenerating}
+            />
 	          </div>
 	        )}
       </div>
@@ -3006,6 +3007,7 @@ function ModelWorkspace({
             jobs={modelGenerateJobs}
             onRetry={job => void onGenerate()}
             lastUpdatedAt={null}
+            hideActiveJobs={isGenerating}
           />
         )}
       </div>
@@ -3053,7 +3055,8 @@ function ResultsHistory({
   onRetry,
   onDismissFailed,
   onEditResult,
-  lastUpdatedAt
+  lastUpdatedAt,
+  hideActiveJobs = false
 }: {
   jobs: GenerateJob[];
   kind?: "generate" | "edit";
@@ -3062,12 +3065,14 @@ function ResultsHistory({
   onDismissFailed?: (id: string) => void;
   onEditResult?: (url: string, sourceJobId?: string, sourceIndex?: number) => void;
   lastUpdatedAt?: string | null;
+  hideActiveJobs?: boolean;
 }) {
   const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE_SIZE);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const { activeJobs, failedJobs, doneJobs } = splitJobsByStatus(jobs);
   if (activeJobs.length === 0 && failedJobs.length === 0 && doneJobs.length === 0) return null;
 
+  const visibleActiveJobs = hideActiveJobs ? [] : activeJobs;
   const visibleJobs = doneJobs.slice(0, visibleCount);
   const remaining = doneJobs.length - visibleCount;
 
@@ -3077,7 +3082,7 @@ function ResultsHistory({
         History
       </p>
       <div className="space-y-2">
-        {activeJobs.map(job => (
+        {visibleActiveJobs.map(job => (
           <RunningHistoryRow key={job.id} job={job} kind={kind} lastUpdatedAt={lastUpdatedAt} />
         ))}
         {failedJobs.map(job => (

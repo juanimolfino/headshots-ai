@@ -211,8 +211,10 @@ export default async function LandingPage() {
               <div className="why-grid">
                 {WHY.map((item) => (
                   <div className="why-item" key={item.title}>
-                    <WhyIcon name={item.icon} />
-                    <h3>{item.title}</h3>
+                    <div className="why-item-head">
+                      <WhyIcon name={item.icon} />
+                      <h3>{item.title}</h3>
+                    </div>
                     <p>{item.body}</p>
                   </div>
                 ))}
@@ -284,15 +286,13 @@ export default async function LandingPage() {
               <div className="row">
                 <CreditDot tone="blue" />
                 <span>
-                  <b>Blue credits</b> generate images — low quality: 1 cr · medium: 2
-                  cr · high: 3 cr.
+                  <b>Blue credits</b> generate images. <span className="credits-note-copy">1 = low, 2 = medium, 3 = high quality.</span>
                 </span>
               </div>
               <div className="row">
                 <CreditDot tone="gold" />
                 <span>
-                  <b>Golden credits</b> train a personal AI model on your photos — 1
-                  model = 1 golden credit.
+                  <b>Golden credits</b> train one personal model. <span className="credits-note-copy">1 model = 1 golden credit.</span>
                 </span>
               </div>
             </Reveal>
@@ -320,7 +320,7 @@ export default async function LandingPage() {
         <div className="wrap">
           <Reveal className="cta-band">
             <h2>Your next headshot is ten minutes away.</h2>
-            <Button asChild variant="pill" size="pill">
+            <Button asChild variant="pill" size="pill" className="mb-10 md:mb-12">
               <Link href="/login">
                 Get my headshots <ButtonArrow />
               </Link>

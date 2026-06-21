@@ -37,7 +37,13 @@ const workflow = [
 export default function AboutPage() {
   return (
     <main className="bg-bg text-ink">
-      <section className="mx-auto max-w-5xl px-6 py-16 md:py-20">
+      <section className="mx-auto max-w-5xl px-6 py-6 md:py-8">
+        <Button asChild variant="pillGhost" size="pillSm">
+          <Link href="/">Back to landing</Link>
+        </Button>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-6 py-10 md:py-14">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-ink-muted">About</p>
         <div className="mt-5 grid gap-8 md:grid-cols-[1.1fr_.9fr] md:items-end">
           <div>

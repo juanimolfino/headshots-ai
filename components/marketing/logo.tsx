@@ -1,12 +1,12 @@
-/* eslint-disable @next/next/no-img-element */
-
+import Image from "next/image";
+import logoVector from "../../app/headshot-logo-vector.jpg";
 import { siteConfig } from "@/lib/seo";
 
 export function Logo() {
   return (
     <span className="logo">
-      <img
-        src="/picyourai_icon_512_white.png"
+      <Image
+        src={logoVector}
         alt=""
         width={32}
         height={32}

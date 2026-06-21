@@ -4,10 +4,10 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 const INPUT = [
-  { src: "/hero/sel-4.jpg", style: { left: "2%", top: "4%", "--r": "-8deg" } },
-  { src: "/hero/sel-5.jpg", style: { left: "43%", top: "0%", "--r": "6deg" } },
-  { src: "/hero/sel-6.jpg", style: { left: "6%", top: "39%", "--r": "5deg" } },
-  { src: "/hero/sel-9.jpg", style: { left: "47%", top: "43%", "--r": "-6deg" } },
+  { src: "/hero/sel-5.jpg", style: { left: "2%", top: "4%", "--r": "-8deg" } },
+  { src: "/hero/sel-4.jpg", style: { left: "43%", top: "0%", "--r": "6deg" } },
+  { src: "/hero/sel-9.jpg", style: { left: "6%", top: "39%", "--r": "5deg" } },
+  { src: "/hero/sel-6.jpg", style: { left: "47%", top: "43%", "--r": "-6deg" } },
   { src: "/hero/sel-2.jpg", style: { left: "25%", top: "20%", "--r": "-2deg" } },
   { src: "/hero/sel-10.jpg", style: { left: "30%", top: "50%", "--r": "9deg" } }
 ] as const;
@@ -30,6 +30,12 @@ export function HeroTransform() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const warm = [...INPUT, ...OUTPUT].map(item => item.src);
+    warm.forEach(src => {
+      const img = new window.Image();
+      img.src = src;
+    });
+
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduce) {
       timer.current = setTimeout(() => setPhaseIndex(2), 0);
@@ -78,7 +84,7 @@ export function HeroTransform() {
         <div className="hsx-input" aria-hidden="true">
           {INPUT.map((card, index) => (
             <div key={index} className="hsx-card" style={card.style as CSSProperties}>
-              <Image src={card.src} alt="" fill sizes="240px" />
+              <Image src={card.src} alt="" fill sizes="240px" unoptimized />
             </div>
           ))}
         </div>
@@ -92,6 +98,7 @@ export function HeroTransform() {
                 fill
                 sizes="220px"
                 style={{ objectPosition: shot.pos }}
+                unoptimized
               />
               <figcaption className="hsx-cap">{shot.cap}</figcaption>
             </figure>
