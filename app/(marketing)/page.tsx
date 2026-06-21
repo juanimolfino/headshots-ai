@@ -87,6 +87,15 @@ export default async function LandingPage() {
                 Upload your selfies, we train a model on your face, you get
                 studio-quality headshots in minutes. No photographer. No studio.
               </Reveal>
+            </div>
+
+            <Reveal delay={1} className="hero-visual">
+              <div className="hero-transform-shell">
+                <HeroTransform />
+              </div>
+            </Reveal>
+
+            <div className="hero-actions">
               <Reveal delay={2} className="hero-cta">
                 <Button asChild variant="pill" size="pill">
                   <Link href={authenticated ? "/dashboard/headshots" : "/login"}>
@@ -117,12 +126,6 @@ export default async function LandingPage() {
                 </span>
               </Reveal>
             </div>
-
-            <Reveal delay={1} className="hero-visual">
-              <div className="hero-transform-shell">
-                <HeroTransform />
-              </div>
-            </Reveal>
           </div>
         </section>
 

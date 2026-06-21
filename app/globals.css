@@ -318,8 +318,19 @@ body {
 
   /* ---------- Hero ---------- */
   .hero { padding: 46px 0 96px; position: relative; }
-  .hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 64px; align-items: center; }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    grid-template-areas:
+      "copy visual"
+      "actions visual";
+    gap: 0 64px;
+    align-items: center;
+  }
   .hero-copy { transform: translateY(-10px); }
+  .hero-copy { grid-area: copy; }
+  .hero-actions { grid-area: actions; }
+  .hero-visual { grid-area: visual; }
   .hero h1 { font-size: clamp(40px, 6.2vw, 72px); letter-spacing: -0.025em; line-height: 1.06; margin-bottom: 24px; text-wrap: balance; }
   .hero h1 em { font-style: italic; color: var(--navy); }
   .hero .sub { font-size: clamp(17px, 1.4vw, 19px); color: var(--ink-soft); max-width: 30em; margin-bottom: 36px; line-height: 1.55; }
@@ -625,7 +636,15 @@ body {
 
   /* ---------- Responsive ---------- */
   @media (max-width: 920px) {
-    .hero-grid { grid-template-columns: 1fr; gap: 48px; }
+    .hero-grid {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "copy"
+        "visual"
+        "actions";
+      gap: 30px;
+    }
+    .hero-copy { transform: none; }
     .hero-shots { max-width: 460px; }
     .why-grid { grid-template-columns: 1fr 1fr; gap: 34px; }
     .steps { grid-template-columns: 1fr; gap: 42px; }
@@ -678,6 +697,8 @@ body {
     .credits-note .row { align-items: flex-start; }
     .cta-band { width: 92%; }
     .foot-top { flex-direction: column; gap: 28px; }
+    .foot-brand { align-items: flex-start; text-align: left; }
+    .foot-brand .logo { justify-content: flex-start; }
     .wrap { padding: 0 22px; }
   }
 }
