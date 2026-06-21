@@ -113,7 +113,7 @@ export default async function LandingPage() {
                   </span>
                 </span>
                 <span>
-                  Trusted by <b>1,200+ professionals</b> worldwide
+                  Join free and get <b>5 blue credits</b> to try it
                 </span>
               </Reveal>
             </div>

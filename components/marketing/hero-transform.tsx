@@ -4,12 +4,12 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 const INPUT = [
-  { src: "/hero/sel-5.jpg", style: { left: "2%", top: "4%", "--r": "-8deg" } },
+  { src: "/hero/sel-9.jpg", style: { left: "2%", top: "4%", "--r": "-8deg" } },
   { src: "/hero/sel-4.jpg", style: { left: "43%", top: "0%", "--r": "6deg" } },
-  { src: "/hero/sel-9.jpg", style: { left: "6%", top: "39%", "--r": "5deg" } },
+  { src: "/hero/sel-5.jpg", style: { left: "6%", top: "39%", "--r": "5deg" } },
   { src: "/hero/sel-6.jpg", style: { left: "47%", top: "43%", "--r": "-6deg" } },
-  { src: "/hero/sel-2.jpg", style: { left: "25%", top: "20%", "--r": "-2deg" } },
-  { src: "/hero/sel-10.jpg", style: { left: "30%", top: "50%", "--r": "9deg" } }
+  { src: "/hero/sel-10.jpg", style: { left: "25%", top: "20%", "--r": "-2deg" } },
+  { src: "/hero/sel-2.jpg", style: { left: "30%", top: "50%", "--r": "9deg" } }
 ] as const;
 
 const OUTPUT = [

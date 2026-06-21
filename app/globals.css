@@ -303,7 +303,7 @@ body {
   }
   .nav.scrolled { border-color: var(--line); background: color-mix(in srgb, var(--bg) 92%, transparent); }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
-  .logo { font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1; letter-spacing: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .logo { font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1; letter-spacing: 0; display: flex; align-items: normal; justify-content: center; gap: 10px; }
   .logo-mark { width: 32px; height: 32px; object-fit: contain; display: block; }
   .logo b { font-weight: 600; line-height: 1; }
   .logo .tld { color: var(--ink-muted); font-weight: 400; }
