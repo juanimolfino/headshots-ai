@@ -129,7 +129,7 @@ export const FAQ = [
   },
   {
     q: "What styles are available?",
-    a: "Professional (business attire, neutral background), Cinematic (dramatic editorial lighting), and Natural (soft, candid look). All three are included in every plan.",
+    a: "Professional (business attire, neutral background), Cinematic (dramatic editorial lighting), and Natural (soft, candid look). You can also use the free edit mode to create and tweak images beyond the standard headshot styles.",
   },
   {
     q: "Are my photos stored securely?",
@@ -137,6 +137,6 @@ export const FAQ = [
   },
   {
     q: "Can I get a refund?",
-    a: `If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Reach out at ${legalCompanyInfo.supportEmail}.`,
+    a: `If your model fails to train or results are unusable, we'll refund you or retrain at no cost. Please include a screenshot or a brief description of what went wrong so we can improve the workflow. Reach out at ${legalCompanyInfo.supportEmail}.`,
   },
 ];

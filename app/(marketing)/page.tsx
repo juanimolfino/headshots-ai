@@ -228,7 +228,7 @@ export default async function LandingPage() {
           <div className="wrap">
             <Reveal className="sec-head center">
               <Eyebrow>Pricing</Eyebrow>
-              <h2 id="pricing-h2">Monthly plans, plus credit packs when you need them.</h2>
+              <h2 id="pricing-h2">Affordable plans that fit your needs.</h2>
             </Reveal>
 
             <div className="price-grid">
