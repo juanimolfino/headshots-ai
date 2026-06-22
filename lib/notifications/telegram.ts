@@ -24,6 +24,15 @@ type TelegramSubscriptionNotification = {
   };
 };
 
+type TelegramSignupNotification = {
+  userName?: string | null;
+  userEmail?: string | null;
+  credits: {
+    blue: number;
+    gold: number;
+  };
+};
+
 type TelegramErrorAlert = {
   area: string;
   message: string;
@@ -68,6 +77,15 @@ export function buildSubscriptionMessage(input: TelegramSubscriptionNotification
     `Plan: ${input.itemName}`,
     `Amount: ${formatMoney(input.amountCents, input.currency ?? "usd")}`,
     `Credits applied: ${input.credits.blue} blue, ${input.credits.gold} gold`
+  ].join("\n");
+}
+
+export function buildSignupMessage(input: TelegramSignupNotification) {
+  return [
+    "New user signup",
+    `User: ${input.userName || input.userEmail || "Unknown user"}`,
+    ...(input.userEmail && input.userName ? [`Email: ${input.userEmail}`] : []),
+    `Free credits granted: ${input.credits.blue} blue, ${input.credits.gold} gold`
   ].join("\n");
 }
 
@@ -134,6 +152,10 @@ export async function sendTelegramPaymentNotification(input: TelegramPaymentNoti
 
 export async function sendTelegramSubscriptionNotification(input: TelegramSubscriptionNotification) {
   return sendTelegramMessage(buildSubscriptionMessage(input), "subscription");
+}
+
+export async function sendTelegramSignupNotification(input: TelegramSignupNotification) {
+  return sendTelegramMessage(buildSignupMessage(input), "signup");
 }
 
 export async function sendTelegramErrorAlert(input: TelegramErrorAlert) {

@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { buildSubscriptionMessage } from "@/lib/notifications/telegram";
+import { buildSignupMessage, buildSubscriptionMessage } from "@/lib/notifications/telegram";
 
 describe("Telegram subscription alerts", () => {
+  it("formats signup alerts with free credits", () => {
+    const message = buildSignupMessage({
+      userName: "Jane Doe",
+      userEmail: "jane@example.com",
+      credits: { blue: 5, gold: 0 }
+    });
+
+    expect(message).toContain("New user signup");
+    expect(message).toContain("User: Jane Doe");
+    expect(message).toContain("Email: jane@example.com");
+    expect(message).toContain("Free credits granted: 5 blue, 0 gold");
+  });
+
   it("formats first-time subscription alerts with granted credits", () => {
     expect(buildSubscriptionMessage({
       customerName: "Jane Doe",

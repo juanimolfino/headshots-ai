@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { credits, jobs, subscriptions, transactions, users, type CreditBucket, type CreditKind, type Job, type JobType } from "@/lib/db/schema";
 import { getUsableCreditTotals, planCreditDebit, type CreditBalanceSnapshot, type CreditDebit } from "@/lib/db/credit-balances";
 import { sendPurchaseConfirmationEmail, sendWelcomeEmail } from "@/lib/email/send";
+import { sendTelegramSignupNotification } from "@/lib/notifications/telegram";
 import { logWarn } from "@/lib/observability/logger";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { normalizeStoragePath } from "@/lib/ai/storage";
@@ -156,7 +157,14 @@ export async function ensureUserProfile(authUser: User) {
 
     return { profile, createdProfile: Boolean(created) };
   });
-  if (createdProfile) await sendWelcomeEmail(email, { blue: signupBlueCredits, gold: signupGoldCredits });
+  if (createdProfile) {
+    await sendWelcomeEmail(email, { blue: signupBlueCredits, gold: signupGoldCredits });
+    await sendTelegramSignupNotification({
+      userName: profile.fullName,
+      userEmail: profile.email,
+      credits: { blue: signupBlueCredits, gold: signupGoldCredits }
+    });
+  }
 
   return profile;
 }

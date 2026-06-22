@@ -20,13 +20,11 @@ export default async function LoginPage({
   const initialMessage = error ?? (message === "account-deleted" ? "Account deleted. Your data deletion request was processed." : undefined);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-bg px-6">
+    <main className="relative flex min-h-screen items-center justify-center bg-bg px-6">
+      <Button asChild variant="pillGhost" size="sm" className="absolute left-5 top-5 border-line px-3 py-1.5 text-xs md:left-8 md:top-8">
+        <Link href="/">Back to landing</Link>
+      </Button>
       <div className="w-full max-w-sm">
-        <div className="mb-6 flex justify-center">
-          <Button asChild variant="pillGhost" size="pillSm">
-            <Link href="/">Back to landing</Link>
-          </Button>
-        </div>
         <div className="mb-8 text-center">
           <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-navy">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
