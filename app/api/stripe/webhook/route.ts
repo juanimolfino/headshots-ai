@@ -104,7 +104,7 @@ function getSubscriptionIdFromValue(value: string | Stripe.Subscription | null |
   return typeof value === "string" ? value : value.id;
 }
 
-function getInvoiceSubscriptionId(invoice: InvoiceWithSubscriptionDetails) {
+export function getInvoiceSubscriptionId(invoice: InvoiceWithSubscriptionDetails) {
   const lines = invoice.lines?.data as InvoiceLineItemWithPrice[] | undefined;
   return (
     getSubscriptionIdFromValue(invoice.subscription) ??
@@ -391,10 +391,16 @@ export async function POST(request: Request) {
           });
         }
       } else {
+        console.error("[stripe-webhook] invoice.paid: no subscriptionId found", {
+          invoiceId: invoice.id,
+          apiVersion: event.api_version
+        });
         logWarn("stripe_invoice_paid_skipped_missing_subscription", {
           area: "stripe.webhook",
           stripeEventId: event.id,
-          stripeEventType: event.type
+          stripeEventType: event.type,
+          invoiceId: invoice.id,
+          apiVersion: event.api_version
         });
       }
     }

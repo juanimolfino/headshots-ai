@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { getInvoiceSubscriptionId } from "@/app/api/stripe/webhook/route";
 
 describe("Stripe webhook credit buckets", () => {
   const source = readFileSync(join(process.cwd(), "app/api/stripe/webhook/route.ts"), "utf8");
@@ -27,6 +28,41 @@ describe("Stripe webhook credit buckets", () => {
     expect(source).toContain("invoice.parent?.subscription_details?.subscription");
     expect(source).toContain("item.pricing?.price_details?.price");
     expect(source).toContain("invoice?.lines?.data[0]?.period?.end");
+    expect(source).toContain("[stripe-webhook] invoice.paid: no subscriptionId found");
+    expect(source).toContain("apiVersion: event.api_version");
+  });
+
+  it("resolves subscription ids from legacy invoice.subscription payloads", () => {
+    expect(getInvoiceSubscriptionId({
+      id: "in_legacy",
+      subscription: "sub_legacy"
+    } as never)).toBe("sub_legacy");
+  });
+
+  it("resolves subscription ids from Stripe 2026 invoice.parent subscription details", () => {
+    expect(getInvoiceSubscriptionId({
+      id: "in_dahlia",
+      parent: {
+        subscription_details: {
+          subscription: "sub_parent"
+        }
+      }
+    } as never)).toBe("sub_parent");
+  });
+
+  it("falls back to subscription ids on invoice line parents", () => {
+    expect(getInvoiceSubscriptionId({
+      id: "in_line",
+      lines: {
+        data: [{
+          parent: {
+            subscription_item_details: {
+              subscription: "sub_line"
+            }
+          }
+        }]
+      }
+    } as never)).toBe("sub_line");
   });
 
   it("handles subscription lifecycle events without clearing packs", () => {
